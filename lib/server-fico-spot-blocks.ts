@@ -34,21 +34,28 @@ function mapRow(row: Record<string, unknown>): FicoSpotBlock {
   }
 }
 
+function requireSupabaseAdmin() {
+  const admin = getSupabaseAdmin()
+  if (!admin) {
+    throw new Error(
+      'Supabase admin client unavailable. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.',
+    )
+  }
+  return admin
+}
+
 export async function listFicoSpotBlocks(): Promise<FicoSpotBlock[]> {
   if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const { data, error } = await admin
-        .from('fico_spot_blocks')
-        .select('*')
-        .order('date', { ascending: true })
+    const admin = requireSupabaseAdmin()
+    const { data, error } = await admin
+      .from('fico_spot_blocks')
+      .select('*')
+      .order('date', { ascending: true })
 
-      if (!error && data) return data.map((r) => mapRow(r as Record<string, unknown>))
-      if (error?.message?.includes('fico_spot_blocks')) {
-        console.warn('fico_spot_blocks table missing — run migration 008')
-      }
-    }
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((r) => mapRow(r as Record<string, unknown>))
   }
+
   return readFileBlocks()
 }
 
@@ -63,25 +70,24 @@ export async function upsertFicoSpotBlock(block: FicoSpotBlock): Promise<FicoSpo
   const normalized = { ...block, spotsBlocked }
 
   if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const { data, error } = await admin
-        .from('fico_spot_blocks')
-        .upsert(
-          {
-            date: normalized.date,
-            spots_blocked: normalized.spotsBlocked,
-            reason: normalized.reason,
-            created_by: normalized.createdBy ?? null,
-          },
-          { onConflict: 'date' },
-        )
-        .select()
-        .single()
+    const admin = requireSupabaseAdmin()
+    const { data, error } = await admin
+      .from('fico_spot_blocks')
+      .upsert(
+        {
+          date: normalized.date,
+          spots_blocked: normalized.spotsBlocked,
+          reason: normalized.reason,
+          created_by: normalized.createdBy ?? null,
+        },
+        { onConflict: 'date' },
+      )
+      .select()
+      .single()
 
-      if (!error && data) return mapRow(data as Record<string, unknown>)
-      if (error) throw new Error(error.message)
-    }
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('FICO spot block was not returned after save.')
+    return mapRow(data as Record<string, unknown>)
   }
 
   const blocks = await readFileBlocks()
@@ -95,12 +101,11 @@ export async function upsertFicoSpotBlock(block: FicoSpotBlock): Promise<FicoSpo
 
 export async function removeFicoSpotBlock(date: string): Promise<boolean> {
   if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const { error } = await admin.from('fico_spot_blocks').delete().eq('date', date)
-      if (!error) return true
-      if (error) throw new Error(error.message)
-    }
+    const admin = requireSupabaseAdmin()
+    const { error } = await admin.from('fico_spot_blocks').delete().eq('date', date)
+
+    if (error) throw new Error(error.message)
+    return true
   }
 
   const blocks = await readFileBlocks()
