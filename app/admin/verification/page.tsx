@@ -7,12 +7,12 @@ import { runAdminTransaction, formatEmailResult } from '@/lib/admin-actions'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
-import { 
-  Check, 
-  X, 
-  Mail, 
-  Download, 
-  FileText, 
+import {
+  Check,
+  X,
+  Mail,
+  Download,
+  FileText,
   ExternalLink,
   RefreshCw,
   AlertCircle,
@@ -20,7 +20,8 @@ import {
 } from 'lucide-react'
 import { bookingMatchesSearch, enrichBookingDisplay, isLikelyInvalidReceipt } from '@/lib/booking-display'
 import ReceiptPreview from '@/components/receipt-preview'
-import { adminPage, adminSpinnerWrap, adminSpinner, adminCardHover, adminSelect, adminInput } from '@/lib/admin-ui'
+import { adminPage, adminCardHover, adminSelect, adminInput } from '@/lib/admin-ui'
+import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import {
   REJECTION_REASONS,
   resolveRejectionMessage,
@@ -33,7 +34,7 @@ export default function PaymentVerificationQueue() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  
+
   // Modal states
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [showReceiptModal, setShowReceiptModal] = useState(false)
@@ -233,11 +234,7 @@ export default function PaymentVerificationQueue() {
     : bookings
 
   if (loading) {
-    return (
-      <div className={adminSpinnerWrap}>
-        <div className={adminSpinner} />
-      </div>
-    )
+    return <AdminPageSkeleton variant="verification" />
   }
 
   return (
@@ -281,98 +278,94 @@ export default function PaymentVerificationQueue() {
               <p className="text-sm text-white/50">No bookings match your search.</p>
             </div>
           ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {visibleBookings.map((booking) => {
-            const display = enrichBookingDisplay(booking)
-            return (
-            <div key={booking.id} className={`border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''} ${isLikelyInvalidReceipt(display.receiptUrl) ? 'ring-1 ring-red-500/40' : ''}`}>
-              {/* Receipt Preview Thumbnail */}
-              <div 
-                className="h-48 bg-white/[0.05] relative overflow-hidden group cursor-pointer border-b border-white/10"
-                onClick={() => {
-                  setSelectedBooking(display)
-                  setShowReceiptModal(true)
-                }}
-              >
-                <ReceiptPreview receiptUrl={display.receiptUrl} fill className="h-48" />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold uppercase tracking-widest pointer-events-none">
-                  View Large Receipt
-                </div>
-              </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {visibleBookings.map((booking) => {
+                const display = enrichBookingDisplay(booking)
+                return (
+                  <div key={booking.id} className={`border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''} ${isLikelyInvalidReceipt(display.receiptUrl) ? 'ring-1 ring-red-500/40' : ''}`}>
+                    <div
+                      className="h-48 bg-white/[0.05] relative overflow-hidden group cursor-pointer border-b border-white/10"
+                      onClick={() => {
+                        setSelectedBooking(display)
+                        setShowReceiptModal(true)
+                      }}
+                    >
+                      <ReceiptPreview receiptUrl={display.receiptUrl} fill className="h-48" />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold uppercase tracking-widest pointer-events-none">
+                        View Large Receipt
+                      </div>
+                    </div>
 
-              {/* Card Details */}
-              <div className="p-5 space-y-4">
-                <div className="flex justify-between items-start border-b border-white/10 pb-3">
-                  <div>
-                    <h3 className="font-semibold text-white">{booking.customerName}</h3>
-                    <p className="text-[10px] text-white/40 font-mono mt-0.5">{booking.id}</p>
-                  </div>
-                  <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase">
-                    {booking.packageName}
-                  </span>
-                </div>
+                    <div className="p-5 space-y-4">
+                      <div className="flex justify-between items-start border-b border-white/10 pb-3">
+                        <div>
+                          <h3 className="font-semibold text-white">{booking.customerName}</h3>
+                          <p className="text-[10px] text-white/40 font-mono mt-0.5">{booking.id}</p>
+                        </div>
+                        <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase">
+                          {booking.packageName}
+                        </span>
+                      </div>
 
-                <div className="grid grid-cols-2 gap-y-2 text-xs">
-                  <div>
-                    <p className="text-white/40 font-medium text-[9px] uppercase tracking-wider">Date & Time</p>
-                    <p className="font-semibold text-white/90">{booking.bookingDate}</p>
-                    <p className="text-white/50 text-[10px] mt-0.5">{booking.bookingTime}</p>
-                  </div>
-                  <div>
-                    <p className="text-white/40 font-medium text-[9px] uppercase tracking-wider">GCash Transaction Ref</p>
-                    <p className="font-mono font-bold text-white/90">{display.transactionRef || 'Not provided'}</p>
-                  </div>
-                  <div className="col-span-2 border-t border-white/10 pt-3">
-                    <div className="flex justify-between items-center text-[11px]">
-                      <span className="text-white/40 font-medium">Deposit Amount:</span>
-                      <span className="font-bold text-[#8FA0FF]">₱{booking.depositAmount.toFixed(2)}</span>
+                      <div className="grid grid-cols-2 gap-y-2 text-xs">
+                        <div>
+                          <p className="text-white/40 font-medium text-[9px] uppercase tracking-wider">Date & Time</p>
+                          <p className="font-semibold text-white/90">{booking.bookingDate}</p>
+                          <p className="text-white/50 text-[10px] mt-0.5">{booking.bookingTime}</p>
+                        </div>
+                        <div>
+                          <p className="text-white/40 font-medium text-[9px] uppercase tracking-wider">GCash Transaction Ref</p>
+                          <p className="font-mono font-bold text-white/90">{display.transactionRef || 'Not provided'}</p>
+                        </div>
+                        <div className="col-span-2 border-t border-white/10 pt-3">
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-white/40 font-medium">Deposit Amount:</span>
+                            <span className="font-bold text-[#8FA0FF]">₱{booking.depositAmount.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/[0.03] px-5 py-3 border-t border-white/10 space-y-2">
+                      {isLikelyInvalidReceipt(display.receiptUrl) && (
+                        <button
+                          type="button"
+                          onClick={() => handleRejectForged(display)}
+                          disabled={actionLoading}
+                          className="btn-reject-fx w-full bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
+                        >
+                          <AlertCircle className="w-3.5 h-3.5" /> Reject — Forged / Not a receipt
+                        </button>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApprove(display)}
+                          disabled={actionLoading}
+                          className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Approve
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedBooking(display)
+                            setRejectionReason(isLikelyInvalidReceipt(display.receiptUrl) ? 'forged' : 'unable_to_verify')
+                            setShowRejectModal(true)
+                          }}
+                          disabled={actionLoading}
+                          className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
+                        >
+                          <X className="w-3.5 h-3.5" /> Reject
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="bg-white/[0.03] px-5 py-3 border-t border-white/10 space-y-2">
-                {isLikelyInvalidReceipt(display.receiptUrl) && (
-                  <button
-                    type="button"
-                    onClick={() => handleRejectForged(display)}
-                    disabled={actionLoading}
-                    className="btn-reject-fx w-full bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" /> Reject — Forged / Not a receipt
-                  </button>
-                )}
-                <div className="flex gap-2">
-                <button
-                  onClick={() => handleApprove(display)}
-                  disabled={actionLoading}
-                  className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
-                >
-                  <Check className="w-3.5 h-3.5" /> Approve
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedBooking(display)
-                    setRejectionReason(isLikelyInvalidReceipt(display.receiptUrl) ? 'forged' : 'unable_to_verify')
-                    setShowRejectModal(true)
-                  }}
-                  disabled={actionLoading}
-                  className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
-                >
-                  <X className="w-3.5 h-3.5" /> Reject
-                </button>
-                </div>
-              </div>
+                )
+              })}
             </div>
-            )
-          })}
-        </div>
           )}
         </>
       )}
 
-      {/* 1. RECEIPT VIEWER MODAL */}
       {receiptModalBooking && selectedBooking && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="border border-white/10 bg-[#222222] shadow-2xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[90vh]">
@@ -381,10 +374,10 @@ export default function PaymentVerificationQueue() {
                 <div className="p-12 text-center text-white/50 space-y-4">
                   <FileText className="w-20 h-20 text-primary/50 mx-auto" />
                   <p className="text-sm font-semibold uppercase tracking-wider">PDF Receipt Attachment</p>
-                  <a 
-                    href={receiptModalBooking.receiptUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
+                  <a
+                    href={receiptModalBooking.receiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline"
                   >
                     Open PDF in new tab <ExternalLink className="w-3 h-3" />
@@ -395,7 +388,6 @@ export default function PaymentVerificationQueue() {
               )}
             </div>
 
-            {/* Receipt Details Panel */}
             <div className="md:w-1/2 p-8 flex flex-col justify-between overflow-y-auto space-y-6">
               <div className="space-y-6">
                 <div className="flex justify-between items-start border-b border-white/10 pb-4">
@@ -404,7 +396,7 @@ export default function PaymentVerificationQueue() {
                     <h2 className="text-lg font-bold text-white mt-1">{selectedBooking.customerName}</h2>
                     <p className="text-xs font-mono text-white/40 mt-0.5">Reference: {selectedBooking.id}</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => {
                       setShowReceiptModal(false)
                       setSelectedBooking(null)
@@ -431,10 +423,10 @@ export default function PaymentVerificationQueue() {
                   <div className="min-w-0">
                     <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Facebook Link</p>
                     {selectedBooking.customerFbLink ? (
-                      <a 
-                        href={selectedBooking.customerFbLink} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
+                      <a
+                        href={selectedBooking.customerFbLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-[#C4CEFF] hover:underline hover:text-white font-semibold inline-flex items-center gap-1 mt-0.5 break-all"
                       >
                         Visit Profile <ExternalLink className="w-3.5 h-3.5 shrink-0" />
@@ -543,7 +535,6 @@ export default function PaymentVerificationQueue() {
         </div>
       )}
 
-      {/* 2. REJECT PAYMENT MODAL */}
       {showRejectModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
           <form
@@ -555,7 +546,7 @@ export default function PaymentVerificationQueue() {
                 <h3 className="font-bold text-white">Reject Payment Receipt</h3>
                 <p className="text-[10px] text-white/40 font-mono mt-0.5">Booking ID: {selectedBooking.id}</p>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => setShowRejectModal(false)}
                 className="p-1 hover:bg-white/[0.05] rounded text-white/40"
