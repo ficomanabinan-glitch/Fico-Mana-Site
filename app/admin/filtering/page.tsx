@@ -2,20 +2,14 @@
 
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { RefreshCw } from 'lucide-react'
+import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import FilteringDashboard, { type FilteringDashTab } from '@/components/filtering-dashboard'
 
 const VALID_TABS = new Set<FilteringDashTab>(['overview', 'queue', 'calendar', 'editor'])
 
 export default function AdminFilteringPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <RefreshCw className="w-6 h-6 text-primary animate-spin" />
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminLoadingSkeleton />}>
       <AdminFilteringContent />
     </Suspense>
   )
