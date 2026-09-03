@@ -54,6 +54,18 @@ export function AdminAutoSyncProvider({
   }, [enabled])
 
   useEffect(() => {
+    const handleNumberFocus = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof HTMLInputElement) || target.type !== 'number' || target.value !== '0') return
+
+      requestAnimationFrame(() => target.select())
+    }
+
+    document.addEventListener('focusin', handleNumberFocus)
+    return () => document.removeEventListener('focusin', handleNumberFocus)
+  }, [])
+
+  useEffect(() => {
     if (!enabled) return
 
     let intervalId: ReturnType<typeof setInterval> | null = null
