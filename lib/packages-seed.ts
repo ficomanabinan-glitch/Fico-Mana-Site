@@ -1,0 +1,33 @@
+export type PackageSeedRow = {
+  id: string
+  category: 'graduation' | 'capping-pinning' | 'self-portrait' | 'creative'
+  title: string
+  price_display: string
+  price_amount: number
+  duration: string
+  description: string
+  features: string[]
+  slot_type: 'makeup' | 'standard'
+  secondary_price_display?: string
+  secondary_price_amount?: number
+  secondary_price_label?: string
+  book_variants?: { id: string; label: string }[]
+  note?: string
+  sort_order: number
+}
+
+export const PACKAGE_SEED_ROWS: PackageSeedRow[] = [
+  { id:'fico-package', category:'graduation', title:'FICO PACKAGE', price_display:'₱3,500', price_amount:3500, duration:'30 mins', description:'Available anytime from 8:00 AM – 4:00 PM', features:['Free use of Toga & Cap','Free use of Alampay','Professional Photographer','5 Edited/Enhanced Copies','Professional Light Setup','2 pegs (toga, uniform, or alampay)','2 pcs. 4R-sized Prints','4 pcs. Wallet-sized Prints','1 pc. 8R Glass-to-Glass Frame','Get ALL RAW Copies','Receive 5 enhanced photos 14 days after selection'], slot_type:'standard', sort_order:1 },
+  { id:'mana-makeup', category:'graduation', title:'MANA PACKAGE', price_display:'₱6,500', price_amount:6500, duration:'2 hours', description:'With Hair and Makeup.', features:['Free use of Toga & Cap','Free use of Alampay','Professional Photographer','5 Edited/Enhanced Copies','Professional Light Setup','2 pegs (toga, uniform, or alampay)','2 pcs. 4R-sized Prints','4 pcs. Wallet-sized Prints','1 pc. 8R Glass-to-Glass Frame','Get ALL RAW Copies','Receive 5 enhanced photos 14 days after selection'], slot_type:'makeup', sort_order:2 },
+  { id:'capping-pinning', category:'capping-pinning', title:'CAPPING AND PINNING PHOTOSHOOT', price_display:'₱4,000', price_amount:4000, duration:'Studio session', description:'Other service · 10 slots only per day · ₱500 deposit required', features:['Free Makeup','2 edited/enhanced photos','1 layout/outfit','All raw copies','1 pc. 8R Glass-to-Glass Frame','2 pcs. 4R-sized printed copies','7–14 working days for editing process'], slot_type:'makeup', sort_order:3 },
+  { id:'creative-package', category:'creative', title:'CREATIVE PACKAGE', price_display:'₱13,500', price_amount:13500, duration:'2–3 hours photoshoot', description:'Light Effects / Curtain / Simple Studio Setup', features:['2–3 hours photoshoot',"2 layouts (client's peg & plain backdrop)",'Professional photographer','Creative direction (for poses)','Professional light setup','20 ENHANCED photos (soft copies)','ALL RAW photos (soft copies)','2 pcs printed 4R photo of choice'], slot_type:'makeup', secondary_price_display:'₱15,500', secondary_price_amount:15500, secondary_price_label:'With Hair & Make Up (2 pegs)', book_variants:[{id:'creative-package',label:'Book — Without HMUA (₱13,500)'},{id:'creative-package-makeup',label:'Book — With HMUA (₱15,500)'}], note:'₱3,500/head for additional pax (with HMUA).', sort_order:10 },
+  { id:'creative-package-makeup', category:'creative', title:'CREATIVE PACKAGE (With Hair & Makeup)', price_display:'₱15,500', price_amount:15500, duration:'2–3 hours photoshoot (includes HMUA for 2 pegs)', description:'Light Effects / Curtain / Simple Studio Setup with Hair & Makeup', features:['2–3 hours photoshoot',"2 layouts (client's peg & plain backdrop)",'Professional photographer','Creative direction (for poses)','Professional light setup','20 ENHANCED photos (soft copies)','ALL RAW photos (soft copies)','2 pcs printed 4R photo of choice','Hair & makeup for 2 pegs'], slot_type:'makeup', note:'₱3,500/head for additional pax (with HMUA).', sort_order:11 },
+  { id:'fico-1', category:'self-portrait', title:'FICO 1 — Solo or Duo Digital', price_display:'Php 350', price_amount:350, duration:'10 mins studio shoot', description:'Solo or Duo Digital', features:['10 mins studio shoot','Your choice of backdrop (1)','Soft copies of selected ENHANCED PHOTOS (5 photos)','NO PRINTED COPIES'], slot_type:'standard', note:'Walk-in clients are not eligible for this package.', sort_order:20 },
+  { id:'fico-2', category:'self-portrait', title:'FICO 2 — Solo or Duo', price_display:'Php 600', price_amount:600, duration:'15 mins studio shoot', description:'Solo or Duo — Best Seller', features:['15 mins studio shoot','Your choice of backdrop (1)','Soft copies of ALL ENHANCED PHOTOS','NO PRINTED COPIES'], slot_type:'standard', sort_order:21 },
+  { id:'fico-3', category:'self-portrait', title:'FICO 3 — Solo or Duo', price_display:'Php 700', price_amount:700, duration:'15 mins studio shoot', description:'Solo or Duo', features:['15 mins studio shoot','Your choice of backdrop (1)','Soft copies of selected ENHANCED PHOTOS (10 photos)','2 4R-sized prints'], slot_type:'standard', sort_order:22 },
+  { id:'fico-4', category:'self-portrait', title:'FICO 4 — Solo or Duo', price_display:'Php 1,000', price_amount:1000, duration:'20 mins studio shoot', description:'Solo or Duo', features:['20 mins studio shoot','Your choice of backdrop (1)','Soft copies of ALL ENHANCED PHOTOS','3 4R-sized prints'], slot_type:'standard', sort_order:23 },
+  { id:'mana-1', category:'self-portrait', title:'MANA 1 — Family / Barkada', price_display:'Php 700', price_amount:700, duration:'10 mins studio shoot', description:'Family / Barkada', features:['3–5 pax (any age)','10 mins studio shoot','Your choice of backdrop (1)','Soft copies of selected ENHANCED PHOTOS (10 photos)','NO PRINTED COPIES'], slot_type:'standard', note:'Walk-in clients are not eligible for this package.', sort_order:24 },
+  { id:'mana-2', category:'self-portrait', title:'MANA 2 — Family / Barkada', price_display:'Php 1,200', price_amount:1200, duration:'15 mins studio shoot', description:'Family / Barkada', features:['3–5 pax (any age)','15 mins studio shoot','Your choice of backdrop (1)','Soft copies of ALL ENHANCED PHOTOS','NO PRINTED COPIES'], slot_type:'standard', sort_order:25 },
+  { id:'mana-3', category:'self-portrait', title:'MANA 3 — Family / Barkada', price_display:'Php 1,500', price_amount:1500, duration:'20 mins studio shoot', description:'Family / Barkada', features:['3–5 pax (any age)','20 mins studio shoot','15 mins photo selection (for add-ons)','Your choice of backdrop (1)','Soft copies of selected ENHANCED PHOTOS (15 photos)','3 4R-sized prints'], slot_type:'standard', sort_order:26 },
+  { id:'mana-4', category:'self-portrait', title:'MANA 4 — Family / Barkada', price_display:'Php 2,000', price_amount:2000, duration:'20 mins studio shoot', description:'Family / Barkada', features:['3–5 pax (any age)','20 mins studio shoot','Your choice of backdrop (1)','Soft copies of ALL ENHANCED PHOTOS','4 4R-sized prints'], slot_type:'standard', sort_order:27 },
+]
