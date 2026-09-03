@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Viewport } from 'next'
 import { Geist, Geist_Mono, Cormorant_Garamond } from 'next/font/google'
 import { rootMetadata } from '@/lib/site-metadata'
+import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
 import './globals.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
@@ -36,6 +37,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased" style={{ backgroundColor: '#1c2e22' }}>
         {children}
+        <ReceiptUploadEnhancer />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
