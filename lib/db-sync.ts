@@ -30,7 +30,10 @@ export async function syncStoreToDatabase(client?: SupabaseClient | null): Promi
 
   const db = client ?? getSupabaseAdmin()
   if (!db) {
-    return { ...empty, message: 'SUPABASE_SERVICE_ROLE_KEY required for automatic DB sync.' }
+    return {
+      ...empty,
+      message: 'Supabase admin key required. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.',
+    }
   }
 
   const packagesSynced = await syncPackagesToDb(db)
