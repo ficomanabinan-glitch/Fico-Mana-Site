@@ -12,5 +12,6 @@ export async function GET() {
     hasModernSecret,
     hasLegacyServiceRole,
     adminAvailable,
+    deploymentCheck: '2026-09-04-env-refresh',
   })
 }
