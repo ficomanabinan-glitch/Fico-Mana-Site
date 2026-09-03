@@ -34,27 +34,29 @@ function FilteringDashboardShell() {
   const initialSearch = searchParams.get('search')?.trim() ?? ''
   const tabParam = searchParams.get('tab')?.trim() as FilteringDashTab | null
   const initialTab = tabParam && VALID_TABS.has(tabParam) ? tabParam : undefined
-  const [loading, setLoading] = useState(true)
   const [staffUser, setStaffUser] = useState<SupabaseUser | null>(null)
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.replace('/admin?redirect=/filtering')
-        return
-      }
-      setStaffUser(session.user)
-      setLoading(false)
+    // Middleware is the authoritative route guard. Read the session only to populate
+    // the staff label instead of blocking the entire page behind a second auth gate.
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setStaffUser(session.user)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace('/admin?redirect=/filtering')
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setStaffUser(session.user)
         return
       }
-      setStaffUser(session.user)
+
+      // Only navigate away for an actual sign-out/session loss after the page is mounted.
+      if (event === 'SIGNED_OUT') {
+        router.replace('/admin?redirect=/filtering')
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -63,16 +65,7 @@ function FilteringDashboardShell() {
   const handleLogout = async () => {
     const supabase = createSupabaseBrowserClient()
     await supabase.auth.signOut()
-    router.push('/admin')
-    router.refresh()
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#222222] flex items-center justify-center">
-        <RefreshCw className="w-6 h-6 text-primary animate-spin" />
-      </div>
-    )
+    router.replace('/admin')
   }
 
   const staffLabel = staffUser?.email?.split('@')[0] ?? 'Staff'
