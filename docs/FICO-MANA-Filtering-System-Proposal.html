@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>FICO MANA — Filtering System Proposal</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm 14mm 16mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Calibri, Arial, Helvetica, sans-serif;
+      color: #0f172a;
+      font-size: 9.5pt;
+      line-height: 1.42;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .sheet { max-width: 740px; margin: 0 auto; }
+
+    .hero {
+      background: linear-gradient(135deg, #0500D0 0%, #03008F 100%);
+      color: #ffffff;
+      padding: 22px 24px 20px;
+      margin: 0 0 18px;
+    }
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: 22pt;
+      letter-spacing: 0.14em;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .hero .tagline {
+      margin: 4px 0 0;
+      font-size: 8pt;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: #e8eaff;
+    }
+    .hero .doc-type {
+      margin-top: 14px;
+      font-size: 11pt;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #ffffff;
+    }
+    .hero .doc-sub {
+      margin-top: 6px;
+      font-size: 9pt;
+      color: #ffffff;
+      max-width: 380px;
+      line-height: 1.45;
+    }
+    .hero-meta {
+      text-align: right;
+      font-size: 8.5pt;
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.28);
+      padding: 12px 14px;
+      min-width: 200px;
+      color: #ffffff;
+    }
+    .hero-meta .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.16);
+    }
+    .hero-meta .row:last-child { border-bottom: 0; }
+    .hero-meta .label {
+      color: #dce0ff;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 7.5pt;
+    }
+    .hero-meta .value { font-weight: 600; color: #ffffff; }
+
+    .invest-strip {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr;
+      gap: 0;
+      border: 1px solid #d4d8f0;
+      margin-bottom: 14px;
+    }
+    .invest-strip .cell {
+      padding: 12px 14px;
+      border-right: 1px solid #d4d8f0;
+    }
+    .invest-strip .cell:last-child { border-right: 0; background: #0500D0; color: #fff; }
+    .invest-strip .k {
+      font-size: 7.5pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .invest-strip .cell:last-child .k { color: #dce0ff; }
+    .invest-strip .v {
+      font-size: 11.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .invest-strip .cell:last-child .v { color: #fff; font-size: 14pt; }
+
+    .note {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #0500D0;
+      padding: 10px 12px;
+      margin: 0 0 14px;
+      font-size: 8.5pt;
+      color: #334155;
+    }
+
+    h2 {
+      margin: 16px 0 8px;
+      font-size: 9.5pt;
+      color: #0500D0;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border-bottom: 2px solid #0500D0;
+      padding-bottom: 4px;
+    }
+    p { margin: 0 0 8px; color: #334155; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 8px 0 4px;
+    }
+    .flow-item {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 8px 9px;
+      background: #f8fafc;
+      border: 1px solid #e8ecf4;
+    }
+    .flow-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #0500D0;
+      color: #fff;
+      font-size: 8pt;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+    .flow-item strong {
+      display: block;
+      font-size: 9pt;
+      color: #0f172a;
+      margin-bottom: 1px;
+    }
+    .flow-item span { font-size: 8pt; color: #64748b; line-height: 1.35; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0 12px;
+      font-size: 8.5pt;
+    }
+    th, td {
+      border: 1px solid #dce3f0;
+      padding: 7px 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #0500D0;
+      color: #fff;
+      font-size: 7.5pt;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    tbody tr:nth-child(even) td { background: #f8fafc; }
+    td.amt, th.amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    td.num { width: 28px; text-align: center; color: #64748b; font-weight: 600; }
+    tr.total td {
+      background: #0500D0 !important;
+      color: #fff;
+      font-weight: 700;
+      font-size: 9.5pt;
+      border-color: #0500D0;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .card {
+      border: 1px solid #dce3f0;
+      padding: 10px 12px;
+      background: #fff;
+    }
+    .card.yes { border-top: 3px solid #16a34a; }
+    .card.no { border-top: 3px solid #94a3b8; }
+    .card h3 {
+      margin: 0 0 6px;
+      color: #0f172a;
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .card ul {
+      margin: 0;
+      padding-left: 15px;
+      font-size: 8pt;
+      color: #475569;
+    }
+    .card li { margin-bottom: 3px; }
+
+    .accept {
+      margin-top: 14px;
+      border: 1px solid #dce3f0;
+      background: #f8fafc;
+      padding: 14px 16px;
+    }
+    .accept h2 {
+      margin-top: 0;
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+    .accept-box {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      padding: 10px 12px;
+      margin: 8px 0 14px;
+      font-size: 8.5pt;
+      color: #334155;
+    }
+    .sign {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .sign-card {
+      background: #fff;
+      border: 1px solid #dce3f0;
+      padding: 12px;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sign-card .who {
+      font-size: 7.5pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0500D0;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .sign-card .fields {
+      margin-top: auto;
+      font-size: 8pt;
+      color: #64748b;
+    }
+    .sign-card .sig-line {
+      border-bottom: 1px solid #94a3b8;
+      height: 36px;
+      margin-bottom: 6px;
+    }
+    .sign-card .field-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed #e2e8f0;
+    }
+
+    footer {
+      margin-top: 16px;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="hero">
+      <div class="hero-top">
+        <div>
+          <h1>FICO MANA</h1>
+          <p class="tagline">Self Portrait Studio</p>
+          <div class="doc-type">Filtering System — Project Proposal</div>
+          <p class="doc-sub">
+            Post-shoot selection, review, editor turnaround &amp; delivery.
+            Booking and deposit modules excluded (already settled).
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="row"><span class="label">Ref</span><span class="value">FM-FLT-2026-001</span></div>
+          <div class="row"><span class="label">Date</span><span class="value">July 27, 2026</span></div>
+          <div class="row"><span class="label">Valid until</span><span class="value">August 27, 2026</span></div>
+          <div class="row"><span class="label">Prepared for</span><span class="value">FICO MANA Studio</span></div>
+          <div class="row"><span class="label">Status</span><span class="value">For acceptance</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="invest-strip">
+      <div class="cell">
+        <div class="k">Scope</div>
+        <div class="v">Filtering &amp; Editor only</div>
+      </div>
+      <div class="cell">
+        <div class="k">Payment schedule</div>
+        <div class="v">50% / 50%</div>
+      </div>
+      <div class="cell">
+        <div class="k">Total investment</div>
+        <div class="v">₱30,000</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Important:</strong> This quotation covers the Filtering System only.
+      Public booking, package selection, deposit verification, and related payment emails
+      are <strong>not included</strong> — those modules are acknowledged as already paid separately.
+    </div>
+
+    <h2>1. System overview</h2>
+    <p>
+      After a shoot, raw photos are shared with the client. This system manages 5-photo selection,
+      staff quality review, editor day folders, a 12 working-day turnaround, and final edited delivery.
+    </p>
+
+    <div class="flow">
+      <div class="flow-item">
+        <div class="flow-num">1</div>
+        <div>
+          <strong>Gallery ready</strong>
+          <span>Staff shares the raw Google Drive gallery with the client.</span>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-num">2</div>
+        <div>
+          <strong>Client 5-pick</strong>
+          <span>Client submits a Drive folder with 5 chosen raw photos.</span>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-num">3</div>
+        <div>
+          <strong>Review Queue</strong>
+          <span>Staff approves or rejects; client is emailed automatically.</span>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-num">4</div>
+        <div>
+          <strong>Editor folders</strong>
+          <span>Approved jobs grouped by shoot date for clear daily workload.</span>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-num">5</div>
+        <div>
+          <strong>12 working-day window</strong>
+          <span>Starts day after shoot; late approvals still get a full 12 working days.</span>
+        </div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-num">6</div>
+        <div>
+          <strong>Edited delivery</strong>
+          <span>Staff pastes edited Drive link and emails the client.</span>
+        </div>
+      </div>
+    </div>
+
+    <h2>2. Investment breakdown</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="amt" style="width:6%">#</th>
+          <th style="width:24%">Module</th>
+          <th>Deliverables</th>
+          <th class="amt" style="width:16%">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">01</td>
+          <td><strong>Client 5-pick submit</strong></td>
+          <td>Submit page, Drive folder capture, booking match, selection-received emails (client &amp; staff)</td>
+          <td class="amt">₱6,000</td>
+        </tr>
+        <tr>
+          <td class="num">02</td>
+          <td><strong>Review Queue</strong></td>
+          <td>Approve / reject workflow, reasons, staff alerts, client emails with resubmit link</td>
+          <td class="amt">₱8,000</td>
+        </tr>
+        <tr>
+          <td class="num">03</td>
+          <td><strong>Filtering dashboard</strong></td>
+          <td>Overview KPIs, shoot-day calendar, Client # order, pipeline tabs</td>
+          <td class="amt">₱5,000</td>
+        </tr>
+        <tr>
+          <td class="num">04</td>
+          <td><strong>Editor &amp; delivery</strong></td>
+          <td>Shoot-day folders, 12 working-day deadline, overdue tracking, edited delivery email</td>
+          <td class="amt">₱8,000</td>
+        </tr>
+        <tr>
+          <td class="num">05</td>
+          <td><strong>QA &amp; handoff</strong></td>
+          <td>Late-submit / reject-resubmit checks and staff walkthrough</td>
+          <td class="amt">₱3,000</td>
+        </tr>
+        <tr class="total">
+          <td colspan="3">Total — Filtering System only</td>
+          <td class="amt">₱30,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Inclusions &amp; exclusions</h2>
+    <div class="two-col">
+      <div class="card yes">
+        <h3>Included in ₱30,000</h3>
+        <ul>
+          <li>Filtering Dashboard (all tabs)</li>
+          <li>Client 5-pick submission flow</li>
+          <li>Approve / reject + email notices</li>
+          <li>Shoot-day editor folders</li>
+          <li>12 working-day edit deadline rules</li>
+          <li>Edited-photo delivery email</li>
+          <li>Staff operational handoff</li>
+        </ul>
+      </div>
+      <div class="card no">
+        <h3>Excluded (already settled / separate)</h3>
+        <ul>
+          <li>Public booking &amp; package website</li>
+          <li>Deposit payment &amp; verification</li>
+          <li>Shoot reminder / booking emails</li>
+          <li>Hosting (Vercel / Supabase / email)</li>
+          <li>Monthly retainer (unless agreed)</li>
+          <li>Features outside filtering scope</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>4. Payment terms</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:28%">Milestone</th>
+          <th>Description</th>
+          <th class="amt" style="width:18%">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>50% — Commencement</strong></td>
+          <td>Due upon written / signed acceptance of this proposal</td>
+          <td class="amt">₱15,000</td>
+        </tr>
+        <tr>
+          <td><strong>50% — Delivery</strong></td>
+          <td>Due upon completion and staff handoff of the Filtering System</td>
+          <td class="amt">₱15,000</td>
+        </tr>
+        <tr class="total">
+          <td colspan="2">Total payable</td>
+          <td class="amt">₱30,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="accept">
+      <h2>5. Acceptance</h2>
+      <div class="accept-box">
+        By signing below, the Client accepts the <strong>Filtering System</strong> scope and investment of
+        <strong>₱30,000.00</strong>. Booking, deposit, and payment-verification modules are expressly
+        acknowledged as <strong>already settled separately</strong> and are not part of this agreement.
+        This proposal is valid until <strong>August 27, 2026</strong>.
+      </div>
+
+      <div class="sign">
+        <div class="sign-card">
+          <div class="who">Client / Studio</div>
+          <div class="fields">
+            <div class="sig-line"></div>
+            <div><strong>Signature over printed name</strong></div>
+            <div class="field-row">
+              <span>Position: _______________</span>
+              <span>Date: _______________</span>
+            </div>
+          </div>
+        </div>
+        <div class="sign-card">
+          <div class="who">Service provider</div>
+          <div class="fields">
+            <div class="sig-line"></div>
+            <div><strong>Signature over printed name</strong></div>
+            <div class="field-row">
+              <span>Position: _______________</span>
+              <span>Date: _______________</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>FICO MANA Self Portrait Studio · Cabuyao Retail Plaza, 4025 Cabuyao, Laguna</div>
+      <div>Ref FM-FLT-2026-001 · Filtering System Proposal · Confidential</div>
+    </footer>
+  </div>
+</body>
+</html>

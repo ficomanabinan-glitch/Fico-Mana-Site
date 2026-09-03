@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>FICO MANA — Development Revisions Quotation</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm 12mm 14mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Calibri, Arial, Helvetica, sans-serif;
+      color: #0f172a;
+      font-size: 9pt;
+      line-height: 1.4;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .sheet { max-width: 740px; margin: 0 auto; }
+
+    .hero {
+      background: linear-gradient(135deg, #0500D0 0%, #03008F 100%);
+      color: #ffffff;
+      padding: 20px 22px 18px;
+      margin: 0 0 14px;
+    }
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: 20pt;
+      letter-spacing: 0.14em;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .hero .tagline {
+      margin: 4px 0 0;
+      font-size: 7.5pt;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: #e8eaff;
+    }
+    .hero .doc-type {
+      margin-top: 12px;
+      font-size: 10.5pt;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .hero .doc-sub {
+      margin-top: 5px;
+      font-size: 8.5pt;
+      color: #ffffff;
+      max-width: 360px;
+      line-height: 1.4;
+    }
+    .hero-meta {
+      text-align: right;
+      font-size: 8pt;
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.28);
+      padding: 10px 12px;
+      min-width: 190px;
+      color: #ffffff;
+    }
+    .hero-meta .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 2px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.16);
+    }
+    .hero-meta .row:last-child { border-bottom: 0; }
+    .hero-meta .label {
+      color: #dce0ff;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 7pt;
+    }
+    .hero-meta .value { font-weight: 600; color: #ffffff; }
+
+    .invest-strip {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      border: 1px solid #d4d8f0;
+      margin-bottom: 12px;
+    }
+    .invest-strip .cell {
+      padding: 10px 12px;
+      border-right: 1px solid #d4d8f0;
+    }
+    .invest-strip .cell:last-child { border-right: 0; background: #0500D0; color: #fff; }
+    .invest-strip .k {
+      font-size: 7pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 3px;
+    }
+    .invest-strip .cell:last-child .k { color: #dce0ff; }
+    .invest-strip .v {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .invest-strip .cell:last-child .v { color: #fff; font-size: 13pt; }
+
+    .note {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #0500D0;
+      padding: 8px 10px;
+      margin: 0 0 12px;
+      font-size: 8pt;
+      color: #334155;
+    }
+
+    h2 {
+      margin: 12px 0 6px;
+      font-size: 9pt;
+      color: #0500D0;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border-bottom: 2px solid #0500D0;
+      padding-bottom: 3px;
+    }
+    p { margin: 0 0 6px; color: #334155; font-size: 8.5pt; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 4px 0 10px;
+      font-size: 8pt;
+    }
+    th, td {
+      border: 1px solid #dce3f0;
+      padding: 6px 7px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #0500D0;
+      color: #fff;
+      font-size: 7pt;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    tbody tr:nth-child(even) td { background: #f8fafc; }
+    td.amt, th.amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    td.ctr { text-align: center; }
+    tr.discount td { background: #fef3c7 !important; color: #92400e; }
+    tr.total td {
+      background: #0500D0 !important;
+      color: #fff;
+      font-weight: 700;
+      font-size: 9pt;
+      border-color: #0500D0;
+    }
+
+    .tier {
+      margin: 0 0 8px;
+      border: 1px solid #dce3f0;
+      page-break-inside: avoid;
+    }
+    .tier-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      background: #f1f5f9;
+      border-bottom: 1px solid #dce3f0;
+    }
+    .tier-head strong {
+      font-size: 8pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0500D0;
+    }
+    .tier-head span {
+      font-size: 7.5pt;
+      color: #475569;
+      font-weight: 600;
+    }
+    .tier ul {
+      margin: 0;
+      padding: 6px 8px 6px 20px;
+      font-size: 7.5pt;
+      color: #334155;
+      columns: 2;
+      column-gap: 14px;
+    }
+    .tier.major ul { columns: 1; }
+    .tier li { margin-bottom: 2px; break-inside: avoid; }
+
+    .accept {
+      margin-top: 10px;
+      border: 1px solid #dce3f0;
+      background: #f8fafc;
+      padding: 12px 14px;
+    }
+    .accept h2 {
+      margin-top: 0;
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+    .accept-box {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      padding: 8px 10px;
+      margin: 6px 0 12px;
+      font-size: 8pt;
+      color: #334155;
+    }
+    .sign {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .sign-card {
+      background: #fff;
+      border: 1px solid #dce3f0;
+      padding: 10px;
+      min-height: 96px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sign-card .who {
+      font-size: 7pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0500D0;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .sign-card .fields {
+      margin-top: auto;
+      font-size: 7.5pt;
+      color: #64748b;
+    }
+    .sign-card .sig-line {
+      border-bottom: 1px solid #94a3b8;
+      height: 28px;
+      margin-bottom: 4px;
+    }
+    .sign-card .field-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px dashed #e2e8f0;
+    }
+
+    footer {
+      margin-top: 12px;
+      padding-top: 6px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 7pt;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="hero">
+      <div class="hero-top">
+        <div>
+          <h1>FICO MANA</h1>
+          <p class="tagline">Self Portrait Studio</p>
+          <div class="doc-type">Development Revisions — Quotation</div>
+          <p class="doc-sub">
+            Change-request package (2 Major + 17 Minor). Booking system build is already settled and excluded.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="row"><span class="label">Ref</span><span class="value">FM-REV-2026-001</span></div>
+          <div class="row"><span class="label">Date</span><span class="value">July 30, 2026</span></div>
+          <div class="row"><span class="label">Valid until</span><span class="value">August 30, 2026</span></div>
+          <div class="row"><span class="label">Prepared for</span><span class="value">FICO MANA Studio</span></div>
+          <div class="row"><span class="label">Status</span><span class="value">For acceptance</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="invest-strip">
+      <div class="cell">
+        <div class="k">Scope</div>
+        <div class="v">Post-go-live revisions</div>
+      </div>
+      <div class="cell">
+        <div class="k">List price</div>
+        <div class="v">₱10,500</div>
+      </div>
+      <div class="cell">
+        <div class="k">Amount due</div>
+        <div class="v">₱6,000</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Discount applied:</strong> Standard rates are Major ₱1,000 and Minor ₱500.
+      Package discount includes <strong>1 Major waived (−₱1,000)</strong> and
+      <strong>Minor discount (−₱3,500)</strong>, for a final payable of <strong>₱6,000</strong>.
+      Original booking / payment system is acknowledged as already paid separately.
+    </div>
+
+    <h2>1. Development cost summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="amt">Items</th>
+          <th class="amt">Rate</th>
+          <th class="amt">Gross</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Major</strong></td>
+          <td class="ctr">2</td>
+          <td class="amt">₱1,000</td>
+          <td class="amt">₱2,000</td>
+        </tr>
+        <tr>
+          <td><strong>Minor</strong></td>
+          <td class="ctr">17</td>
+          <td class="amt">₱500</td>
+          <td class="amt">₱8,500</td>
+        </tr>
+        <tr>
+          <td colspan="3"><strong>Subtotal (list)</strong></td>
+          <td class="amt"><strong>₱10,500</strong></td>
+        </tr>
+        <tr class="discount">
+          <td colspan="3">Discount — 1 Major waived</td>
+          <td class="amt">−₱1,000</td>
+        </tr>
+        <tr class="discount">
+          <td colspan="3">Discount — Minor package adjustment</td>
+          <td class="amt">−₱3,500</td>
+        </tr>
+        <tr class="total">
+          <td colspan="3">Grand total due</td>
+          <td class="amt">₱6,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Revision details</h2>
+
+    <div class="tier major">
+      <div class="tier-head">
+        <strong>Major — 2 items</strong>
+        <span>₱1,000 × 2 = ₱2,000 · 1 waived in package</span>
+      </div>
+      <ul>
+        <li>Retire FICO 3 &amp; FICO 4 — removed from catalog, DB sync / deactivation migration</li>
+        <li>Editor deadline (12 working days) + shoot-day editor folders (late approvals keep full window)</li>
+      </ul>
+    </div>
+
+    <div class="tier">
+      <div class="tier-head">
+        <strong>Minor — 17 items</strong>
+        <span>₱500 × 17 = ₱8,500 · discounted in package</span>
+      </div>
+      <ul>
+        <li>Client day ranking (earliest = Client 1, 2, 3…)</li>
+        <li>Client label rename (Priority → Client)</li>
+        <li>Shoot reminder email + admin Send Reminder</li>
+        <li>Reminder email rewrite (today + MANA / FICO prep)</li>
+        <li>Ops notes (dashboard / email ops)</li>
+        <li>Email-storage subscription reminders</li>
+        <li>Complete session / Google Drive gallery flow</li>
+        <li>Gallery / “5 Enhanced Photos” emails</li>
+        <li>Walk-in receipt upload + email validation</li>
+        <li>Site title metadata (FICO MANA)</li>
+        <li>Hero mobile layout fixes</li>
+        <li>Package inclusions dropdown (booking UI)</li>
+        <li>Raw-photo rejection email reliability</li>
+        <li>BPI transaction ref optional on deposit</li>
+        <li>Navbar fixes</li>
+        <li>Admin UI accent / styling consistency</li>
+        <li>Hard-delete bookings with reason validation</li>
+      </ul>
+    </div>
+
+    <h2>3. Payment terms</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:28%">Milestone</th>
+          <th>Description</th>
+          <th class="amt" style="width:18%">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>100% — Due</strong></td>
+          <td>Payable upon acceptance for this discounted revisions package</td>
+          <td class="amt">₱6,000</td>
+        </tr>
+        <tr class="total">
+          <td colspan="2">Total payable</td>
+          <td class="amt">₱6,000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="accept">
+      <h2>4. Acceptance</h2>
+      <div class="accept-box">
+        By signing below, the Client accepts this <strong>Development Revisions</strong> package for
+        <strong>₱6,000.00</strong> (list ₱10,500 less package discounts: 1 Major waived and Minor adjustment),
+        covering <strong>2 Major and 17 Minor</strong> items. The original booking / payment system is
+        acknowledged as <strong>already settled separately</strong>. Valid until <strong>August 30, 2026</strong>.
+      </div>
+
+      <div class="sign">
+        <div class="sign-card">
+          <div class="who">Client / Studio</div>
+          <div class="fields">
+            <div class="sig-line"></div>
+            <div><strong>Signature over printed name</strong></div>
+            <div class="field-row">
+              <span>Position: _______________</span>
+              <span>Date: _______________</span>
+            </div>
+          </div>
+        </div>
+        <div class="sign-card">
+          <div class="who">Service provider</div>
+          <div class="fields">
+            <div class="sig-line"></div>
+            <div><strong>Signature over printed name</strong></div>
+            <div class="field-row">
+              <span>Position: _______________</span>
+              <span>Date: _______________</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>FICO MANA Self Portrait Studio · Cabuyao Retail Plaza, Laguna</div>
+      <div>Ref FM-REV-2026-001 · Revisions Quotation · Confidential</div>
+    </footer>
+  </div>
+</body>
+</html>
