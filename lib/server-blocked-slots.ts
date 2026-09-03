@@ -30,48 +30,51 @@ function mapRow(row: Record<string, unknown>): BlockedSlot {
   }
 }
 
+function requireSupabaseAdmin() {
+  const admin = getSupabaseAdmin()
+  if (!admin) {
+    throw new Error(
+      'Supabase admin client unavailable. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.',
+    )
+  }
+  return admin
+}
+
 export async function listBlockedSlots(): Promise<BlockedSlot[]> {
   if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const { data, error } = await admin
-        .from('blocked_slots')
-        .select('*')
-        .order('date', { ascending: true })
+    const admin = requireSupabaseAdmin()
+    const { data, error } = await admin
+      .from('blocked_slots')
+      .select('*')
+      .order('date', { ascending: true })
 
-      if (!error && data) return data.map((r) => mapRow(r as Record<string, unknown>))
-
-      // Fallback if only legacy blocked_days exists
-      const { data: legacy, error: legacyErr } = await admin.from('blocked_days').select('*')
-      if (!legacyErr && legacy?.length) {
-        console.warn('blocked_slots missing — using empty list (run migration 007)')
-      }
-    }
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((r) => mapRow(r as Record<string, unknown>))
   }
+
   return readFileBlockedSlots()
 }
 
 export async function upsertBlockedSlot(slot: BlockedSlot): Promise<BlockedSlot> {
   if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const { data, error } = await admin
-        .from('blocked_slots')
-        .upsert(
-          {
-            date: slot.date,
-            slot_id: slot.slotId,
-            reason: slot.reason,
-            created_by: slot.createdBy ?? null,
-          },
-          { onConflict: 'date,slot_id' },
-        )
-        .select()
-        .single()
+    const admin = requireSupabaseAdmin()
+    const { data, error } = await admin
+      .from('blocked_slots')
+      .upsert(
+        {
+          date: slot.date,
+          slot_id: slot.slotId,
+          reason: slot.reason,
+          created_by: slot.createdBy ?? null,
+        },
+        { onConflict: 'date,slot_id' },
+      )
+      .select()
+      .single()
 
-      if (!error && data) return mapRow(data as Record<string, unknown>)
-      if (error) throw new Error(error.message)
-    }
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('Blocked slot was not returned after save.')
+    return mapRow(data as Record<string, unknown>)
   }
 
   const slots = await readFileBlockedSlots()
@@ -85,16 +88,15 @@ export async function upsertBlockedSlot(slot: BlockedSlot): Promise<BlockedSlot>
 
 export async function removeBlockedSlot(date: string, slotId: string): Promise<boolean> {
   if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const { error } = await admin
-        .from('blocked_slots')
-        .delete()
-        .eq('date', date)
-        .eq('slot_id', slotId)
-      if (!error) return true
-      if (error) throw new Error(error.message)
-    }
+    const admin = requireSupabaseAdmin()
+    const { error } = await admin
+      .from('blocked_slots')
+      .delete()
+      .eq('date', date)
+      .eq('slot_id', slotId)
+
+    if (error) throw new Error(error.message)
+    return true
   }
 
   const slots = await readFileBlockedSlots()
