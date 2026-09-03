@@ -11,8 +11,8 @@ const ALLOWED_TYPES = new Set([
   'image/png',
   'image/webp',
   'image/gif',
-  'application/pdf',
 ])
+const ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
 
 async function uploadToStorage(file: File, fileName: string) {
   const buffer = Buffer.from(await file.arrayBuffer())
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const file = form.get('file')
 
     if (!rawBookingId || !(file instanceof File)) {
-      return NextResponse.json({ error: 'Booking reference and file are required.' }, { status: 400 })
+      return NextResponse.json({ error: 'Booking reference and receipt image are required.' }, { status: 400 })
     }
 
     if (!isValidBookingId(bookingId) && !bookingId.startsWith('FM-W')) {
@@ -53,11 +53,15 @@ export async function POST(request: Request) {
     }
 
     if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: 'File must be 5 MB or smaller.' }, { status: 400 })
+      return NextResponse.json({ error: 'Receipt image must be 5 MB or smaller.' }, { status: 400 })
     }
 
-    if (file.type && !ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json({ error: 'Upload a JPG, PNG, WEBP, GIF, or PDF file.' }, { status: 400 })
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+    if (!ALLOWED_TYPES.has(file.type) || !ALLOWED_EXTENSIONS.has(extension)) {
+      return NextResponse.json(
+        { error: 'Upload a receipt image only: JPG, JPEG, PNG, WEBP, or GIF.' },
+        { status: 400 },
+      )
     }
 
     const booking = await loadBookingById(bookingId)
@@ -85,7 +89,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'Failed to upload receipt. Run migration 004 in Supabase and set SUPABASE_SERVICE_ROLE_KEY on Vercel.',
+            'Failed to upload receipt. Ensure receipt storage is configured and the Supabase server secret is available on Vercel.',
         },
         { status: 500 },
       )
