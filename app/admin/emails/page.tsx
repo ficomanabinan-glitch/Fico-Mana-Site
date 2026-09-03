@@ -11,14 +11,13 @@ import {
   adminBtnGhost,
   adminOverlay,
   adminModal,
-  adminSpinnerWrap,
-  adminSpinner,
   emailStatusBadge,
 } from '@/lib/admin-ui'
 import AdminPageHeader from '@/components/admin-page-header'
 import AdminOpsNotes from '@/components/admin-ops-notes'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 
 export default function EmailLogsConsole() {
   const toast = useAdminToast()
@@ -67,11 +66,7 @@ export default function EmailLogsConsole() {
   }, [searchTerm, logs])
 
   if (loading) {
-    return (
-      <div className={adminSpinnerWrap}>
-        <div className={adminSpinner} />
-      </div>
-    )
+    return <AdminPageSkeleton variant="emails" />
   }
 
   return (
