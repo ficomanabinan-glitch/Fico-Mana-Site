@@ -12,7 +12,6 @@ import {
   Bell,
   Menu,
   X,
-  RefreshCw,
   FileText,
   Image,
 } from 'lucide-react'
@@ -21,6 +20,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { AdminToastProvider } from '@/components/admin-toast-provider'
 import { AdminAutoSyncProvider } from '@/components/admin-auto-sync'
 import AdminSyncStatus from '@/components/admin-sync-status'
+import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge, adminNavActive, adminNavIdle } from '@/lib/admin-ui'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
@@ -104,8 +104,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <RefreshCw className="w-6 h-6 text-primary animate-spin" />
+      <div className="admin-console min-h-screen bg-[#222222] text-white flex">
+        <aside className="hidden md:flex md:w-[260px] border-r border-white/[0.08] flex-col flex-shrink-0 p-4 animate-pulse">
+          <div className="p-3 mb-5">
+            <div className="h-6 w-32 rounded bg-white/10" />
+            <div className="mt-2 h-2.5 w-24 rounded bg-white/[0.06]" />
+          </div>
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-10 rounded-lg bg-white/[0.045] border border-white/[0.05]" />
+            ))}
+          </div>
+          <div className="mt-auto h-16 rounded-xl bg-white/[0.035] border border-white/[0.06]" />
+        </aside>
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="h-14 border-b border-white/[0.08] px-5 md:px-8 flex items-center justify-between animate-pulse">
+            <div className="h-3 w-28 rounded bg-white/[0.07]" />
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-20 rounded-lg bg-white/[0.05]" />
+              <div className="h-8 w-8 rounded-full bg-white/[0.07]" />
+            </div>
+          </header>
+          <main className="relative flex-1 overflow-y-auto p-5 md:p-8">
+            <AdminLoadingSkeleton />
+          </main>
+        </div>
       </div>
     )
   }
@@ -121,7 +144,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: 'Bookings List', href: '/admin/bookings', icon: List },
     {
       label: 'Filtering Queue',
-      href: '/filtering',
+      href: '/admin/filtering',
       icon: Image,
       badge: pendingRawPhotoReviews > 0 ? pendingRawPhotoReviews : undefined,
     },
@@ -267,12 +290,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                 <Link
                                   href={
                                     n.type.startsWith('RAW_PHOTO')
-                                      ? `/filtering?tab=queue&search=${encodeURIComponent(n.bookingId)}`
+                                      ? `/admin/filtering?tab=queue&search=${encodeURIComponent(n.bookingId)}`
                                       : `/admin/bookings?search=${encodeURIComponent(n.bookingId)}`
                                   }
                                   onClick={() => setShowNotifDrawer(false)}
                                   className="text-[10px] text-[#C4CEFF] font-semibold hover:underline hover:text-white"
-                                  {...(n.type.startsWith('RAW_PHOTO') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                                 >
                                   View
                                 </Link>
