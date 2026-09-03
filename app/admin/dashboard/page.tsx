@@ -13,13 +13,14 @@ import {
   ArrowRight,
   Download,
 } from 'lucide-react'
-import { adminPage, adminCard, adminPanel, adminCardHover, adminSpinnerWrap, adminSpinner, adminEmptyState } from '@/lib/admin-ui'
+import { adminPage, adminCard, adminPanel, adminCardHover, adminEmptyState } from '@/lib/admin-ui'
 import AdminBookingSearch from '@/components/admin-booking-search'
 import AdminPageHeader from '@/components/admin-page-header'
 import AdminOpsNotes from '@/components/admin-ops-notes'
 import BookingPrioritySelect from '@/components/booking-priority-select'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import { buildDayPriorityMap, getDayPriorityCount, sortBookingsByDayPriority } from '@/lib/booking-priority'
 import { downloadDayBookingsExcel } from '@/lib/export-day-bookings'
 
@@ -109,11 +110,7 @@ export default function DashboardOverview() {
   const todayPriorityCount = getDayPriorityCount(bookings, todayStr)
 
   if (loading) {
-    return (
-      <div className={adminSpinnerWrap}>
-        <div className={adminSpinner} />
-      </div>
-    )
+    return <AdminPageSkeleton variant="dashboard" />
   }
 
   const kpis = [
