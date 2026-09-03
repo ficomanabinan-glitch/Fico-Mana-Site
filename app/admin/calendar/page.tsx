@@ -9,7 +9,8 @@ import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AdminPageHeader from '@/components/admin-page-header'
 import AdminBookingCalendar, { AdminDaySessions } from '@/components/admin-booking-calendar'
-import { adminPage, adminSpinnerWrap, adminSpinner } from '@/lib/admin-ui'
+import { adminPage } from '@/lib/admin-ui'
+import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 
 function todayKey() {
   const now = new Date()
@@ -51,11 +52,7 @@ export default function AdminCalendarPage() {
   useOnAdminDbSync(() => fetchData(true))
 
   if (loading) {
-    return (
-      <div className={adminSpinnerWrap}>
-        <div className={adminSpinner} />
-      </div>
-    )
+    return <AdminPageSkeleton variant="calendar" />
   }
 
   return (
