@@ -94,6 +94,53 @@ function monthsOverlapping(start: Date, end: Date, expense: SalesExpense) {
   return count
 }
 
+function bucketRevenue(bookings: Booking[], start: Date, end: Date) {
+  return bookings
+    .filter((b) => VALID_SALES_STATUSES.has(b.bookingStatus) && dateInRange(b.bookingDate, start, end))
+    .reduce((sum, b) => sum + toMinor(b.price), 0)
+}
+
+function bucketExpenses(expenses: SalesExpense[], start: Date, end: Date) {
+  let total = 0
+  for (const expense of expenses) {
+    if (expenseApplies(expense, start, end)) total += toMinor(expense.amount)
+  }
+  return total
+}
+
+function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period: SalesPeriod, start: Date, end: Date) {
+  const buckets: Array<{ key: string; label: string; revenue: number; expenses: number }> = []
+
+  if (period === 'month') {
+    const cursor = new Date(start)
+    while (cursor < end) {
+      const next = new Date(cursor)
+      next.setDate(next.getDate() + 1)
+      buckets.push({
+        key: cursor.toISOString().slice(0, 10),
+        label: String(cursor.getDate()),
+        revenue: fromMinor(bucketRevenue(bookings, cursor, next)),
+        expenses: fromMinor(bucketExpenses(expenses, cursor, next)),
+      })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return buckets
+  }
+
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  while (cursor < end) {
+    const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    buckets.push({
+      key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+      label: cursor.toLocaleDateString('en-PH', { month: 'short' }),
+      revenue: fromMinor(bucketRevenue(bookings, cursor, next)),
+      expenses: fromMinor(bucketExpenses(expenses, cursor, next)),
+    })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  return buckets
+}
+
 export function calculateSalesSummary(
   bookings: Booking[],
   expenses: SalesExpense[],
@@ -157,26 +204,6 @@ export function calculateSalesSummary(
     contributionMinor > 0 ? Math.ceil((fixedExpensesMinor + desiredProfitMinor) / contributionMinor) : null
   const profitMargin = bookedSalesMinor > 0 ? (netProfitMinor / bookedSalesMinor) * 100 : 0
 
-  const monthBuckets: Array<{ key: string; label: string; revenue: number; expenses: number }> = []
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
-  while (cursor < end) {
-    const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-    const monthRevenueMinor = bookings
-      .filter((b) => VALID_SALES_STATUSES.has(b.bookingStatus) && dateInRange(b.bookingDate, cursor, next))
-      .reduce((sum, b) => sum + toMinor(b.price), 0)
-    let monthExpenseMinor = 0
-    for (const expense of expenses) {
-      if (expenseApplies(expense, cursor, next)) monthExpenseMinor += toMinor(expense.amount)
-    }
-    monthBuckets.push({
-      key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
-      label: cursor.toLocaleDateString('en-PH', { month: 'short' }),
-      revenue: fromMinor(monthRevenueMinor),
-      expenses: fromMinor(monthExpenseMinor),
-    })
-    cursor.setMonth(cursor.getMonth() + 1)
-  }
-
   return {
     period: { start: start.toISOString(), end: end.toISOString(), months: periodMonths },
     bookedSales: fromMinor(bookedSalesMinor),
@@ -199,6 +226,6 @@ export function calculateSalesSummary(
     desiredProfit: fromMinor(desiredProfitMinor),
     desiredProfitBookings,
     desiredProfitMargin: settings.desiredProfitMargin,
-    monthly: monthBuckets,
+    monthly: buildTrendBuckets(bookings, expenses, period, start, end),
   }
 }
