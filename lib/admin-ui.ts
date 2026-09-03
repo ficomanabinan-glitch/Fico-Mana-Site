@@ -22,8 +22,9 @@ export const adminTableWrap = `${adminPanel} overflow-x-auto`
 export const adminTableHead =
   'bg-white/[0.03] border-b border-white/10 text-[10px] font-bold tracking-widest text-white/40 uppercase'
 export const adminTableRow = 'hover:bg-white/[0.03] transition-colors'
-export const adminSpinnerWrap = 'flex items-center justify-center min-h-[400px]'
-export const adminSpinner = 'w-7 h-7 border-2 border-primary/30 border-t-primary animate-spin rounded-full'
+export const adminSpinnerWrap = 'min-h-[400px] w-full py-1'
+export const adminSpinner =
+  'relative h-[360px] w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] animate-pulse before:absolute before:left-4 before:top-5 before:h-6 before:w-48 before:rounded-md before:bg-white/10 after:absolute after:inset-x-4 after:top-16 after:bottom-4 after:rounded-lg after:bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.07)_0px,rgba(255,255,255,0.07)_38px,transparent_38px,transparent_54px)]'
 export const adminOverlay = 'fixed inset-0 bg-black/75 backdrop-blur-md flex z-50 animate-in fade-in duration-200'
 export const adminDrawer =
   'bg-[#222222] border-l border-white/10 w-full max-w-lg h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300'
