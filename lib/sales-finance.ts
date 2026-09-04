@@ -100,10 +100,21 @@ function bucketRevenue(bookings: Booking[], start: Date, end: Date) {
     .reduce((sum, b) => sum + toMinor(b.price), 0)
 }
 
-function bucketExpenses(expenses: SalesExpense[], start: Date, end: Date) {
+function bucketExpenses(expenses: SalesExpense[], start: Date, end: Date, recurringOncePerMonth = false) {
   let total = 0
   for (const expense of expenses) {
-    if (expenseApplies(expense, start, end)) total += toMinor(expense.amount)
+    if (!expenseApplies(expense, start, end)) continue
+
+    if (recurringOncePerMonth && expense.recurrence === 'monthly') {
+      const monthStart = new Date(start.getFullYear(), start.getMonth(), 1)
+      const begins = expense.startDate
+        ? new Date(`${expense.startDate}T12:00:00`)
+        : new Date(`${expense.expenseDate}T12:00:00`)
+      const chargeDate = begins > monthStart ? begins : monthStart
+      if (!(chargeDate >= start && chargeDate < end)) continue
+    }
+
+    total += toMinor(expense.amount)
   }
   return total
 }
@@ -120,7 +131,7 @@ function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period
         key: cursor.toISOString().slice(0, 10),
         label: String(cursor.getDate()),
         revenue: fromMinor(bucketRevenue(bookings, cursor, next)),
-        expenses: fromMinor(bucketExpenses(expenses, cursor, next)),
+        expenses: fromMinor(bucketExpenses(expenses, cursor, next, true)),
       })
       cursor.setDate(cursor.getDate() + 1)
     }
