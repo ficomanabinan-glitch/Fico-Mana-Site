@@ -3,6 +3,6 @@
   "alias": ["admin.ficomana.com"],
   "env": {
     "ADMIN_HOSTNAME": "admin.ficomana.com",
-    "ADMIN_ENFORCE_SUBDOMAIN": "true"
+    "ADMIN_ENFORCE_SUBDOMAIN": "false"
   }
 }
