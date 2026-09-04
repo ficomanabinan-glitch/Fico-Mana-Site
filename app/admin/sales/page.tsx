@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
   Banknote,
@@ -61,6 +61,12 @@ type Summary = {
 
 type SalesPayload = { summary: Summary; settings: SalesSettings; expenses: SalesExpense[] }
 
+type SalesSettingsDraft = {
+  monthlyRevenueTarget: string
+  desiredMonthlyProfit: string
+  desiredProfitMargin: string
+}
+
 type ExpenseDraft = {
   id?: string
   expenseType: 'fixed' | 'variable'
@@ -74,6 +80,51 @@ type ExpenseDraft = {
   bookingId: string
   notes: string
   isActive: boolean
+}
+
+const SALES_CACHE_PREFIX = 'fico_admin_sales_v1:'
+const SALES_CACHE_MAX_AGE_MS = 10 * 60_000
+
+function salesCacheKey(period: SalesPeriod, anchor: string) {
+  return `${SALES_CACHE_PREFIX}${period}:${anchor}`
+}
+
+function readSalesCache(period: SalesPeriod, anchor: string): SalesPayload | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(salesCacheKey(period, anchor))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { savedAt: number; payload: SalesPayload }
+    if (!parsed?.payload || Date.now() - Number(parsed.savedAt || 0) > SALES_CACHE_MAX_AGE_MS) return null
+    return parsed.payload
+  } catch {
+    return null
+  }
+}
+
+function writeSalesCache(period: SalesPeriod, anchor: string, payload: SalesPayload) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(salesCacheKey(period, anchor), JSON.stringify({ savedAt: Date.now(), payload }))
+  } catch {
+    // Ignore storage quota/private-mode failures; the dashboard still works without cache.
+  }
+}
+
+function settingsToDraft(settings?: SalesSettings | null): SalesSettingsDraft {
+  return {
+    monthlyRevenueTarget: settings?.monthlyRevenueTarget ? String(settings.monthlyRevenueTarget) : '',
+    desiredMonthlyProfit: settings?.desiredMonthlyProfit ? String(settings.desiredMonthlyProfit) : '',
+    desiredProfitMargin: settings?.desiredProfitMargin ? String(settings.desiredProfitMargin) : '',
+  }
+}
+
+function draftToSettings(draft: SalesSettingsDraft): SalesSettings {
+  return {
+    monthlyRevenueTarget: Number(draft.monthlyRevenueTarget || 0),
+    desiredMonthlyProfit: Number(draft.desiredMonthlyProfit || 0),
+    desiredProfitMargin: Number(draft.desiredProfitMargin || 0),
+  }
 }
 
 const emptyExpense = (): ExpenseDraft => ({
@@ -99,23 +150,28 @@ const peso = (value: number) =>
 
 export default function SalesManagementPage() {
   const toast = useAdminToast()
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [period, setPeriod] = useState<SalesPeriod>('month')
   const [anchor, setAnchor] = useState(new Date().toISOString().slice(0, 10))
-  const [data, setData] = useState<SalesPayload | null>(null)
-  const [settingsDraft, setSettingsDraft] = useState<SalesSettings>({
-    monthlyRevenueTarget: 0,
-    desiredMonthlyProfit: 0,
-    desiredProfitMargin: 0,
-  })
+  const [data, setData] = useState<SalesPayload | null>(() => readSalesCache('month', new Date().toISOString().slice(0, 10)))
+  const [loading, setLoading] = useState(() => !readSalesCache('month', new Date().toISOString().slice(0, 10)))
+  const [refreshing, setRefreshing] = useState(false)
+  const [settingsDraft, setSettingsDraft] = useState<SalesSettingsDraft>(() => settingsToDraft(data?.settings))
+  const settingsDirtyRef = useRef(false)
   const [expense, setExpense] = useState<ExpenseDraft>(emptyExpense)
   const [savingSettings, setSavingSettings] = useState(false)
   const [savingExpense, setSavingExpense] = useState(false)
 
   const loadData = useCallback(
     async (silent = false) => {
-      if (!silent) setRefreshing(true)
+      const cached = readSalesCache(period, anchor)
+      if (cached) {
+        setData(cached)
+        if (!settingsDirtyRef.current) setSettingsDraft(settingsToDraft(cached.settings))
+        setLoading(false)
+      } else if (!silent) {
+        setRefreshing(true)
+      }
+
       try {
         const params = new URLSearchParams({ period, anchor })
         const res = await fetch(`/api/sales/summary?${params}`, {
@@ -124,13 +180,16 @@ export default function SalesManagementPage() {
         })
         const payload = (await res.json().catch(() => ({}))) as SalesPayload & { error?: string }
         if (!res.ok) throw new Error(payload.error || 'Failed to load sales data.')
+        writeSalesCache(period, anchor, payload)
         setData(payload)
-        setSettingsDraft(payload.settings)
+        if (!settingsDirtyRef.current) setSettingsDraft(settingsToDraft(payload.settings))
       } catch (error) {
-        toast.error(
-          'Sales data unavailable',
-          error instanceof Error ? error.message : 'Could not load financial metrics.',
-        )
+        if (!cached) {
+          toast.error(
+            'Sales data unavailable',
+            error instanceof Error ? error.message : 'Could not load financial metrics.',
+          )
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -140,10 +199,23 @@ export default function SalesManagementPage() {
   )
 
   useEffect(() => {
+    const cached = readSalesCache(period, anchor)
+    if (cached) {
+      setData(cached)
+      if (!settingsDirtyRef.current) setSettingsDraft(settingsToDraft(cached.settings))
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     void loadData(true)
-  }, [loadData])
+  }, [period, anchor, loadData])
 
   useOnAdminDbSync(() => loadData(true))
+
+  const updateSetting = (key: keyof SalesSettingsDraft, value: string) => {
+    settingsDirtyRef.current = true
+    setSettingsDraft((previous) => ({ ...previous, [key]: value }))
+  }
 
   const saveSettings = async () => {
     setSavingSettings(true)
@@ -152,10 +224,11 @@ export default function SalesManagementPage() {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsDraft),
+        body: JSON.stringify(draftToSettings(settingsDraft)),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'Failed to save targets.')
+      settingsDirtyRef.current = false
       toast.success('Financial targets saved', 'Sales planning metrics have been recalculated.')
       await loadData(true)
     } catch (error) {
@@ -272,7 +345,7 @@ export default function SalesManagementPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Sales Management"
-        subtitle="Bookings → revenue → expenses → profit → targets → required shoots."
+        subtitle="Track revenue, expenses, profit, and sales targets for FICO MANA Studio."
         onRefresh={() => loadData()}
         refreshing={refreshing}
       >
@@ -378,12 +451,12 @@ export default function SalesManagementPage() {
           <MoneyField
             label="Monthly Revenue Target"
             value={settingsDraft.monthlyRevenueTarget}
-            onChange={(value) => setSettingsDraft((p) => ({ ...p, monthlyRevenueTarget: value }))}
+            onChange={(value) => updateSetting('monthlyRevenueTarget', value)}
           />
           <MoneyField
             label="Desired Monthly Net Profit"
             value={settingsDraft.desiredMonthlyProfit}
-            onChange={(value) => setSettingsDraft((p) => ({ ...p, desiredMonthlyProfit: value }))}
+            onChange={(value) => updateSetting('desiredMonthlyProfit', value)}
           />
           <div className="space-y-2">
             <label className={adminLabel}>Desired Profit Margin %</label>
@@ -393,9 +466,8 @@ export default function SalesManagementPage() {
               max="100"
               step="1"
               value={settingsDraft.desiredProfitMargin}
-              onChange={(e) =>
-                setSettingsDraft((p) => ({ ...p, desiredProfitMargin: Number(e.target.value) }))
-              }
+              placeholder="0"
+              onChange={(e) => updateSetting('desiredProfitMargin', e.target.value)}
               className={adminInput}
             />
           </div>
@@ -823,8 +895,8 @@ function MoneyField({
   onChange,
 }: {
   label: string
-  value: number
-  onChange: (value: number) => void
+  value: string
+  onChange: (value: string) => void
 }) {
   return (
     <div className="space-y-2">
@@ -834,7 +906,8 @@ function MoneyField({
         min="0"
         step="100"
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        placeholder="0"
+        onChange={(e) => onChange(e.target.value)}
         className={adminInput}
       />
     </div>
