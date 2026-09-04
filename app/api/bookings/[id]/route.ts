@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getBookingFromDb, saveBookingToDb, deleteBookingFromDb } from '@/lib/supabase-store'
+import { disableClientPortal, provisionBookingResources } from '@/lib/booking-provisioning'
 
 const DELETE_REASONS = {
   admin_error: 'Admin error',
@@ -24,9 +25,7 @@ export async function GET(
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (!admin) {
-        return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
-      }
+      if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
       const booking = await getBookingFromDb(admin, id)
       if (booking) {
         if (isStaff) return NextResponse.json(booking)
@@ -62,32 +61,54 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { user, error: authError } = await requireStaffAuth()
     if (authError) return authError
 
     const { id } = await params
     const booking = (await request.json()) as Booking
-    if (booking.id !== id) {
-      return NextResponse.json({ error: 'ID mismatch' }, { status: 400 })
+    if (booking.id !== id) return NextResponse.json({ error: 'ID mismatch' }, { status: 400 })
+
+    const admin = isSupabaseConfigured() ? getSupabaseAdmin() : null
+    const prior = admin ? await getBookingFromDb(admin, id) : await getBookingById(id)
+    if (!prior) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+
+    let saved: Booking
+    if (admin) {
+      const dbSaved = await saveBookingToDb(admin, booking)
+      if (!dbSaved) return NextResponse.json({ error: 'Failed to save booking to database.' }, { status: 500 })
+      saved = dbSaved
+      await upsertBooking(saved)
+    } else {
+      saved = await upsertBooking(booking)
     }
 
-    if (isSupabaseConfigured()) {
-      const admin = getSupabaseAdmin()
-      if (!admin) {
-        return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
-      }
-      const saved = await saveBookingToDb(admin, booking)
-      if (saved) {
-        await upsertBooking(saved)
-        return NextResponse.json(saved)
+    let provisioning: unknown = undefined
+    if (admin) {
+      const actor = { type: 'staff' as const, id: user?.id || null }
+      const cancelledNow = saved.bookingStatus === 'Cancelled' && prior.bookingStatus !== 'Cancelled'
+      if (cancelledNow) {
+        await disableClientPortal(saved.id, actor).catch(console.error)
+      } else if (saved.bookingStatus === 'Confirmed' || saved.bookingStatus === 'Completed') {
+        const needsReconcile =
+          prior.bookingStatus !== saved.bookingStatus ||
+          prior.bookingDate !== saved.bookingDate ||
+          prior.customerName !== saved.customerName
+        if (needsReconcile) {
+          provisioning = await provisionBookingResources(saved.id, actor).catch((error) => {
+            console.error('PUT booking provisioning failed:', error)
+            return undefined
+          })
+        }
       }
     }
 
-    const saved = await upsertBooking(booking)
-    return NextResponse.json(saved)
+    return NextResponse.json({ ...saved, ...(provisioning ? { provisioning } : {}) })
   } catch (error) {
     console.error('PUT /api/bookings/[id]', error)
-    return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update booking' },
+      { status: 500 },
+    )
   }
 }
 
@@ -105,19 +126,14 @@ export async function DELETE(
     let notes = ''
     try {
       const body = (await request.json()) as { reason?: string; notes?: string }
-      if (body.reason === 'admin_error' || body.reason === 'client_error') {
-        reason = body.reason
-      }
+      if (body.reason === 'admin_error' || body.reason === 'client_error') reason = body.reason
       notes = body.notes?.trim() || ''
     } catch {
       // empty body
     }
 
     if (!reason) {
-      return NextResponse.json(
-        { error: 'Delete reason required: admin_error or client_error.' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: 'Delete reason required: admin_error or client_error.' }, { status: 400 })
     }
 
     const booking = isSupabaseConfigured()
@@ -133,19 +149,13 @@ export async function DELETE(
     }
 
     const target = booking || (await getBookingById(id))
-    if (!target) {
-      return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
-    }
+    if (!target) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (!admin) {
-        return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
-      }
+      if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
       const ok = await deleteBookingFromDb(admin, id)
-      if (!ok) {
-        return NextResponse.json({ error: 'Failed to delete booking from database.' }, { status: 500 })
-      }
+      if (!ok) return NextResponse.json({ error: 'Failed to delete booking from database.' }, { status: 500 })
     }
 
     await deleteBookingFromStore(id)
