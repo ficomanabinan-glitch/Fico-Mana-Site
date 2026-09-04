@@ -18,13 +18,12 @@ const ogParts = [
   'part-02.txt',
   'part-03.txt',
   'part-04.txt',
-  'part-05a.txt',
-  'part-05b.txt',
+  'part-05.txt',
   'part-06.txt',
 ]
-const ogPartsDir = join(process.cwd(), 'assets', 'og-homepage')
+const ogPartsDir = join(process.cwd(), 'assets', 'og-homepage-q20')
 const ogTarget = join(process.cwd(), 'public', 'og-homepage.jpg')
-const expectedOgHash = 'cf2165b2b3b8d0a469fbbda7ce906691a6527a103037970956455e87d2c85875'
+const expectedOgHash = 'fa08c02dc9fe0da7b6c2bf9d89922456463a30c6a7bb30e16238443aad1cbc6d'
 
 const encodedOg = (
   await Promise.all(ogParts.map(async (part) => (await readFile(join(ogPartsDir, part), 'utf8')).trim()))
@@ -32,7 +31,7 @@ const encodedOg = (
 const ogBytes = Buffer.from(encodedOg, 'base64')
 const ogHash = createHash('sha256').update(ogBytes).digest('hex')
 
-if (ogBytes.length !== 35160 || ogHash !== expectedOgHash) {
+if (ogBytes.length !== 15023 || ogHash !== expectedOgHash) {
   throw new Error(`Homepage social preview verification failed: ${ogBytes.length} bytes, sha256 ${ogHash}`)
 }
 
