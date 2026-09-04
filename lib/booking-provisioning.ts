@@ -235,7 +235,6 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
       drive_client_folder_id: driveResult.client.id,
       drive_client_folder_url: driveResult.clientUrl,
     })
-    await admin.from('bookings').update({ drive_link: driveResult.clientUrl }).eq('id', bookingId)
     await audit(admin, bookingId, row.drive_client_folder_id ? 'drive_folder_reconciled' : 'drive_client_folder_created', actor, {
       externalResourceId: driveResult.client.id,
       metadata: {
