@@ -51,18 +51,6 @@ function adminSubdomainAlias(request: NextRequest) {
   return NextResponse.redirect(url)
 }
 
-function maybeEnforceAdminSubdomain(request: NextRequest) {
-  if (process.env.ADMIN_ENFORCE_SUBDOMAIN !== 'true') return null
-  if (isAdminHost(request.headers.get('host'))) return null
-  if (!request.nextUrl.pathname.startsWith('/admin')) return null
-
-  const hostname = process.env.ADMIN_HOSTNAME?.trim() || 'admin.ficomana.com'
-  const url = request.nextUrl.clone()
-  url.protocol = 'https:'
-  url.host = hostname
-  return NextResponse.redirect(url)
-}
-
 async function enforceInquiryRateLimit(request: NextRequest) {
   const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!secret) {
@@ -129,9 +117,6 @@ export async function updateSession(request: NextRequest) {
   const alias = adminSubdomainAlias(request)
   if (alias) return alias
 
-  const enforceSubdomain = maybeEnforceAdminSubdomain(request)
-  if (enforceSubdomain) return enforceSubdomain
-
   const { pathname } = request.nextUrl
   const isAdminLogin = pathname === '/admin'
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
@@ -148,9 +133,24 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/api/sync')
   const isAuthCallback = pathname === '/auth/callback'
 
+  // /admin is intentionally a public-facing dead-end login screen. It does not
+  // authenticate or inspect a Supabase session. All deeper admin routes are
+  // sealed and always return visitors to the dummy screen, including users who
+  // may still possess an old valid session.
+  if (isAdminLogin) {
+    return NextResponse.next()
+  }
+
+  if (isAdminRoute) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin'
+    url.search = ''
+    return NextResponse.redirect(url)
+  }
+
   // Broad matching is needed for admin.ficomana.com aliases. Avoid doing any
   // Supabase work for ordinary public-site requests.
-  if (!isAdminRoute && !isFilteringRoute && !isSensitiveApi && !isAuthCallback) {
+  if (!isFilteringRoute && !isSensitiveApi && !isAuthCallback) {
     return NextResponse.next()
   }
 
@@ -183,27 +183,9 @@ export async function updateSession(request: NextRequest) {
     if (limited) return limited
   }
 
-  if (isAdminRoute && !isAdminLogin && !admin) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin'
-    url.search = ''
-    url.searchParams.set('error', user ? 'unauthorized' : 'auth')
-    url.searchParams.set('redirect', pathname)
-    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
-  }
-
   if (isFilteringRoute && !admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin'
-    url.search = ''
-    url.searchParams.set('error', user ? 'unauthorized' : 'auth')
-    url.searchParams.set('redirect', '/admin/filtering')
-    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
-  }
-
-  if (isAdminLogin && admin) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin/dashboard'
     url.search = ''
     return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }
