@@ -6,8 +6,12 @@ function normalizePublicSiteUrl(raw: string | undefined): string | null {
   const url = raw.trim().replace(/\/$/, '')
   // Never put ephemeral *.vercel.app hosts in customer-facing links
   if (url.includes('vercel.app')) return null
-  // Migrate the former production hostname to the current public domain.
-  if (url === 'https://ficomana.studio' || url === 'https://www.ficomana.studio') {
+  // Normalize legacy and apex production hostnames to the canonical www domain.
+  if (
+    url === 'https://ficomana.com' ||
+    url === 'https://ficomana.studio' ||
+    url === 'https://www.ficomana.studio'
+  ) {
     return CANONICAL_SITE_URL
   }
   return url
