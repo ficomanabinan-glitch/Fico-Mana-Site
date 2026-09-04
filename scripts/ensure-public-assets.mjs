@@ -13,36 +13,22 @@ async function exists(path) {
   }
 }
 
-const ogParts = [
-  ['part-01.txt', 4000, '0958475f2de1ef0e07500161017df4cbb580b3cb9d28488f07847e988ba0e2a5'],
-  ['part-02.txt', 4000, 'ba83f22cb2d614b9714e7ad3e2886cee5e22bcefc5a7040dfd3b9a598fb14d25'],
-  ['part-03.txt', 4000, 'e93d432edddbafc090b9f6a705e23ef84d331e49cad8f9dc13838ef82b8a2c56'],
-  ['part-04.txt', 4000, '25ec5d74d22e31204cae083672c91440eec12bc832c8770a588508a000eff6f4'],
-  ['part-05.txt', 4000, '3c73e23262065bcb40a0139ca0a7f003d92e72ab0f121dd220b0be76bfde92ef'],
-  ['part-06.txt', 32, '37f75a73264487f0777352c02a07fbe7c46b8182fc0b456b0fb4b4d3f5cf3bc5'],
-]
-const ogPartsDir = join(process.cwd(), 'assets', 'og-homepage-q20')
+const ogSource = join(process.cwd(), 'public', 'og-homepage-q8.b64')
 const ogTarget = join(process.cwd(), 'public', 'og-homepage.jpg')
-const expectedOgHash = 'fa08c02dc9fe0da7b6c2bf9d89922456463a30c6a7bb30e16238443aad1cbc6d'
+const encodedOg = (await readFile(ogSource, 'utf8')).trim()
+const encodedHash = createHash('sha256').update(encodedOg).digest('hex')
+if (encodedOg.length !== 12688 || encodedHash !== 'c31b7b4c90b64c2f7bbcf6cb83799c5edfc2a3c601d9930ecb5fe80f691464a9') {
+  throw new Error(`Homepage social preview source mismatch: ${encodedOg.length} chars, sha256 ${encodedHash}`)
+}
 
-const loadedParts = await Promise.all(ogParts.map(async ([part, expectedLength, expectedHash]) => {
-  const value = (await readFile(join(ogPartsDir, part), 'utf8')).trim()
-  const hash = createHash('sha256').update(value).digest('hex')
-  if (value.length !== expectedLength || hash !== expectedHash) {
-    throw new Error(`Social preview part mismatch ${part}: length ${value.length}/${expectedLength}, sha256 ${hash}/${expectedHash}`)
-  }
-  return value
-}))
-
-const encodedOg = loadedParts.join('')
 const ogBytes = Buffer.from(encodedOg, 'base64')
 const ogHash = createHash('sha256').update(ogBytes).digest('hex')
-
-if (ogBytes.length !== 15023 || ogHash !== expectedOgHash) {
+if (ogBytes.length !== 9516 || ogHash !== 'fc3bf1bf129638f3ce92b3d07b4a6a321064095c59fce32edd9220019807bd2f') {
   throw new Error(`Homepage social preview verification failed: ${ogBytes.length} bytes, sha256 ${ogHash}`)
 }
 
 await writeFile(ogTarget, ogBytes)
+await unlink(ogSource)
 console.log(`[assets] generated verified og-homepage.jpg (${ogBytes.length} bytes)`)
 
 const legacyEncodedOgPath = join(process.cwd(), 'public', 'og-homepage.b64')
