@@ -14,20 +14,27 @@ async function exists(path) {
 }
 
 const ogParts = [
-  'part-01.txt',
-  'part-02.txt',
-  'part-03.txt',
-  'part-04.txt',
-  'part-05.txt',
-  'part-06.txt',
+  ['part-01.txt', 4000, '0958475f2de1ef0e07500161017df4cbb580b3cb9d28488f07847e988ba0e2a5'],
+  ['part-02.txt', 4000, 'ba83f22cb2d614b9714e7ad3e2886cee5e22bcefc5a7040dfd3b9a598fb14d25'],
+  ['part-03.txt', 4000, 'e93d432edddbafc090b9f6a705e23ef84d331e49cad8f9dc13838ef82b8a2c56'],
+  ['part-04.txt', 4000, '25ec5d74d22e31204cae083672c91440eec12bc832c8770a588508a000eff6f4'],
+  ['part-05.txt', 4000, '3c73e23262065bcb40a0139ca0a7f003d92e72ab0f121dd220b0be76bfde92ef'],
+  ['part-06.txt', 32, '37f75a73264487f0777352c02a07fbe7c46b8182fc0b456b0fb4b4d3f5cf3bc5'],
 ]
 const ogPartsDir = join(process.cwd(), 'assets', 'og-homepage-q20')
 const ogTarget = join(process.cwd(), 'public', 'og-homepage.jpg')
 const expectedOgHash = 'fa08c02dc9fe0da7b6c2bf9d89922456463a30c6a7bb30e16238443aad1cbc6d'
 
-const encodedOg = (
-  await Promise.all(ogParts.map(async (part) => (await readFile(join(ogPartsDir, part), 'utf8')).trim()))
-).join('')
+const loadedParts = await Promise.all(ogParts.map(async ([part, expectedLength, expectedHash]) => {
+  const value = (await readFile(join(ogPartsDir, part), 'utf8')).trim()
+  const hash = createHash('sha256').update(value).digest('hex')
+  if (value.length !== expectedLength || hash !== expectedHash) {
+    throw new Error(`Social preview part mismatch ${part}: length ${value.length}/${expectedLength}, sha256 ${hash}/${expectedHash}`)
+  }
+  return value
+}))
+
+const encodedOg = loadedParts.join('')
 const ogBytes = Buffer.from(encodedOg, 'base64')
 const ogHash = createHash('sha256').update(ogBytes).digest('hex')
 
