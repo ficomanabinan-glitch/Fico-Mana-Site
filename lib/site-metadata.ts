@@ -3,6 +3,7 @@ import { getSiteUrl } from '@/lib/site-url'
 
 export const siteUrl = getSiteUrl()
 export const siteName = 'FICO MANA'
+export const socialPreviewUrl = `${siteUrl}/social-preview-v3.png`
 
 export const siteDescription =
   'FICO MANA is a premier self-portrait and graduation photography studio in Cabuyao, Laguna. Book your session for timeless portraits, professional lighting, and an unforgettable studio experience.'
@@ -18,10 +19,11 @@ export const siteKeywords = [
 ]
 
 export const defaultOgImage = {
-  url: '/opengraph-image',
+  url: socialPreviewUrl,
   width: 1200,
   height: 630,
-  alt: 'FICO MANA Studio landing page preview — The Portrait of Success',
+  alt: 'FICO MANA Studio — The Portrait of Success',
+  type: 'image/png',
 }
 
 type PageMetadataOptions = {
