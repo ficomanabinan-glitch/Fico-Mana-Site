@@ -1,7 +1,27 @@
-import { access, mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 const origin = (process.env.FICOMANA_ASSET_ORIGIN || 'https://www.ficomana.studio').replace(/\/$/, '')
+
+async function exists(path) {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const encodedOgPath = join(process.cwd(), 'public', 'og-homepage.b64')
+const ogTarget = join(process.cwd(), 'public', 'og-homepage.jpg')
+
+if (await exists(encodedOgPath)) {
+  const encoded = (await readFile(encodedOgPath, 'utf8')).trim()
+  const bytes = Buffer.from(encoded, 'base64')
+  await writeFile(ogTarget, bytes)
+  await unlink(encodedOgPath)
+  console.log(`[assets] generated og-homepage.jpg (${bytes.length} bytes)`)
+}
 
 const requiredAssets = [
   'grad/grad_1.jpg',
@@ -20,15 +40,6 @@ const requiredAssets = [
   'green_bg.jpg',
   'retail_bg.jpg',
 ]
-
-async function exists(path) {
-  try {
-    await access(path)
-    return true
-  } catch {
-    return false
-  }
-}
 
 for (const asset of requiredAssets) {
   const target = join(process.cwd(), 'public', asset)
