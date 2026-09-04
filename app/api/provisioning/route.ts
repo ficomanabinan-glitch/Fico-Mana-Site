@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 
 export async function GET() {
   const { error: authError } = await requireStaffAuth()
@@ -17,7 +18,11 @@ export async function GET() {
         .order('booking_date', { ascending: true }),
       admin.from('booking_provisioning').select('*'),
       admin.from('client_portals').select('id,public_id,booking_id,status,expires_at,created_at,last_accessed_at'),
-      admin.from('google_drive_settings').select('root_folder_id,root_folder_name,portal_expiry_days,updated_at').eq('id', 1).maybeSingle(),
+      admin
+        .from('google_drive_settings')
+        .select('root_folder_id,root_folder_name,portal_expiry_days,account_email,refresh_token_encrypted,connected_at,updated_at')
+        .eq('id', 1)
+        .maybeSingle(),
     ])
     if (bookingsError) throw new Error(bookingsError.message)
 
@@ -63,11 +68,10 @@ export async function GET() {
         rootFolderId: settings?.root_folder_id || null,
         rootFolderName: settings?.root_folder_name || 'FICOMANA SHOOTS',
         portalExpiryDays: Number(settings?.portal_expiry_days || 30),
-        oauthConfigured: Boolean(
-          process.env.GOOGLE_CLIENT_ID?.trim() &&
-          process.env.GOOGLE_CLIENT_SECRET?.trim() &&
-          process.env.GOOGLE_REFRESH_TOKEN?.trim(),
-        ),
+        oauthAppConfigured: googleOAuthAppConfigured(),
+        connected: Boolean(settings?.refresh_token_encrypted || process.env.GOOGLE_REFRESH_TOKEN?.trim()),
+        accountEmail: settings?.account_email || (process.env.GOOGLE_REFRESH_TOKEN?.trim() ? 'Environment connection' : null),
+        connectedAt: settings?.connected_at || null,
       },
     })
   } catch (error) {
