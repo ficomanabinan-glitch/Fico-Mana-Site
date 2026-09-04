@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isAdminHost, isAdminUser } from '@/lib/auth/admin'
 import { getSupabaseUrl, getSupabaseKey } from '@/lib/supabase/env'
 
 const INQUIRY_LIMIT = 20
@@ -17,6 +18,49 @@ function requestIp(request: NextRequest) {
   const forwarded = request.headers.get('x-forwarded-for')
   if (forwarded) return forwarded.split(',')[0]?.trim() || 'unknown'
   return request.headers.get('x-real-ip')?.trim() || 'unknown'
+}
+
+function copyResponseCookies(source: NextResponse, target: NextResponse) {
+  source.cookies.getAll().forEach(({ name, value, ...options }) => {
+    target.cookies.set(name, value, options)
+  })
+  return target
+}
+
+function isStaticAsset(pathname: string) {
+  return /\.[a-z0-9]{1,8}$/i.test(pathname)
+}
+
+function isAdminHostPassThrough(pathname: string) {
+  return (
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/_next/') ||
+    isStaticAsset(pathname)
+  )
+}
+
+function adminSubdomainAlias(request: NextRequest) {
+  if (!isAdminHost(request.headers.get('host'))) return null
+  const { pathname } = request.nextUrl
+  if (isAdminHostPassThrough(pathname)) return null
+
+  const url = request.nextUrl.clone()
+  url.pathname = pathname === '/' ? '/admin' : `/admin${pathname}`
+  return NextResponse.redirect(url)
+}
+
+function maybeEnforceAdminSubdomain(request: NextRequest) {
+  if (process.env.ADMIN_ENFORCE_SUBDOMAIN !== 'true') return null
+  if (isAdminHost(request.headers.get('host'))) return null
+  if (!request.nextUrl.pathname.startsWith('/admin')) return null
+
+  const hostname = process.env.ADMIN_HOSTNAME?.trim() || 'admin.ficomana.com'
+  const url = request.nextUrl.clone()
+  url.protocol = 'https:'
+  url.host = hostname
+  return NextResponse.redirect(url)
 }
 
 async function enforceInquiryRateLimit(request: NextRequest) {
@@ -82,8 +126,35 @@ async function enforceInquiryRateLimit(request: NextRequest) {
 }
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  const alias = adminSubdomainAlias(request)
+  if (alias) return alias
 
+  const enforceSubdomain = maybeEnforceAdminSubdomain(request)
+  if (enforceSubdomain) return enforceSubdomain
+
+  const { pathname } = request.nextUrl
+  const isAdminLogin = pathname === '/admin'
+  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isFilteringRoute = pathname === '/filtering' || pathname.startsWith('/filtering/')
+  const isBookingApi = pathname === '/api/bookings' || pathname.startsWith('/api/bookings/')
+  const isSensitiveApi =
+    isBookingApi ||
+    pathname.startsWith('/api/notifications') ||
+    pathname.startsWith('/api/ops-subscriptions') ||
+    pathname.startsWith('/api/emails') ||
+    pathname.startsWith('/api/sales') ||
+    pathname.startsWith('/api/provisioning') ||
+    pathname.startsWith('/api/integrations') ||
+    pathname.startsWith('/api/sync')
+  const isAuthCallback = pathname === '/auth/callback'
+
+  // Broad matching is needed for admin.ficomana.com aliases. Avoid doing any
+  // Supabase work for ordinary public-site requests.
+  if (!isAdminRoute && !isFilteringRoute && !isSensitiveApi && !isAuthCallback) {
+    return NextResponse.next()
+  }
+
+  let supabaseResponse = NextResponse.next({ request })
   const supabase = createServerClient(getSupabaseUrl(), getSupabaseKey(), {
     cookies: {
       getAll() {
@@ -99,14 +170,12 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
+  // getUser validates the token with Supabase Auth; getSession alone is not
+  // sufficient for authorization at this trust boundary.
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
-  const { pathname } = request.nextUrl
-  const isAdminLogin = pathname === '/admin'
-  const isAdminRoute = pathname.startsWith('/admin')
-  const isFilteringRoute = pathname === '/filtering' || pathname.startsWith('/filtering/')
+  const admin = isAdminUser(user)
   const isPublicBookingSubmission = pathname === '/api/bookings' && request.method === 'POST' && !user
 
   if (isPublicBookingSubmission) {
@@ -114,23 +183,29 @@ export async function updateSession(request: NextRequest) {
     if (limited) return limited
   }
 
-  if (isAdminRoute && !isAdminLogin && !user) {
+  if (isAdminRoute && !isAdminLogin && !admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin'
-    return NextResponse.redirect(url)
+    url.search = ''
+    url.searchParams.set('error', user ? 'unauthorized' : 'auth')
+    url.searchParams.set('redirect', pathname)
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }
 
-  if (isFilteringRoute && !user) {
+  if (isFilteringRoute && !admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin'
-    url.search = '?redirect=/admin/filtering'
-    return NextResponse.redirect(url)
+    url.search = ''
+    url.searchParams.set('error', user ? 'unauthorized' : 'auth')
+    url.searchParams.set('redirect', '/admin/filtering')
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }
 
-  if (isAdminLogin && user) {
+  if (isAdminLogin && admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin/dashboard'
-    return NextResponse.redirect(url)
+    url.search = ''
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }
 
   return supabaseResponse

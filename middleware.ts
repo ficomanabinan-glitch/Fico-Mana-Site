@@ -6,19 +6,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/admin/:path*',
-    '/admin',
-    '/filtering',
-    '/filtering/:path*',
-    '/api/bookings',
-    '/api/bookings/:path*',
-    '/api/notifications',
-    '/api/notifications/:path*',
-    '/api/ops-subscriptions',
-    '/api/emails/logs',
-    '/api/emails/send',
-    '/api/emails/health',
-    '/auth/callback',
-  ],
+  // Host-based admin routing cannot be expressed in a path-only matcher. Match
+  // application requests broadly, then return immediately for ordinary public
+  // pages inside updateSession. Static Next.js assets never enter middleware.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|apple-icon.png|icon.png).*)'],
 }
