@@ -1,11 +1,15 @@
 /** Canonical public domain for emails, deep links, and SEO (no trailing slash). */
-export const CANONICAL_SITE_URL = 'https://ficomana.studio'
+export const CANONICAL_SITE_URL = 'https://www.ficomana.com'
 
 function normalizePublicSiteUrl(raw: string | undefined): string | null {
   if (!raw?.trim()) return null
   const url = raw.trim().replace(/\/$/, '')
   // Never put ephemeral *.vercel.app hosts in customer-facing links
   if (url.includes('vercel.app')) return null
+  // Migrate the former production hostname to the current public domain.
+  if (url === 'https://ficomana.studio' || url === 'https://www.ficomana.studio') {
+    return CANONICAL_SITE_URL
+  }
   return url
 }
 
