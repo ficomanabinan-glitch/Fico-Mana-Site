@@ -3,6 +3,7 @@ import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 
+// Internal project folders are intentionally separate from client-facing gallery links.
 export async function GET() {
   const { error: authError } = await requireStaffAuth()
   if (authError) return authError
