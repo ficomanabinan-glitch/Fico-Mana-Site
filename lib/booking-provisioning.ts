@@ -3,6 +3,7 @@ import type { Booking, PaymentRecord } from '@/lib/data-store'
 import { mapDbBookingToModel } from '@/lib/booking-db'
 import { ensureShootHierarchy } from '@/lib/google-drive'
 import { portalUrl } from '@/lib/client-portal'
+import { sendPortalAccessIfNeeded } from '@/lib/portal-email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
 export type ProvisioningStatus = 'NOT_STARTED' | 'PROVISIONING' | 'ACTIVE' | 'PARTIAL_FAILURE' | 'FAILED'
@@ -56,7 +57,6 @@ export async function totalConfirmedPayments(admin: SupabaseClient, booking: Boo
     return data.reduce((sum, row) => sum + Number(row.amount || 0), 0)
   }
 
-  // Migration-safe fallback for bookings confirmed before the payments table became canonical.
   if (booking.paymentStatus === 'Paid Deposit' || booking.paymentStatus === 'Paid Full') {
     return (booking.paymentHistory || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   }
@@ -179,10 +179,7 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   const requiredDeposit = Math.max(0, Number(booking.depositAmount || 0))
 
   if (requiredDeposit > 0 && confirmedPayments < requiredDeposit) {
-    await updateProvisioning(admin, bookingId, {
-      status: 'NOT_STARTED',
-      last_error: null,
-    })
+    await updateProvisioning(admin, bookingId, { status: 'NOT_STARTED', last_error: null })
     await audit(admin, bookingId, 'deposit_threshold_not_reached', actor, {
       metadata: { confirmedPayments, requiredDeposit },
     })
@@ -208,7 +205,7 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
     await audit(admin, bookingId, 'booking_confirmed', actor, {
       metadata: { confirmedPayments, requiredDeposit },
     })
-  } else if (!('confirmedAt' in booking)) {
+  } else {
     await admin.from('bookings').update({ confirmed_at: now }).eq('id', bookingId).is('confirmed_at', null)
   }
 
@@ -272,6 +269,19 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
     last_error: errors.length ? errors.join(' · ') : null,
   })
   if (complete) await audit(admin, bookingId, 'provisioning_completed', actor)
+
+  if (portal) {
+    try {
+      const emailResult = await sendPortalAccessIfNeeded(admin, bookingId, actor)
+      if (emailResult && 'error' in emailResult && emailResult.error) {
+        await audit(admin, bookingId, 'portal_access_email_failed', actor, { error: emailResult.error })
+      }
+    } catch (error) {
+      await audit(admin, bookingId, 'portal_access_email_failed', actor, {
+        error: error instanceof Error ? error.message : 'Portal access email failed.',
+      })
+    }
+  }
 
   return getProvisioningSnapshot(bookingId)
 }
