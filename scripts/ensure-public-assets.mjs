@@ -1,5 +1,4 @@
-import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { createHash } from 'node:crypto'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 const origin = (process.env.FICOMANA_ASSET_ORIGIN || 'https://www.ficomana.studio').replace(/\/$/, '')
@@ -11,29 +10,6 @@ async function exists(path) {
   } catch {
     return false
   }
-}
-
-const ogSource = join(process.cwd(), 'public', 'og-homepage-q8.b64')
-const ogTarget = join(process.cwd(), 'public', 'og-homepage.jpg')
-const encodedOg = (await readFile(ogSource, 'utf8')).trim()
-const encodedHash = createHash('sha256').update(encodedOg).digest('hex')
-if (encodedOg.length !== 12688 || encodedHash !== 'c31b7b4c90b64c2f7bbcf6cb83799c5edfc2a3c601d9930ecb5fe80f691464a9') {
-  throw new Error(`Homepage social preview source mismatch: ${encodedOg.length} chars, sha256 ${encodedHash}`)
-}
-
-const ogBytes = Buffer.from(encodedOg, 'base64')
-const ogHash = createHash('sha256').update(ogBytes).digest('hex')
-if (ogBytes.length !== 9516 || ogHash !== 'fc3bf1bf129638f3ce92b3d07b4a6a321064095c59fce32edd9220019807bd2f') {
-  throw new Error(`Homepage social preview verification failed: ${ogBytes.length} bytes, sha256 ${ogHash}`)
-}
-
-await writeFile(ogTarget, ogBytes)
-await unlink(ogSource)
-console.log(`[assets] generated verified og-homepage.jpg (${ogBytes.length} bytes)`)
-
-const legacyEncodedOgPath = join(process.cwd(), 'public', 'og-homepage.b64')
-if (await exists(legacyEncodedOgPath)) {
-  await unlink(legacyEncodedOgPath)
 }
 
 const requiredAssets = [
