@@ -18,10 +18,10 @@ export const siteKeywords = [
 ]
 
 export const defaultOgImage = {
-  url: '/model/model_2.jpg',
+  url: '/opengraph-image',
   width: 1200,
-  height: 1500,
-  alt: 'Graduation portrait at FICO MANA Studio in Cabuyao, Laguna',
+  height: 630,
+  alt: 'FICO MANA Studio landing page preview — The Portrait of Success',
 }
 
 type PageMetadataOptions = {
@@ -80,11 +80,18 @@ export const rootMetadata: Metadata = {
     shortcut: '/favicon.ico',
   },
   openGraph: {
-    type: 'website', locale: 'en_PH', url: '/', siteName, title: siteName,
-    description: siteDescription, images: [defaultOgImage],
+    type: 'website',
+    locale: 'en_PH',
+    url: '/',
+    siteName,
+    title: `${siteName} Studio — The Portrait of Success`,
+    description: siteDescription,
+    images: [defaultOgImage],
   },
   twitter: {
-    card: 'summary_large_image', title: siteName, description: siteDescription,
+    card: 'summary_large_image',
+    title: `${siteName} Studio — The Portrait of Success`,
+    description: siteDescription,
     images: [defaultOgImage.url],
   },
   robots: {
