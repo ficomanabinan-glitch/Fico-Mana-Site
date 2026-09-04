@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getDriveFolder, resolveDriveRootFolder } from '@/lib/google-drive'
+import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 
 type Body = {
   rootFolderId?: string
@@ -17,7 +18,7 @@ export async function GET() {
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
   const { data } = await admin
     .from('google_drive_settings')
-    .select('root_folder_id,root_folder_name,portal_expiry_days,updated_at')
+    .select('root_folder_id,root_folder_name,portal_expiry_days,account_email,refresh_token_encrypted,granted_scopes,connected_at,disconnected_at,updated_at')
     .eq('id', 1)
     .maybeSingle()
 
@@ -26,11 +27,13 @@ export async function GET() {
     rootFolderName: data?.root_folder_name || 'FICOMANA SHOOTS',
     portalExpiryDays: Number(data?.portal_expiry_days || 30),
     updatedAt: data?.updated_at || null,
-    oauthConfigured: Boolean(
-      process.env.GOOGLE_CLIENT_ID?.trim() &&
-      process.env.GOOGLE_CLIENT_SECRET?.trim() &&
-      process.env.GOOGLE_REFRESH_TOKEN?.trim(),
-    ),
+    oauthAppConfigured: googleOAuthAppConfigured(),
+    connected: Boolean(data?.refresh_token_encrypted),
+    accountEmail: data?.account_email || null,
+    grantedScopes: data?.granted_scopes || null,
+    connectedAt: data?.connected_at || null,
+    disconnectedAt: data?.disconnected_at || null,
+    envRefreshTokenFallback: Boolean(process.env.GOOGLE_REFRESH_TOKEN?.trim()),
   })
 }
 
@@ -69,7 +72,7 @@ export async function PUT(request: Request) {
       .from('google_drive_settings')
       .update(patch)
       .eq('id', 1)
-      .select('root_folder_id,root_folder_name,portal_expiry_days,updated_at')
+      .select('root_folder_id,root_folder_name,portal_expiry_days,account_email,connected_at,updated_at')
       .single()
     if (error) throw new Error(error.message)
 
