@@ -15,6 +15,7 @@ import {
   FileText,
   Image,
   BarChart3,
+  FolderSync,
 } from 'lucide-react'
 import { getNotifications, getBookings, markNotificationRead, Notification } from '@/lib/data-store'
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
@@ -112,7 +113,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="mt-2 h-2.5 w-24 rounded bg-white/[0.06]" />
           </div>
           <div className="space-y-2">
-            {Array.from({ length: 7 }).map((_, index) => (
+            {Array.from({ length: 8 }).map((_, index) => (
               <div key={index} className="h-10 rounded-lg bg-white/[0.045] border border-white/[0.05]" />
             ))}
           </div>
@@ -143,6 +144,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       badge: pendingVerifications > 0 ? pendingVerifications : undefined,
     },
     { label: 'Bookings List', href: '/admin/bookings', icon: List },
+    { label: 'Provisioning', href: '/admin/provisioning', icon: FolderSync },
     {
       label: 'Filtering Queue',
       href: '/admin/filtering',
