@@ -4,10 +4,18 @@ type Props = {
   priority: number | null
   maxPriority: number
   className?: string
+  disabled?: boolean
+  onChange?: (priority: number) => void
 }
 
-/** Displays auto-assigned client number for the day (earliest booking time = Client 1). */
-export default function BookingPrioritySelect({ priority, maxPriority, className = '' }: Props) {
+/** Staff-controlled studio arrival order for a shoot day. */
+export default function BookingPrioritySelect({
+  priority,
+  maxPriority,
+  className = '',
+  disabled = false,
+  onChange,
+}: Props) {
   if (!priority || maxPriority < 1) {
     return (
       <span className={`text-[10px] text-white/35 font-semibold uppercase tracking-wider ${className}`}>
@@ -21,10 +29,11 @@ export default function BookingPrioritySelect({ priority, maxPriority, className
   return (
     <select
       value={priority}
-      disabled
-      title="Auto-assigned from booking time — earliest session is Client 1"
-      aria-label={`Client ${priority} of ${maxPriority}`}
-      className={`rounded-md border border-white/15 bg-black/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white disabled:opacity-100 disabled:cursor-default focus:outline-none ${className}`}
+      disabled={disabled}
+      onChange={(event) => onChange?.(Number(event.target.value))}
+      title="Set studio arrival order"
+      aria-label={`Studio arrival order: Client ${priority} of ${maxPriority}`}
+      className={`rounded-md border border-white/15 bg-black/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white focus:outline-none focus:border-primary/60 disabled:opacity-50 disabled:cursor-wait ${className}`}
     >
       {options.map((n) => (
         <option key={n} value={n}>
