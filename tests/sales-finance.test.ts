@@ -72,6 +72,20 @@ test('calculates fixed and variable expenses, profit, margin and break-even book
   assert.equal(result.desiredProfitBookings, 2)
 })
 
+test('counts a recurring monthly expense only once across daily chart buckets', () => {
+  const expenses: SalesExpense[] = [
+    {
+      id: 'fixed', expenseType: 'fixed', name: 'RICA', category: 'Other', amount: 15000,
+      expenseDate: '2026-09-04', recurrence: 'monthly', startDate: '2026-09-04', isActive: true,
+    },
+  ]
+  const result = calculateSalesSummary([], expenses, settings, 'month', anchor)
+  const chartExpenseTotal = result.monthly.reduce((sum, point) => sum + point.expenses, 0)
+  assert.equal(result.fixedExpenses, 15000)
+  assert.equal(chartExpenseTotal, 15000)
+  assert.equal(result.monthly.find((point) => point.key === '2026-09-04')?.expenses, 15000)
+})
+
 test('excludes cancelled bookings from sales and safely handles zero data', () => {
   const cancelled = booking({ bookingStatus: 'Cancelled', paymentStatus: 'Unpaid', paymentHistory: [] })
   const result = calculateSalesSummary([cancelled], [], settings, 'month', anchor)
