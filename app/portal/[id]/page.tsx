@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { CalendarDays, CheckCircle2, Clock3, Download, ExternalLink, Package, WalletCards } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock3, Download, ExternalLink, FileText, Package, WalletCards } from 'lucide-react'
 import ClientPortalTrustedDevice from '@/components/client-portal-trusted-device'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { mapDbBookingToModel } from '@/lib/booking-db'
@@ -81,12 +81,19 @@ export default async function ClientPortalPage({
   const amountPaid = await totalConfirmedPayments(admin, booking)
   const balance = Math.max(0, Number(booking.price || 0) - amountPaid)
 
-  const { data: packageRow } = await admin
-    .from('packages')
-    .select('features,description')
-    .eq('id', booking.packageId)
-    .maybeSingle()
+  const [{ data: packageRow }, { data: resources }] = await Promise.all([
+    admin.from('packages').select('features,description').eq('id', booking.packageId).maybeSingle(),
+    admin
+      .from('client_portal_resources')
+      .select('id,resource_type,title,url,content,created_at')
+      .eq('booking_id', booking.id)
+      .eq('is_visible', true)
+      .order('created_at', { ascending: false }),
+  ])
   const features = Array.isArray(packageRow?.features) ? packageRow.features.map(String) : []
+  const visibleResources = resources || []
+  const deliverables = visibleResources.filter((item) => ['photos', 'video'].includes(String(item.resource_type)))
+  const documents = visibleResources.filter((item) => !['photos', 'video'].includes(String(item.resource_type)))
   const stage = projectStage(booking)
 
   await admin.from('client_portals').update({ last_accessed_at: new Date().toISOString() }).eq('id', portal.id)
@@ -146,18 +153,40 @@ export default async function ClientPortalPage({
 
             <div className="border border-white/10 bg-white/[0.02] p-5 sm:p-6">
               <div className="flex items-center gap-2"><Download className="w-4 h-4 text-[#C4CEFF]" /><h2 className="text-sm font-semibold">Approved deliverables</h2></div>
-              {booking.editedPhotoLink ? (
-                <a href={booking.editedPhotoLink} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 border border-[#C4CEFF]/30 bg-[#C4CEFF]/10 px-4 py-3 text-xs font-semibold text-[#C4CEFF] hover:bg-[#C4CEFF]/15">
-                  Open final edited photos <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {booking.editedPhotoLink ? (
+                  <a href={booking.editedPhotoLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-between gap-2 border border-[#C4CEFF]/30 bg-[#C4CEFF]/10 px-4 py-3 text-xs font-semibold text-[#C4CEFF] hover:bg-[#C4CEFF]/15">
+                    <span>Final edited photos</span><ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                  </a>
+                ) : null}
+                {deliverables.map((resource) => resource.url ? (
+                  <a key={resource.id} href={String(resource.url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-between gap-2 border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white/80 hover:border-white/25">
+                    <span>{resource.title}</span><ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                  </a>
+                ) : (
+                  <div key={resource.id} className="border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/65">{resource.content}</div>
+                ))}
+              </div>
+              {!booking.editedPhotoLink && deliverables.length === 0 ? (
                 <p className="text-xs text-white/45 mt-3">No final client deliverables have been released yet. Internal project folders remain private.</p>
-              )}
+              ) : null}
             </div>
 
             <div className="border border-white/10 bg-white/[0.02] p-5 sm:p-6">
-              <h2 className="text-sm font-semibold">Documents & updates</h2>
-              <p className="text-xs text-white/45 mt-3">Invoices, agreements, meeting documents, and other client-approved resources will appear here when they are attached to this booking.</p>
+              <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-[#C4CEFF]" /><h2 className="text-sm font-semibold">Documents & updates</h2></div>
+              {documents.length ? (
+                <div className="mt-4 space-y-3">
+                  {documents.map((resource) => (
+                    <div key={resource.id} className="border border-white/10 bg-white/[0.025] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div><p className="text-xs font-semibold">{resource.title}</p><p className="text-[9px] uppercase tracking-wider text-white/35 mt-1">{String(resource.resource_type).replace(/_/g, ' ')}</p></div>
+                        {resource.url ? <a href={String(resource.url)} target="_blank" rel="noopener noreferrer" className="text-[#C4CEFF] hover:text-white"><ExternalLink className="w-4 h-4" /></a> : null}
+                      </div>
+                      {resource.content ? <p className="text-xs text-white/55 leading-relaxed mt-3 whitespace-pre-wrap">{resource.content}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-white/45 mt-3">No invoices, agreements, meeting documents, or project updates have been released yet.</p>}
             </div>
           </section>
 
