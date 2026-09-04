@@ -43,63 +43,65 @@ export const adminNavActive =
 export const adminNavIdle =
   'text-white/55 hover:bg-white/[0.04] hover:text-white border border-transparent'
 
+const statusPill = 'inline-flex items-center whitespace-nowrap'
+
 export function bookingStatusBadge(status: Booking['bookingStatus']) {
   switch (status) {
     case 'Confirmed':
-      return 'rounded-md bg-green-500/15 text-green-400 border border-green-500/30'
+      return `${statusPill} rounded-md bg-green-500/15 text-green-400 border border-green-500/30`
     case 'Pending Verification':
-      return 'rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30'
+      return `${statusPill} rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30`
     case 'Pending Payment':
-      return 'rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30'
+      return `${statusPill} rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30`
     case 'Completed':
-      return 'rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/30'
+      return `${statusPill} rounded-md bg-blue-500/15 text-blue-400 border border-blue-500/30`
     case 'Cancelled':
-      return 'rounded-md bg-red-500/15 text-red-400 border border-red-500/30'
+      return `${statusPill} rounded-md bg-red-500/15 text-red-400 border border-red-500/30`
     case 'No Show':
-      return 'rounded-md bg-white/10 text-white/50 border border-white/20'
+      return `${statusPill} rounded-md bg-white/10 text-white/50 border border-white/20`
     default:
-      return 'rounded-md bg-white/5 text-white/60 border border-white/10'
+      return `${statusPill} rounded-md bg-white/5 text-white/60 border border-white/10`
   }
 }
 
 export function rawPhotoStatusBadge(status: RawPhotoWorkflowStatus) {
   switch (status) {
     case 'approved':
-      return 'rounded-md bg-green-500/15 text-green-400 border border-green-500/30'
+      return `${statusPill} rounded-md bg-green-500/15 text-green-400 border border-green-500/30`
     case 'delivered':
-      return 'rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+      return `${statusPill} rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30`
     case 'rejected':
-      return 'rounded-md bg-red-500/15 text-red-400 border border-red-500/30'
+      return `${statusPill} rounded-md bg-red-500/15 text-red-400 border border-red-500/30`
     case 'pending_review':
-      return 'rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30'
+      return `${statusPill} rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30`
     case 'awaiting_selection':
-      return 'rounded-md bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+      return `${statusPill} rounded-md bg-cyan-500/15 text-cyan-400 border border-cyan-500/30`
     case 'awaiting_gallery':
-      return 'rounded-md bg-white/5 text-white/50 border border-white/10'
+      return `${statusPill} rounded-md bg-white/5 text-white/50 border border-white/10`
   }
 }
 
 export function paymentStatusBadge(status: Booking['paymentStatus']) {
   switch (status) {
     case 'Paid Full':
-      return 'rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+      return `${statusPill} rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30`
     case 'Paid Deposit':
-      return 'rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+      return `${statusPill} rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20`
     case 'Pending Verification':
-      return 'rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30'
+      return `${statusPill} rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30`
     case 'Unpaid':
-      return 'rounded-md bg-red-500/15 text-red-400 border border-red-500/30'
+      return `${statusPill} rounded-md bg-red-500/15 text-red-400 border border-red-500/30`
     case 'Refunded':
-      return 'rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30'
+      return `${statusPill} rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30`
     default:
-      return 'rounded-md bg-white/5 text-white/60 border border-white/10'
+      return `${statusPill} rounded-md bg-white/5 text-white/60 border border-white/10`
   }
 }
 
 export function emailStatusBadge(status: 'SENT' | 'FAILED') {
   return status === 'SENT'
-    ? 'rounded-md bg-green-500/15 text-green-400 border border-green-500/30'
-    : 'rounded-md bg-red-500/15 text-red-400 border border-red-500/30'
+    ? `${statusPill} rounded-md bg-green-500/15 text-green-400 border border-green-500/30`
+    : `${statusPill} rounded-md bg-red-500/15 text-red-400 border border-red-500/30`
 }
 
 export function notificationTypeBadge(type: string) {
