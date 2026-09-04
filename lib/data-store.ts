@@ -89,9 +89,47 @@ export interface EmailLog {
 }
 
 const BOOKINGS_KEY = 'ficomana_bookings'
+const BOOKINGS_AT_KEY = 'ficomana_bookings_cached_at'
 const NOTIFS_KEY = 'ficomana_notifications'
+const NOTIFS_AT_KEY = 'ficomana_notifications_cached_at'
+const ADMIN_CACHE_TTL_MS = 90_000
+
+let bookingsInFlight: Promise<Booking[]> | null = null
+let notificationsInFlight: Promise<Notification[]> | null = null
+let blockedSlotsMemory: { data: BlockedSlot[]; at: number } | null = null
+let blockedSlotsInFlight: Promise<BlockedSlot[]> | null = null
+let ficoSpotBlocksMemory: { data: FicoSpotBlock[]; at: number } | null = null
+let ficoSpotBlocksInFlight: Promise<FicoSpotBlock[]> | null = null
+let emailLogsMemory: { data: EmailLog[]; at: number } | null = null
+let emailLogsInFlight: Promise<EmailLog[]> | null = null
+
+function cacheIsFresh(at: number | null | undefined) {
+  return !!at && Date.now() - at < ADMIN_CACHE_TTL_MS
+}
+
+function cachedAt(key: string) {
+  if (typeof window === 'undefined') return 0
+  return Number(localStorage.getItem(key) || 0)
+}
+
+function invalidateAdminReadCaches() {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(BOOKINGS_AT_KEY, '0')
+    localStorage.setItem(NOTIFS_AT_KEY, '0')
+  }
+  blockedSlotsMemory = blockedSlotsMemory ? { ...blockedSlotsMemory, at: 0 } : null
+  ficoSpotBlocksMemory = ficoSpotBlocksMemory ? { ...ficoSpotBlocksMemory, at: 0 } : null
+  emailLogsMemory = emailLogsMemory ? { ...emailLogsMemory, at: 0 } : null
+}
+
+function signalAdminCacheUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('admin:db-synced'))
+  }
+}
 
 export function dispatchAdminRefresh() {
+  invalidateAdminReadCaches()
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('admin:db-synced'))
   }
@@ -100,12 +138,14 @@ export function dispatchAdminRefresh() {
 function cacheBookings(bookings: Booking[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings))
+    localStorage.setItem(BOOKINGS_AT_KEY, String(Date.now()))
   }
 }
 
 function cacheNotifications(notifs: Notification[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifs))
+    localStorage.setItem(NOTIFS_AT_KEY, String(Date.now()))
   }
 }
 
@@ -114,6 +154,16 @@ function getCachedBookings(): Booking[] {
   try {
     const data = localStorage.getItem(BOOKINGS_KEY)
     return data ? (JSON.parse(data) as Booking[]) : []
+  } catch {
+    return []
+  }
+}
+
+function getCachedNotifications(): Notification[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(NOTIFS_KEY)
+    return raw ? (JSON.parse(raw) as Notification[]) : []
   } catch {
     return []
   }
@@ -131,25 +181,43 @@ export async function getBookingPackages(category?: string): Promise<BookingPack
   return category ? bookingPackages.filter((p) => p.category === category) : bookingPackages
 }
 
-/** Staff: all bookings from API (Supabase is source of truth). */
-export async function getBookings(): Promise<Booking[]> {
+async function fetchBookingsFresh(signalUpdate = false): Promise<Booking[]> {
+  if (bookingsInFlight) return bookingsInFlight
+  bookingsInFlight = (async () => {
+    try {
+      const res = await fetch('/api/bookings', { cache: 'no-store', credentials: 'include' })
+      if (res.ok) {
+        const data = (await res.json()) as Booking[]
+        cacheBookings(data)
+        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+        return data
+      }
+      if (res.status === 401) {
+        console.error('getBookings: staff login required')
+        return []
+      }
+      console.error('getBookings failed:', res.status)
+    } catch (error) {
+      console.error('getBookings failed:', error)
+    }
+    return getCachedBookings()
+  })()
   try {
-    const res = await fetch('/api/bookings', { cache: 'no-store', credentials: 'include' })
-    if (res.ok) {
-      const data = (await res.json()) as Booking[]
-      cacheBookings(data)
-      return data
-    }
-    if (res.status === 401) {
-      console.error('getBookings: staff login required')
-      return []
-    }
-    console.error('getBookings failed:', res.status)
-  } catch (error) {
-    console.error('getBookings failed:', error)
+    return await bookingsInFlight
+  } finally {
+    bookingsInFlight = null
   }
-  // Never fall back to localStorage for admin — stale cache shows ghost verification items.
-  return []
+}
+
+/** Staff: all bookings from API. Recent cached data renders immediately while stale data refreshes quietly. */
+export async function getBookings(): Promise<Booking[]> {
+  const cached = getCachedBookings()
+  if (cached.length > 0 && cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
+  if (cached.length > 0) {
+    void fetchBookingsFresh(true)
+    return cached
+  }
+  return fetchBookingsFresh(false)
 }
 
 /** Public availability for booking calendar (no PII). */
@@ -191,15 +259,37 @@ export async function getBookingsForAvailability(): Promise<Booking[]> {
   return []
 }
 
+async function fetchFicoSpotBlocksFresh(signalUpdate = false): Promise<FicoSpotBlock[]> {
+  if (ficoSpotBlocksInFlight) return ficoSpotBlocksInFlight
+  ficoSpotBlocksInFlight = (async () => {
+    try {
+      const res = await fetch('/api/fico-spot-blocks', { cache: 'no-store' })
+      if (res.ok) {
+        const data = (await res.json()) as FicoSpotBlock[]
+        ficoSpotBlocksMemory = { data, at: Date.now() }
+        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+        return data
+      }
+    } catch (error) {
+      console.error('getFicoSpotBlocks failed:', error)
+    }
+    return ficoSpotBlocksMemory?.data ?? []
+  })()
+  try {
+    return await ficoSpotBlocksInFlight
+  } finally {
+    ficoSpotBlocksInFlight = null
+  }
+}
+
 /** Public: admin-held FICO spots per day. */
 export async function getFicoSpotBlocks(): Promise<FicoSpotBlock[]> {
-  try {
-    const res = await fetch('/api/fico-spot-blocks', { cache: 'no-store' })
-    if (res.ok) return (await res.json()) as FicoSpotBlock[]
-  } catch (error) {
-    console.error('getFicoSpotBlocks failed:', error)
+  if (ficoSpotBlocksMemory && cacheIsFresh(ficoSpotBlocksMemory.at)) return ficoSpotBlocksMemory.data
+  if (ficoSpotBlocksMemory) {
+    void fetchFicoSpotBlocksFresh(true)
+    return ficoSpotBlocksMemory.data
   }
-  return []
+  return fetchFicoSpotBlocksFresh(false)
 }
 
 /** Staff: hold N FICO spots on a date (0 clears the hold). */
@@ -216,6 +306,7 @@ export async function setFicoSpotBlock(
       body: JSON.stringify({ date, spotsBlocked, reason }),
     })
     if (res.ok) {
+      ficoSpotBlocksMemory = ficoSpotBlocksMemory ? { ...ficoSpotBlocksMemory, at: 0 } : null
       const data = await res.json()
       if (data?.cleared) return null
       return data as FicoSpotBlock
@@ -228,15 +319,37 @@ export async function setFicoSpotBlock(
   }
 }
 
+async function fetchBlockedSlotsFresh(signalUpdate = false): Promise<BlockedSlot[]> {
+  if (blockedSlotsInFlight) return blockedSlotsInFlight
+  blockedSlotsInFlight = (async () => {
+    try {
+      const res = await fetch('/api/blocked-slots', { cache: 'no-store' })
+      if (res.ok) {
+        const data = (await res.json()) as BlockedSlot[]
+        blockedSlotsMemory = { data, at: Date.now() }
+        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+        return data
+      }
+    } catch (error) {
+      console.error('getBlockedSlots failed:', error)
+    }
+    return blockedSlotsMemory?.data ?? []
+  })()
+  try {
+    return await blockedSlotsInFlight
+  } finally {
+    blockedSlotsInFlight = null
+  }
+}
+
 /** Public: admin-blocked session slots (studio can still operate other slots). */
 export async function getBlockedSlots(): Promise<BlockedSlot[]> {
-  try {
-    const res = await fetch('/api/blocked-slots', { cache: 'no-store' })
-    if (res.ok) return (await res.json()) as BlockedSlot[]
-  } catch (error) {
-    console.error('getBlockedSlots failed:', error)
+  if (blockedSlotsMemory && cacheIsFresh(blockedSlotsMemory.at)) return blockedSlotsMemory.data
+  if (blockedSlotsMemory) {
+    void fetchBlockedSlotsFresh(true)
+    return blockedSlotsMemory.data
   }
-  return []
+  return fetchBlockedSlotsFresh(false)
 }
 
 /** Staff: block a session slot on a date. */
@@ -248,7 +361,10 @@ export async function blockSlot(date: string, slotId: string, reason: string): P
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date, slotId, reason }),
     })
-    if (res.ok) return (await res.json()) as BlockedSlot
+    if (res.ok) {
+      blockedSlotsMemory = blockedSlotsMemory ? { ...blockedSlotsMemory, at: 0 } : null
+      return (await res.json()) as BlockedSlot
+    }
     const err = await res.json().catch(() => ({}))
     throw new Error((err as { error?: string }).error ?? 'Failed to block slot')
   } catch (error) {
@@ -264,6 +380,7 @@ export async function unblockSlot(date: string, slotId: string): Promise<boolean
       `/api/blocked-slots?date=${encodeURIComponent(date)}&slotId=${encodeURIComponent(slotId)}`,
       { method: 'DELETE', credentials: 'include' },
     )
+    if (res.ok) blockedSlotsMemory = blockedSlotsMemory ? { ...blockedSlotsMemory, at: 0 } : null
     return res.ok
   } catch (error) {
     console.error('unblockSlot failed:', error)
@@ -272,6 +389,8 @@ export async function unblockSlot(date: string, slotId: string): Promise<boolean
 }
 
 export async function getBooking(id: string): Promise<Booking | null> {
+  const cached = getCachedBookings().find((b) => b.id === id)
+  if (cached && cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
   try {
     const res = await fetch(`/api/bookings/${encodeURIComponent(id)}`, {
       cache: 'no-store',
@@ -281,7 +400,7 @@ export async function getBooking(id: string): Promise<Booking | null> {
   } catch (error) {
     console.error(`getBooking failed for ${id}:`, error)
   }
-  return getCachedBookings().find((b) => b.id === id) ?? null
+  return cached ?? null
 }
 
 export type PublicResubmitBooking = {
@@ -367,13 +486,15 @@ export async function syncAdminDatabase(): Promise<{
       cache: 'no-store',
     })
     if (!res.ok) return { ok: false, message: 'Sync failed' }
-    return (await res.json()) as {
+    const result = (await res.json()) as {
       ok: boolean
       bookingsPushed?: number
       bookingsUpdated?: number
       notificationsPushed?: number
       message?: string
     }
+    if (result.ok) invalidateAdminReadCaches()
+    return result
   } catch (error) {
     console.error('syncAdminDatabase failed:', error)
     return { ok: false, message: 'Sync failed' }
@@ -403,24 +524,37 @@ export async function saveBooking(booking: Booking): Promise<{ booking: Booking;
   return { booking: saved, emailErrors }
 }
 
-export async function getNotifications(): Promise<Notification[]> {
-  try {
-    const res = await fetch('/api/notifications', { cache: 'no-store', credentials: 'include' })
-    if (res.ok) {
-      const data = (await res.json()) as Notification[]
-      cacheNotifications(data)
-      return data
+async function fetchNotificationsFresh(signalUpdate = false): Promise<Notification[]> {
+  if (notificationsInFlight) return notificationsInFlight
+  notificationsInFlight = (async () => {
+    try {
+      const res = await fetch('/api/notifications', { cache: 'no-store', credentials: 'include' })
+      if (res.ok) {
+        const data = (await res.json()) as Notification[]
+        cacheNotifications(data)
+        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+        return data
+      }
+    } catch (error) {
+      console.error('getNotifications failed:', error)
     }
-  } catch (error) {
-    console.error('getNotifications failed:', error)
-  }
-  if (typeof window === 'undefined') return []
+    return getCachedNotifications()
+  })()
   try {
-    const raw = localStorage.getItem(NOTIFS_KEY)
-    return raw ? (JSON.parse(raw) as Notification[]) : []
-  } catch {
-    return []
+    return await notificationsInFlight
+  } finally {
+    notificationsInFlight = null
   }
+}
+
+export async function getNotifications(): Promise<Notification[]> {
+  const cached = getCachedNotifications()
+  if (cached.length > 0 && cacheIsFresh(cachedAt(NOTIFS_AT_KEY))) return cached
+  if (cached.length > 0) {
+    void fetchNotificationsFresh(true)
+    return cached
+  }
+  return fetchNotificationsFresh(false)
 }
 
 export async function addNotification(
@@ -457,9 +591,8 @@ export async function markNotificationRead(id: string): Promise<void> {
   if (!res.ok) return
 
   if (typeof window !== 'undefined') {
-    const notifs = await getNotifications()
-    cacheNotifications(notifs.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
-    dispatchAdminRefresh()
+    const notifs = getCachedNotifications().map((n) => (n.id === id ? { ...n, isRead: true } : n))
+    cacheNotifications(notifs)
   }
 }
 
@@ -499,14 +632,36 @@ export async function markOpsSubscriptionPaid(): Promise<boolean> {
   }
 }
 
-export async function getEmailLogs(): Promise<EmailLog[]> {
+async function fetchEmailLogsFresh(signalUpdate = false): Promise<EmailLog[]> {
+  if (emailLogsInFlight) return emailLogsInFlight
+  emailLogsInFlight = (async () => {
+    try {
+      const res = await fetch('/api/emails/logs', { cache: 'no-store', credentials: 'include' })
+      if (res.ok) {
+        const data = (await res.json()) as EmailLog[]
+        emailLogsMemory = { data, at: Date.now() }
+        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+        return data
+      }
+    } catch (error) {
+      console.error('getEmailLogs failed:', error)
+    }
+    return emailLogsMemory?.data ?? []
+  })()
   try {
-    const res = await fetch('/api/emails/logs', { cache: 'no-store', credentials: 'include' })
-    if (res.ok) return (await res.json()) as EmailLog[]
-  } catch (error) {
-    console.error('getEmailLogs failed:', error)
+    return await emailLogsInFlight
+  } finally {
+    emailLogsInFlight = null
   }
-  return []
+}
+
+export async function getEmailLogs(): Promise<EmailLog[]> {
+  if (emailLogsMemory && cacheIsFresh(emailLogsMemory.at)) return emailLogsMemory.data
+  if (emailLogsMemory) {
+    void fetchEmailLogsFresh(true)
+    return emailLogsMemory.data
+  }
+  return fetchEmailLogsFresh(false)
 }
 
 export async function uploadReceipt(bookingId: string, file: File, email?: string): Promise<string> {
