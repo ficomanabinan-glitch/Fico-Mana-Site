@@ -55,6 +55,15 @@ async function loadSavedPriorities() {
 }
 
 function bookingIdFromSelect(select: HTMLSelectElement | null) {
+  if (!select) return null
+
+  const tableRow = select.closest('tr')
+  if (tableRow) {
+    const referenceCell = tableRow.querySelector<HTMLTableCellElement>('td:nth-child(2)')
+    const reference = referenceCell?.textContent?.trim()
+    if (reference) return reference
+  }
+
   let node: HTMLElement | null = select
   for (let depth = 0; node && depth < 5; depth += 1) {
     const link = node.querySelector<HTMLAnchorElement>('a[href*="/admin/bookings?search="]')
@@ -72,13 +81,36 @@ function bookingIdFromSelect(select: HTMLSelectElement | null) {
 
 function applyVisualOrder(select: HTMLSelectElement | null, priority: number) {
   if (!select) return
-  const row = select.parentElement?.parentElement?.parentElement as HTMLElement | null
-  const list = row?.parentElement as HTMLElement | null
-  if (!row || !list) return
+
+  const tableRow = select.closest('tr') as HTMLTableRowElement | null
+  if (tableRow) {
+    const tbody = tableRow.parentElement
+    if (!tbody || tbody.tagName !== 'TBODY') return
+
+    tableRow.dataset.clientPriorityOrder = String(priority)
+    const rows = Array.from(tbody.children).filter(
+      (child): child is HTMLTableRowElement =>
+        child instanceof HTMLTableRowElement &&
+        Boolean(child.querySelector('select[data-client-priority-select="true"]')),
+    )
+
+    rows
+      .sort((a, b) => {
+        const aSelect = a.querySelector<HTMLSelectElement>('select[data-client-priority-select="true"]')
+        const bSelect = b.querySelector<HTMLSelectElement>('select[data-client-priority-select="true"]')
+        return Number(aSelect?.value || 9999) - Number(bSelect?.value || 9999)
+      })
+      .forEach((row) => tbody.appendChild(row))
+    return
+  }
+
+  const item = select.parentElement?.parentElement?.parentElement as HTMLElement | null
+  const list = item?.parentElement as HTMLElement | null
+  if (!item || !list) return
 
   list.style.display = 'flex'
   list.style.flexDirection = 'column'
-  row.style.order = String(priority)
+  item.style.order = String(priority)
 }
 
 /** Staff-controlled studio arrival order for a shoot day. */
@@ -149,7 +181,7 @@ export default function BookingPrioritySelect({
 
     if (!currentBookingId || nextPriority === currentPriority) return
 
-    const dayList = currentSelect?.closest('.divide-y') || currentSelect?.parentElement?.parentElement?.parentElement?.parentElement
+    const dayList = currentSelect?.closest('.divide-y') || currentSelect?.closest('tbody') || currentSelect?.parentElement?.parentElement?.parentElement?.parentElement
     const selects = Array.from(
       dayList?.querySelectorAll<HTMLSelectElement>('select[data-client-priority-select="true"]') ?? [],
     )
