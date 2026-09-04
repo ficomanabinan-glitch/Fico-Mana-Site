@@ -1,39 +1,32 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { FormEvent, useRef, useState } from 'react'
 import { AlertTriangle, Lock, Mail, RefreshCw, ShieldCheck } from 'lucide-react'
-import { loginAdmin } from './actions'
-import { initialLoginState } from '@/lib/auth/login-state'
 import { adminBtnPrimary, adminInput } from '@/lib/admin-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 export default function AdminLogin() {
-  const searchParams = useSearchParams()
-  const [state, formAction, pending] = useActionState(loginAdmin, initialLoginState)
-  const [now, setNow] = useState<number | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState(false)
 
-  useEffect(() => {
-    if (!state.retryAt) {
-      setNow(null)
-      return
-    }
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (pending) return
 
-    const update = () => setNow(Math.floor(Date.now() / 1000))
-    update()
-    const timer = window.setInterval(update, 1000)
-    return () => window.clearInterval(timer)
-  }, [state.retryAt])
+    // This is intentionally a dead-end admin screen. Credentials are never read,
+    // sent to the server, logged, persisted, or passed to Supabase.
+    setFailed(false)
+    setPending(true)
 
-  const remainingSeconds =
-    state.code === 'RATE_LIMITED' && state.retryAt
-      ? Math.max(0, state.retryAt - (now ?? Math.floor(Date.now() / 1000)))
-      : 0
-  const locked = state.code === 'RATE_LIMITED' && remainingSeconds > 0
-  const remainingMinutes = Math.max(1, Math.ceil(remainingSeconds / 60))
-  const legacyAuthError = searchParams.get('error') === 'auth'
+    window.setTimeout(() => {
+      formRef.current?.reset()
+      setPending(false)
+      setFailed(true)
+    }, 700)
+  }
 
   return (
     <div className="admin-console min-h-screen bg-black text-white flex flex-col justify-center items-center px-6 relative overflow-hidden">
@@ -48,27 +41,12 @@ export default function AdminLogin() {
           <p className="text-[10px] font-bold tracking-[0.25em] text-[#C4CEFF] uppercase">Secure Staff Console</p>
         </div>
 
-        <form action={formAction} className="space-y-5">
-          {locked ? (
-            <Alert variant="warning">
-              <AlertTriangle aria-hidden="true" />
-              <AlertTitle>Login temporarily locked</AlertTitle>
-              <AlertDescription>
-                Too many login attempts. Please try again in {remainingMinutes}{' '}
-                {remainingMinutes === 1 ? 'minute' : 'minutes'}.
-              </AlertDescription>
-            </Alert>
-          ) : state.message ? (
+        <form ref={formRef} onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
+          {failed ? (
             <Alert variant="destructive">
               <AlertTriangle aria-hidden="true" />
               <AlertTitle>Sign-in unsuccessful</AlertTitle>
-              <AlertDescription>{state.message}</AlertDescription>
-            </Alert>
-          ) : legacyAuthError ? (
-            <Alert variant="destructive">
-              <AlertTriangle aria-hidden="true" />
-              <AlertTitle>Sign-in unsuccessful</AlertTitle>
-              <AlertDescription>Sign-in failed. Please try again.</AlertDescription>
+              <AlertDescription>Invalid email or password.</AlertDescription>
             </Alert>
           ) : null}
 
@@ -83,10 +61,10 @@ export default function AdminLogin() {
                 name="email"
                 type="email"
                 inputMode="email"
-                autoComplete="email"
+                autoComplete="off"
                 maxLength={320}
                 required
-                disabled={pending || locked}
+                disabled={pending}
                 placeholder="you@ficomana.com"
                 className={`${adminInput} pl-11`}
               />
@@ -103,10 +81,10 @@ export default function AdminLogin() {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 maxLength={1024}
                 required
-                disabled={pending || locked}
+                disabled={pending}
                 placeholder="Enter your password"
                 className={`${adminInput} pl-11`}
               />
@@ -115,7 +93,7 @@ export default function AdminLogin() {
 
           <Button
             type="submit"
-            disabled={pending || locked}
+            disabled={pending}
             className={`w-full h-auto py-4 flex items-center justify-center gap-2 ${adminBtnPrimary}`}
           >
             {pending ? (
@@ -123,8 +101,6 @@ export default function AdminLogin() {
                 <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
                 Authenticating...
               </>
-            ) : locked ? (
-              `Try again in ${remainingMinutes} ${remainingMinutes === 1 ? 'minute' : 'minutes'}`
             ) : (
               'Login to Console'
             )}
@@ -132,7 +108,7 @@ export default function AdminLogin() {
         </form>
 
         <p className="text-[10px] text-white/30 text-center mt-8 leading-relaxed">
-          Protected by server-validated Supabase authentication and rate limiting.
+          Authorized staff access only.
         </p>
       </div>
     </div>
