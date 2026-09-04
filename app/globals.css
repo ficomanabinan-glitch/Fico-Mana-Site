@@ -349,3 +349,21 @@
   --ring: #a5b4fc;
   --sidebar-primary: #8fa0ff;
 }
+
+/* Keep desktop console navigation available while long pages scroll. */
+@media (min-width: 768px) {
+  .admin-console > aside {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Guard native table layout from client-side row ordering helpers. */
+.admin-console table {
+  display: table !important;
+  flex-direction: initial !important;
+}
