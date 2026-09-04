@@ -7,7 +7,7 @@ export async function GET() {
   if (authError) return authError
 
   try {
-    const loginHint = process.env.GOOGLE_DRIVE_ALLOWED_EMAIL?.trim() || 'ficomanabinan@gmail.com'
+    const loginHint = process.env.GOOGLE_DRIVE_ALLOWED_EMAIL?.trim() || undefined
     return NextResponse.redirect(buildGoogleAuthorizationUrl(loginHint))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Google Drive connection could not start.'
