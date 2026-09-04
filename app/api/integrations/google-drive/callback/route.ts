@@ -28,8 +28,8 @@ export async function GET(request: Request) {
     if (!code || !state) return redirectWith({ drive_error: 'Invalid or expired Google OAuth callback.' })
 
     const token = await exchangeGoogleAuthorizationCode(code)
-    const allowedEmail = (process.env.GOOGLE_DRIVE_ALLOWED_EMAIL?.trim() || 'ficomanabinan@gmail.com').toLowerCase()
-    if (token.email.toLowerCase() !== allowedEmail) {
+    const allowedEmail = process.env.GOOGLE_DRIVE_ALLOWED_EMAIL?.trim().toLowerCase() || ''
+    if (allowedEmail && token.email.toLowerCase() !== allowedEmail) {
       return redirectWith({ drive_error: `Connect ${allowedEmail}, not ${token.email}.` })
     }
 
