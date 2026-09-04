@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { decryptGoogleRefreshToken, googleOAuthClientCredentials } from '@/lib/google-oauth'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -10,14 +12,39 @@ function env(name: string) {
   return process.env[name]?.trim() || ''
 }
 
+async function loadStoredRefreshToken() {
+  const admin = getSupabaseAdmin()
+  if (!admin) return null
+  const { data } = await admin
+    .from('google_drive_settings')
+    .select('refresh_token_encrypted,account_email')
+    .eq('id', 1)
+    .maybeSingle()
+  if (!data?.refresh_token_encrypted) return null
+  return {
+    refreshToken: decryptGoogleRefreshToken(String(data.refresh_token_encrypted)),
+    accountEmail: data.account_email ? String(data.account_email) : null,
+  }
+}
+
 async function getAccessToken(): Promise<string> {
-  const clientId = env('GOOGLE_CLIENT_ID')
-  const clientSecret = env('GOOGLE_CLIENT_SECRET')
-  const refreshToken = env('GOOGLE_REFRESH_TOKEN')
+  const stored = await loadStoredRefreshToken()
+  const refreshToken = stored?.refreshToken || env('GOOGLE_REFRESH_TOKEN')
+  let clientId = env('GOOGLE_CLIENT_ID')
+  let clientSecret = env('GOOGLE_CLIENT_SECRET')
+  if (!clientId || !clientSecret) {
+    try {
+      const creds = googleOAuthClientCredentials()
+      clientId = creds.clientId
+      clientSecret = creds.clientSecret
+    } catch {
+      // handled below
+    }
+  }
 
   if (!clientId || !clientSecret || !refreshToken) {
     throw new GoogleDriveConfigError(
-      'Google Drive is not connected. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN.',
+      'Google Drive is not connected. Open Admin → Provisioning and connect the studio Google account.',
     )
   }
 
@@ -34,7 +61,7 @@ async function getAccessToken(): Promise<string> {
   })
   const data = (await response.json().catch(() => ({}))) as { access_token?: string; error_description?: string }
   if (!response.ok || !data.access_token) {
-    throw new Error(data.error_description || 'Google OAuth token refresh failed.')
+    throw new Error(data.error_description || 'Google OAuth token refresh failed. Reconnect Google Drive from Provisioning.')
   }
   return data.access_token
 }
@@ -202,5 +229,4 @@ export async function ensureShootHierarchy(input: {
   }
 }
 
-// Reserved for future approved-deliverable uploads without adding another Google client.
 export { DRIVE_UPLOAD_API }
