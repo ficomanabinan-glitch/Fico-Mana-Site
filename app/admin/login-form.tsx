@@ -1,58 +1,39 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Lock, Mail, RefreshCw } from 'lucide-react'
-import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
-import { isSupabaseConfigured } from '@/lib/supabase'
-import { adminInput, adminBtnPrimary } from '@/lib/admin-ui'
+import { useActionState, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { AlertTriangle, Lock, Mail, RefreshCw, ShieldCheck } from 'lucide-react'
+import { loginAdmin } from './actions'
+import { initialLoginState } from '@/lib/auth/login-state'
+import { adminBtnPrimary, adminInput } from '@/lib/admin-ui'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export default function AdminLogin() {
-  const router = useRouter()
   const searchParams = useSearchParams()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [state, formAction, pending] = useActionState(loginAdmin, initialLoginState)
+  const [now, setNow] = useState<number | null>(null)
 
   useEffect(() => {
-    if (searchParams.get('error') === 'auth') {
-      setError('Sign-in failed. Please try again.')
-    }
-  }, [searchParams])
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (!isSupabaseConfigured()) {
-      setError('Supabase is not configured. Check .env.local and restart the dev server.')
+    if (!state.retryAt) {
+      setNow(null)
       return
     }
 
-    setLoading(true)
-    try {
-      const supabase = createSupabaseBrowserClient()
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+    const update = () => setNow(Math.floor(Date.now() / 1000))
+    update()
+    const timer = window.setInterval(update, 1000)
+    return () => window.clearInterval(timer)
+  }, [state.retryAt])
 
-      if (signInError) {
-        setError(
-          signInError.message === 'Invalid login credentials'
-            ? 'Invalid email address or password.'
-            : signInError.message,
-        )
-        return
-      }
-
-      const redirect = searchParams.get('redirect')
-      router.push(redirect && redirect.startsWith('/') ? redirect : '/admin/dashboard')
-      router.refresh()
-    } catch {
-      setError('Something went wrong. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const remainingSeconds =
+    state.code === 'RATE_LIMITED' && state.retryAt
+      ? Math.max(0, state.retryAt - (now ?? Math.floor(Date.now() / 1000)))
+      : 0
+  const locked = state.code === 'RATE_LIMITED' && remainingSeconds > 0
+  const remainingMinutes = Math.max(1, Math.ceil(remainingSeconds / 60))
+  const legacyAuthError = searchParams.get('error') === 'auth'
 
   return (
     <div className="admin-console min-h-screen bg-black text-white flex flex-col justify-center items-center px-6 relative overflow-hidden">
@@ -60,31 +41,52 @@ export default function AdminLogin() {
 
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-8 md:p-10 relative z-10 shadow-[0_24px_80px_rgba(0,0,0,0.5)]">
         <div className="text-center space-y-2 mb-8">
+          <div className="mx-auto mb-4 flex size-10 items-center justify-center rounded-full border border-[#C4CEFF]/20 bg-[#C4CEFF]/10">
+            <ShieldCheck className="size-5 text-[#C4CEFF]" aria-hidden="true" />
+          </div>
           <h1 className="font-serif text-3xl font-bold tracking-tight text-white">FICO MANA</h1>
-          <p className="text-[10px] font-bold tracking-[0.25em] text-[#C4CEFF] uppercase">Staff Console</p>
+          <p className="text-[10px] font-bold tracking-[0.25em] text-[#C4CEFF] uppercase">Secure Staff Console</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
-          {error && (
-            <div className="rounded-lg bg-red-500/10 text-red-400 border border-red-500/25 p-3.5 text-xs font-medium text-center">
-              {error}
-            </div>
-          )}
+        <form action={formAction} className="space-y-5">
+          {locked ? (
+            <Alert variant="warning">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>Login temporarily locked</AlertTitle>
+              <AlertDescription>
+                Too many login attempts. Please try again in {remainingMinutes}{' '}
+                {remainingMinutes === 1 ? 'minute' : 'minutes'}.
+              </AlertDescription>
+            </Alert>
+          ) : state.message ? (
+            <Alert variant="destructive">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>Sign-in unsuccessful</AlertTitle>
+              <AlertDescription>{state.message}</AlertDescription>
+            </Alert>
+          ) : legacyAuthError ? (
+            <Alert variant="destructive">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>Sign-in unsuccessful</AlertTitle>
+              <AlertDescription>Sign-in failed. Please try again.</AlertDescription>
+            </Alert>
+          ) : null}
 
           <div className="space-y-2">
             <label htmlFor="email" className="text-[10px] font-semibold tracking-widest text-[#C4CEFF] uppercase">
               Staff Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
-              <input
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" aria-hidden="true" />
+              <Input
                 id="email"
                 name="email"
                 type="email"
+                inputMode="email"
                 autoComplete="email"
+                maxLength={320}
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                disabled={pending || locked}
                 placeholder="you@ficomana.com"
                 className={`${adminInput} pl-11`}
               />
@@ -96,38 +98,41 @@ export default function AdminLogin() {
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
-              <input
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" aria-hidden="true" />
+              <Input
                 id="password"
                 name="password"
                 type="password"
                 autoComplete="current-password"
+                maxLength={1024}
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                disabled={pending || locked}
                 placeholder="Enter your password"
                 className={`${adminInput} pl-11`}
               />
             </div>
           </div>
 
-          <button
+          <Button
             type="submit"
-            disabled={loading}
-            className={`w-full py-4 flex items-center justify-center gap-2 ${adminBtnPrimary}`}
+            disabled={pending || locked}
+            className={`w-full h-auto py-4 flex items-center justify-center gap-2 ${adminBtnPrimary}`}
           >
-            {loading ? (
+            {pending ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" /> Authenticating...
+                <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+                Authenticating...
               </>
+            ) : locked ? (
+              `Try again in ${remainingMinutes} ${remainingMinutes === 1 ? 'minute' : 'minutes'}`
             ) : (
               'Login to Console'
             )}
-          </button>
+          </Button>
         </form>
 
         <p className="text-[10px] text-white/30 text-center mt-8 leading-relaxed">
-          Staff accounts are created in Supabase Auth.
+          Protected by server-validated Supabase authentication and rate limiting.
         </p>
       </div>
     </div>

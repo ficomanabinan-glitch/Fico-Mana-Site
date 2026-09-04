@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { isAdminUser } from '@/lib/auth/admin'
 import { getSupabaseUrl, getSupabaseKey } from '@/lib/supabase/env'
 
 export async function createSupabaseServerClient() {
@@ -16,14 +17,14 @@ export async function createSupabaseServerClient() {
             cookieStore.set(name, value, options)
           })
         } catch {
-          // Called from a Server Component — safe to ignore.
+          // Server Components cannot mutate response cookies; middleware refreshes them.
         }
       },
     },
   })
 }
 
-/** Returns the authenticated staff user, or null. */
+/** Returns a server-validated authenticated user, or null. */
 export async function getStaffUser() {
   const supabase = await createSupabaseServerClient()
   const {
@@ -32,4 +33,10 @@ export async function getStaffUser() {
   } = await supabase.auth.getUser()
   if (error || !user) return null
   return user
+}
+
+/** Returns a server-validated administrator, never trusting user_metadata. */
+export async function getAdminUser() {
+  const user = await getStaffUser()
+  return isAdminUser(user) ? user : null
 }

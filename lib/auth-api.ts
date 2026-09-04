@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getStaffUser } from '@/lib/supabase/server'
+import { getAdminUser } from '@/lib/supabase/server'
 
+/** API authorization is server-side RBAC, not merely "has a Supabase session". */
 export async function requireStaffAuth() {
-  const user = await getStaffUser()
+  const user = await getAdminUser()
   if (!user) {
     return { user: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
