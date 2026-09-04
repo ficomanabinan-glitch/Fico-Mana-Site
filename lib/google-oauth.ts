@@ -88,7 +88,7 @@ export function verifyGoogleOAuthState(value: string | null | undefined): OAuthS
   }
 }
 
-export function buildGoogleAuthorizationUrl(loginHint = 'ficomanabinan@gmail.com') {
+export function buildGoogleAuthorizationUrl(loginHint?: string) {
   const clientId = env('GOOGLE_CLIENT_ID')
   if (!clientId || !env('GOOGLE_CLIENT_SECRET')) {
     throw new Error('Google OAuth app credentials are not configured on the server.')
@@ -102,8 +102,8 @@ export function buildGoogleAuthorizationUrl(loginHint = 'ficomanabinan@gmail.com
     include_granted_scopes: 'true',
     scope: [...PROFILE_SCOPES, DRIVE_SCOPE].join(' '),
     state: createGoogleOAuthState(),
-    login_hint: loginHint,
   })
+  if (loginHint?.trim()) params.set('login_hint', loginHint.trim())
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }
 
