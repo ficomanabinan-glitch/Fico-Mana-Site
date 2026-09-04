@@ -29,12 +29,17 @@ export function mapDbBookingToModel(b: DbBookingRow): Booking {
     }
   }
 
-  const paymentHistory =
-    typeof b.payment_history === 'string'
-      ? JSON.parse(b.payment_history)
-      : Array.isArray(b.payment_history)
-        ? (b.payment_history as Booking['paymentHistory'])
-        : (b.payment_history as Booking['paymentHistory']) || []
+  let paymentHistory: Booking['paymentHistory'] = []
+  if (Array.isArray(b.payment_history)) {
+    paymentHistory = b.payment_history as Booking['paymentHistory']
+  } else if (typeof b.payment_history === 'string') {
+    try {
+      const parsed = JSON.parse(b.payment_history)
+      paymentHistory = Array.isArray(parsed) ? parsed : []
+    } catch {
+      paymentHistory = []
+    }
+  }
 
   if (!transactionRef && paymentHistory.length) {
     const deposit = paymentHistory.find((p: { type?: string }) => p.type === 'Deposit')
@@ -166,9 +171,8 @@ export function mapModelBookingToDb(b: Booking): Record<string, unknown> {
         : b.receiptUrl?.startsWith('data:')
           ? null
           : (b.receiptUrl ?? null),
-    payment_history: JSON.stringify(b.paymentHistory ?? []),
+    payment_history: b.paymentHistory ?? [],
     drive_link: b.driveLink ?? null,
-    // Raw photo / edited delivery columns — only send when used (migration-safe).
     ...(b.rawPhotoLink ||
     b.rawPhotoStatus ||
     b.rawPhotoNotes ||
@@ -226,18 +230,18 @@ function parseFeatures(raw: unknown): string[] {
 export function mapDbPackageRow(row: DbPackageRow) {
   return {
     id: row.id,
-    category: row.category as 'graduation' | 'self-portrait' | 'creative',
+    category: row.category,
     title: row.title,
     price: row.price_display,
     priceAmount: Number(row.price_amount),
-    duration: row.duration || 'Studio session',
-    description: row.description || row.title,
+    duration: row.duration ?? undefined,
+    description: row.description ?? undefined,
     features: parseFeatures(row.features),
-    slotType: row.slot_type === 'makeup' ? ('makeup' as const) : ('standard' as const),
-    secondaryPrice: row.secondary_price_display || undefined,
-    secondaryPriceLabel: row.secondary_price_label || undefined,
-    bookVariants: row.book_variants || undefined,
-    note: row.note || undefined,
-    sortOrder: row.sort_order,
+    slotType: row.slot_type,
+    secondaryPriceDisplay: row.secondary_price_display ?? undefined,
+    secondaryPriceAmount: row.secondary_price_amount != null ? Number(row.secondary_price_amount) : undefined,
+    secondaryPriceLabel: row.secondary_price_label ?? undefined,
+    bookVariants: Array.isArray(row.book_variants) ? row.book_variants : undefined,
+    note: row.note ?? undefined,
   }
 }
