@@ -1,4 +1,5 @@
 import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 
 const origin = (process.env.FICOMANA_ASSET_ORIGIN || 'https://www.ficomana.studio').replace(/\/$/, '')
@@ -12,15 +13,35 @@ async function exists(path) {
   }
 }
 
-const encodedOgPath = join(process.cwd(), 'public', 'og-homepage.b64')
+const ogParts = [
+  'part-01.txt',
+  'part-02.txt',
+  'part-03.txt',
+  'part-04.txt',
+  'part-05a.txt',
+  'part-05b.txt',
+  'part-06.txt',
+]
+const ogPartsDir = join(process.cwd(), 'assets', 'og-homepage')
 const ogTarget = join(process.cwd(), 'public', 'og-homepage.jpg')
+const expectedOgHash = 'cf2165b2b3b8d0a469fbbda7ce906691a6527a103037970956455e87d2c85875'
 
-if (await exists(encodedOgPath)) {
-  const encoded = (await readFile(encodedOgPath, 'utf8')).trim()
-  const bytes = Buffer.from(encoded, 'base64')
-  await writeFile(ogTarget, bytes)
-  await unlink(encodedOgPath)
-  console.log(`[assets] generated og-homepage.jpg (${bytes.length} bytes)`)
+const encodedOg = (
+  await Promise.all(ogParts.map(async (part) => (await readFile(join(ogPartsDir, part), 'utf8')).trim()))
+).join('')
+const ogBytes = Buffer.from(encodedOg, 'base64')
+const ogHash = createHash('sha256').update(ogBytes).digest('hex')
+
+if (ogBytes.length !== 35160 || ogHash !== expectedOgHash) {
+  throw new Error(`Homepage social preview verification failed: ${ogBytes.length} bytes, sha256 ${ogHash}`)
+}
+
+await writeFile(ogTarget, ogBytes)
+console.log(`[assets] generated verified og-homepage.jpg (${ogBytes.length} bytes)`)
+
+const legacyEncodedOgPath = join(process.cwd(), 'public', 'og-homepage.b64')
+if (await exists(legacyEncodedOgPath)) {
+  await unlink(legacyEncodedOgPath)
 }
 
 const requiredAssets = [
