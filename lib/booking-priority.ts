@@ -2,6 +2,14 @@ import type { Booking } from '@/lib/data-store'
 import { usesMakeupSlots } from '@/lib/booking-packages'
 import { ALL_MANA_SLOTS, findSlotByBookingTime, getSlotId } from '@/lib/booking-slots'
 
+type PriorityOverrides = ReadonlyMap<string, number> | Record<string, number>
+
+function overridePriority(overrides: PriorityOverrides | undefined, bookingId: string): number | undefined {
+  if (!overrides) return undefined
+  if (overrides instanceof Map) return overrides.get(bookingId)
+  return overrides[bookingId]
+}
+
 function parseClockToMinutes(raw: string): number | null {
   const text = (raw || '').trim()
   if (!text) return null
@@ -21,8 +29,10 @@ function parseClockToMinutes(raw: string): number | null {
   return hours * 60 + minutes
 }
 
-/** Lower = earlier in the day. Used to auto-assign Client 1, 2, … */
-export function getBookingTimeRank(booking: Pick<Booking, 'slotId' | 'bookingTime' | 'arrivalTime' | 'shootTime' | 'packageId'>): number {
+/** Lower = earlier in the day. Used only as a fallback before staff sets studio arrival order. */
+export function getBookingTimeRank(
+  booking: Pick<Booking, 'slotId' | 'bookingTime' | 'arrivalTime' | 'shootTime' | 'packageId'>,
+): number {
   const slotId = getSlotId(booking as Booking) || findSlotByBookingTime(booking.bookingTime || '')?.id
   if (slotId) {
     const idx = ALL_MANA_SLOTS.findIndex((slot) => slot.id === slotId)
@@ -38,9 +48,7 @@ export function getBookingTimeRank(booking: Pick<Booking, 'slotId' | 'bookingTim
   const fromLabel = parseClockToMinutes(booking.bookingTime || '')
   if (fromLabel != null) return 1000 + fromLabel
 
-  // FICO / flexible day slots share one label — keep them after timed MANA slots, ordered later by createdAt
   if (!usesMakeupSlots(booking.packageId)) return 5000
-
   return 9000
 }
 
@@ -55,10 +63,14 @@ export function compareBySessionTime(a: Booking, b: Booking): number {
 }
 
 /**
- * Client number map per shoot day: earliest session time → Client 1, next → Client 2, etc.
- * Cancelled/rejected bookings are omitted (no number).
+ * Client number map per shoot day.
+ * Saved studio arrival order wins. Any unassigned positions are filled by session time so every
+ * eligible client still has one unique Client 1..N position before staff finishes ordering the day.
  */
-export function buildDayPriorityMap(bookings: Booking[]): Map<string, number> {
+export function buildDayPriorityMap(
+  bookings: Booking[],
+  manualPriorities?: PriorityOverrides,
+): Map<string, number> {
   const byDate = new Map<string, Booking[]>()
 
   for (const booking of bookings) {
@@ -69,10 +81,35 @@ export function buildDayPriorityMap(bookings: Booking[]): Map<string, number> {
   }
 
   const priorities = new Map<string, number>()
+
   for (const list of byDate.values()) {
-    list.sort(compareBySessionTime)
-    list.forEach((booking, index) => {
-      priorities.set(booking.id, index + 1)
+    const fallback = [...list].sort(compareBySessionTime)
+    const maxPriority = fallback.length
+    const occupied = new Set<number>()
+    const unassigned: Booking[] = []
+
+    for (const booking of fallback) {
+      const saved = overridePriority(manualPriorities, booking.id)
+      if (
+        Number.isInteger(saved) &&
+        (saved as number) >= 1 &&
+        (saved as number) <= maxPriority &&
+        !occupied.has(saved as number)
+      ) {
+        priorities.set(booking.id, saved as number)
+        occupied.add(saved as number)
+      } else {
+        unassigned.push(booking)
+      }
+    }
+
+    const openPositions: number[] = []
+    for (let priority = 1; priority <= maxPriority; priority += 1) {
+      if (!occupied.has(priority)) openPositions.push(priority)
+    }
+
+    unassigned.forEach((booking, index) => {
+      priorities.set(booking.id, openPositions[index])
     })
   }
 
@@ -84,9 +121,12 @@ export function getDayPriorityCount(bookings: Booking[], date: string): number {
   return bookings.filter((b) => b.bookingDate === date && isPriorityEligible(b)).length
 }
 
-/** Sort by shoot date (asc), then auto priority (asc). Cancelled/rejected sink to the bottom of their day. */
-export function sortBookingsByDayPriority(bookings: Booking[]): Booking[] {
-  const priorities = buildDayPriorityMap(bookings)
+/** Sort by shoot date, then manual studio arrival order. Unassigned clients fall back to session time. */
+export function sortBookingsByDayPriority(
+  bookings: Booking[],
+  manualPriorities?: PriorityOverrides,
+): Booking[] {
+  const priorities = buildDayPriorityMap(bookings, manualPriorities)
 
   return [...bookings].sort((a, b) => {
     const dateCmp = (a.bookingDate || '').localeCompare(b.bookingDate || '')
