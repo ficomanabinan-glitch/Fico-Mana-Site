@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { saveBookingToDb, addNotificationToDb } from '@/lib/supabase-store'
 import { sendEditedPhotosEmail } from '@/lib/email'
+import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 
 type Body = {
   editedPhotoLink?: string
@@ -42,9 +43,7 @@ export async function POST(
     }
 
     const booking = await loadBookingById(id)
-    if (!booking) {
-      return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
-    }
+    if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
     if (booking.rawPhotoStatus !== 'Approved') {
       return NextResponse.json(
@@ -63,14 +62,11 @@ export async function POST(
     }
 
     const notificationMessage = `Edited photos delivered for ${booking.id} (${updatedBooking.customerName}).`
-
     let saved: Booking = updatedBooking
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (!admin) {
-        return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
-      }
+      if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
 
       const patch: Record<string, unknown> = {
         edited_photo_link: editedPhotoLink,
@@ -91,9 +87,7 @@ export async function POST(
         const viaUpsert = await saveBookingToDb(admin, updatedBooking)
         if (!viaUpsert) {
           return NextResponse.json(
-            {
-              error: `Database save failed: ${error.message}. Run migration 013_edited_photo_delivery.sql in Supabase.`,
-            },
+            { error: `Database save failed: ${error.message}. Run the edited photo delivery migration in Supabase.` },
             { status: 500 },
           )
         }
@@ -101,17 +95,14 @@ export async function POST(
       } else {
         saved = {
           ...updatedBooking,
-          editedPhotoLink: data?.edited_photo_link
-            ? String(data.edited_photo_link)
-            : editedPhotoLink,
-          editedPhotoDeliveredAt: data?.edited_photo_delivered_at
-            ? String(data.edited_photo_delivered_at)
-            : deliveredAt,
+          editedPhotoLink: data?.edited_photo_link ? String(data.edited_photo_link) : editedPhotoLink,
+          editedPhotoDeliveredAt: data?.edited_photo_delivered_at ? String(data.edited_photo_delivered_at) : deliveredAt,
         }
       }
 
       await upsertBooking(saved)
       await addNotificationToDb(admin, booking.id, 'EDITED_PHOTOS_READY', notificationMessage)
+      await setPortalExpiryFromDelivery(booking.id, deliveredAt)
     } else {
       saved = await upsertBooking(updatedBooking)
       await addServerNotification(booking.id, 'EDITED_PHOTOS_READY', notificationMessage)
@@ -121,9 +112,7 @@ export async function POST(
     if (shouldEmail) {
       try {
         const emailResult = await sendEditedPhotosEmail(saved, editedPhotoLink)
-        if (!emailResult.success && emailResult.error) {
-          emailErrors.push(emailResult.error)
-        }
+        if (!emailResult.success && emailResult.error) emailErrors.push(emailResult.error)
       } catch (err) {
         console.error('sendEditedPhotosEmail failed:', err)
         emailErrors.push(err instanceof Error ? err.message : 'Failed to send email.')
