@@ -368,20 +368,9 @@ function curvedPath(coordinates: Array<{ x: number; y: number }>) {
   if (coordinates.length === 1) return `M ${coordinates[0].x} ${coordinates[0].y}`
 
   return coordinates.slice(0, -1).reduce((path, point, index) => {
-    const previous = coordinates[Math.max(0, index - 1)]
     const next = coordinates[index + 1]
-    const afterNext = coordinates[Math.min(coordinates.length - 1, index + 2)]
-    const controlOneX = point.x + (next.x - previous.x) / 6
-    const controlOneY = Math.min(
-      CHART_HEIGHT - CHART_MARGIN.bottom,
-      Math.max(CHART_MARGIN.top, point.y + (next.y - previous.y) / 6),
-    )
-    const controlTwoX = next.x - (afterNext.x - point.x) / 6
-    const controlTwoY = Math.min(
-      CHART_HEIGHT - CHART_MARGIN.bottom,
-      Math.max(CHART_MARGIN.top, next.y - (afterNext.y - point.y) / 6),
-    )
-    return `${path} C ${controlOneX} ${controlOneY}, ${controlTwoX} ${controlTwoY}, ${next.x} ${next.y}`
+    const horizontalBend = (next.x - point.x) * 0.45
+    return `${path} C ${point.x + horizontalBend} ${point.y}, ${next.x - horizontalBend} ${next.y}, ${next.x} ${next.y}`
   }, `M ${coordinates[0].x} ${coordinates[0].y}`)
 }
 
