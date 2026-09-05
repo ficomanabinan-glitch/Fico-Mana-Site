@@ -86,6 +86,30 @@ test('counts a recurring monthly expense only once across daily chart buckets', 
   assert.equal(result.monthly.find((point) => point.key === '2026-09-04')?.expenses, 15000)
 })
 
+test('builds a seven-day financial trend ending on the selected reporting date', () => {
+  const expenses: SalesExpense[] = [
+    {
+      id: 'crew', expenseType: 'variable', name: 'Crew', category: 'Production', amount: 5000,
+      expenseDate: '2026-09-10', recurrence: 'one_time', bookingId: 'FM-100001', isActive: true,
+    },
+  ]
+  const result = calculateSalesSummary([booking()], expenses, settings, 'month', anchor)
+
+  assert.equal(result.daily.length, 7)
+  assert.equal(result.daily[0]?.key, '2026-09-09')
+  assert.equal(result.daily[6]?.key, '2026-09-15')
+  assert.deepEqual(
+    result.daily.find((point) => point.key === '2026-09-10'),
+    {
+      key: '2026-09-10',
+      label: 'Thu, Sep 10',
+      revenue: 25000,
+      expenses: 5000,
+      netProfit: 20000,
+    },
+  )
+})
+
 test('excludes cancelled bookings from sales and safely handles zero data', () => {
   const cancelled = booking({ bookingStatus: 'Cancelled', paymentStatus: 'Unpaid', paymentHistory: [] })
   const result = calculateSalesSummary([cancelled], [], settings, 'month', anchor)

@@ -8,6 +8,7 @@ import {
   FolderCog, FolderUp, ImagePlus, Loader2, Play, RefreshCw, RotateCcw, Upload, UserRoundCheck,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
 
 type JobStatus = 'WAITING_FOR_SELECTION' | 'READY_FOR_EDITING' | 'DOWNLOADED' | 'EDITING' | 'READY_TO_UPLOAD' | 'UPLOADING' | 'DELIVERED' | 'UPLOAD_FAILED'
@@ -256,7 +257,7 @@ export default function BatchDetailPage() {
     finally{setUploading(false);setUploadProgress((previous)=>({...previous,current:''}));if(directoryInputRef.current)directoryInputRef.current.value='';await load()}
   }
 
-  if(loading)return <div className={`${adminPanel} p-14 text-center text-sm text-white/35`}>Loading batch…</div>
+  if(loading)return <EditorPageSkeleton variant="batch"/>
   if(!detail)return <div className={`${adminPanel} p-14 text-center text-sm text-white/35`}>Batch not found.</div>
 
   return <div className="space-y-6">

@@ -833,6 +833,7 @@ function BookingsManagement() {
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                  data-receipt-upload="true"
                   className="sr-only"
                   onChange={(e) => setWalkInReceiptFile(e.target.files?.[0] ?? null)}
                 />

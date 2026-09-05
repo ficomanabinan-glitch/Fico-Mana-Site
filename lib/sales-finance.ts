@@ -119,20 +119,45 @@ function bucketExpenses(expenses: SalesExpense[], start: Date, end: Date, recurr
   return total
 }
 
+type SalesTrendPoint = {
+  key: string
+  label: string
+  revenue: number
+  expenses: number
+  netProfit: number
+}
+
+function createTrendPoint(
+  bookings: Booking[],
+  expenses: SalesExpense[],
+  start: Date,
+  end: Date,
+  key: string,
+  label: string,
+  recurringOncePerMonth = false,
+): SalesTrendPoint {
+  const revenue = fromMinor(bucketRevenue(bookings, start, end))
+  const expenseTotal = fromMinor(bucketExpenses(expenses, start, end, recurringOncePerMonth))
+  return { key, label, revenue, expenses: expenseTotal, netProfit: revenue - expenseTotal }
+}
+
 function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period: SalesPeriod, start: Date, end: Date) {
-  const buckets: Array<{ key: string; label: string; revenue: number; expenses: number }> = []
+  const buckets: SalesTrendPoint[] = []
 
   if (period === 'month') {
     const cursor = new Date(start)
     while (cursor < end) {
       const next = new Date(cursor)
       next.setDate(next.getDate() + 1)
-      buckets.push({
-        key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`,
-        label: String(cursor.getDate()),
-        revenue: fromMinor(bucketRevenue(bookings, cursor, next)),
-        expenses: fromMinor(bucketExpenses(expenses, cursor, next, true)),
-      })
+      buckets.push(createTrendPoint(
+        bookings,
+        expenses,
+        cursor,
+        next,
+        `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`,
+        String(cursor.getDate()),
+        true,
+      ))
       cursor.setDate(cursor.getDate() + 1)
     }
     return buckets
@@ -141,15 +166,41 @@ function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period
   const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
   while (cursor < end) {
     const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-    buckets.push({
-      key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
-      label: cursor.toLocaleDateString('en-PH', { month: 'short' }),
-      revenue: fromMinor(bucketRevenue(bookings, cursor, next)),
-      expenses: fromMinor(bucketExpenses(expenses, cursor, next)),
-    })
+    buckets.push(createTrendPoint(
+      bookings,
+      expenses,
+      cursor,
+      next,
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+      cursor.toLocaleDateString('en-PH', { month: 'short' }),
+    ))
     cursor.setMonth(cursor.getMonth() + 1)
   }
   return buckets
+}
+
+function buildSevenDayTrend(bookings: Booking[], expenses: SalesExpense[], anchor: Date) {
+  const cursor = new Date(anchor)
+  cursor.setHours(0, 0, 0, 0)
+  cursor.setDate(cursor.getDate() - 6)
+
+  return Array.from({ length: 7 }, () => {
+    const start = new Date(cursor)
+    const end = new Date(cursor)
+    end.setDate(end.getDate() + 1)
+    const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+    const point = createTrendPoint(
+      bookings,
+      expenses,
+      start,
+      end,
+      key,
+      start.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' }),
+      true,
+    )
+    cursor.setDate(cursor.getDate() + 1)
+    return point
+  })
 }
 
 export function calculateSalesSummary(
@@ -237,6 +288,7 @@ export function calculateSalesSummary(
     desiredProfit: fromMinor(desiredProfitMinor),
     desiredProfitBookings,
     desiredProfitMargin: settings.desiredProfitMargin,
+    daily: buildSevenDayTrend(bookings, expenses, anchor),
     monthly: buildTrendBuckets(bookings, expenses, period, start, end),
   }
 }

@@ -974,7 +974,7 @@ function BookingForm() {
                 >
                   <Upload className="w-8 h-8 mx-auto mb-2 text-white" />
                   <p className="text-sm text-white/70">{receiptFile?.name || 'Click to upload receipt *'}</p>
-                  <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => e.target.files?.[0] && setReceiptFile(e.target.files[0])} />
+                  <input ref={fileInputRef} type="file" accept="image/*,.pdf" data-receipt-upload="true" className="hidden" onChange={(e) => e.target.files?.[0] && setReceiptFile(e.target.files[0])} />
                 </div>
               </div>
             </div>

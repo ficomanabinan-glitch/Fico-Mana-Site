@@ -15,8 +15,8 @@ export default function ReceiptUploadEnhancer() {
     let objectUrl: string | null = null
 
     const attach = () => {
-      const candidate = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).find(
-        (el) => el.accept.includes('.pdf') || el.accept.includes('image/*'),
+      const candidate = document.querySelector<HTMLInputElement>(
+        'input[type="file"][data-receipt-upload="true"]',
       )
       if (!candidate || candidate === input) return
 

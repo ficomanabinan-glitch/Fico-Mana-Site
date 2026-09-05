@@ -224,6 +224,7 @@ function BookingResubmitForm() {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*,.pdf"
+                data-receipt-upload="true"
                 className="hidden"
                 onChange={(e) => e.target.files?.[0] && setReceiptFile(e.target.files[0])}
               />
