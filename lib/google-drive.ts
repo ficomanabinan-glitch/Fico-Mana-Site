@@ -112,6 +112,7 @@ export function normalizeDriveFolderName(value: string) {
 export type DriveFolder = {
   id: string
   name: string
+  mimeType?: string
   parents?: string[]
   webViewLink?: string
 }
@@ -309,7 +310,11 @@ export async function createDriveResumableUpload(input: {
 }
 
 export async function getDriveFolder(id: string): Promise<DriveFolder> {
-  return driveFetch<DriveFolder>(`/files/${encodeURIComponent(id)}?fields=id,name,parents,webViewLink&supportsAllDrives=true`)
+  const folder = await driveFetch<DriveFolder>(
+    `/files/${encodeURIComponent(id)}?fields=id,name,mimeType,parents,webViewLink&supportsAllDrives=true`,
+  )
+  if (folder.mimeType !== FOLDER_MIME) throw new Error('The Google Drive ID does not point to a folder.')
+  return folder
 }
 
 export async function findFolder(parentId: string, name: string): Promise<DriveFolder | null> {
@@ -379,6 +384,16 @@ export async function resolveDriveRootFolder(admin: SupabaseClient): Promise<Dri
     }
     return folder
   }
+
+  return initializeDriveRootFolder(admin)
+}
+
+export async function initializeDriveRootFolder(admin: SupabaseClient): Promise<DriveFolder> {
+  const { data: settings } = await admin
+    .from('google_drive_settings')
+    .select('root_folder_name')
+    .eq('id', 1)
+    .maybeSingle()
 
   const rootName = normalizeDriveFolderName(String(settings?.root_folder_name || 'FICOMANA SHOOTS')) || 'FICOMANA SHOOTS'
   const folder = (await findFolder('root', rootName)) ?? (await createFolder('root', rootName))

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { getDriveFolder, resolveDriveRootFolder } from '@/lib/google-drive'
+import { getDriveFolder, initializeDriveRootFolder } from '@/lib/google-drive'
 import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 
 type Body = {
@@ -50,11 +50,20 @@ export async function PUT(request: Request) {
     let rootFolderName = 'FICOMANA SHOOTS'
 
     if (rootFolderId) {
-      const folder = await getDriveFolder(rootFolderId)
-      rootFolderId = folder.id
-      rootFolderName = folder.name
+      try {
+        const folder = await getDriveFolder(rootFolderId)
+        rootFolderId = folder.id
+        rootFolderName = folder.name
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('File not found:')) {
+          throw new Error(
+            'This folder is not available to the connected Google Drive app. Use Create New Root for the secure recommended setup.',
+          )
+        }
+        throw error
+      }
     } else if (body.initializeRoot) {
-      const folder = await resolveDriveRootFolder(admin)
+      const folder = await initializeDriveRootFolder(admin)
       rootFolderId = folder.id
       rootFolderName = folder.name
     }
