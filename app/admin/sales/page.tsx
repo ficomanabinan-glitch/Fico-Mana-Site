@@ -75,10 +75,21 @@ function peso(value: number) {
   }).format(value)
 }
 
+function studioDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || ''
+  return `${value('year')}-${value('month')}-${value('day')}`
+}
+
 export default function SalesManagementPage() {
   const toast = useAdminToast()
   const [period, setPeriod] = useState<Period>('month')
-  const [anchor, setAnchor] = useState(new Date().toISOString().slice(0, 10))
+  const [anchor, setAnchor] = useState(studioDateKey())
   const [data, setData] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
