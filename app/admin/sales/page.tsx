@@ -375,7 +375,10 @@ function curvedPath(coordinates: Array<{ x: number; y: number }>) {
 }
 
 function TrendChart({ points }: { points: TrendPoint[] }) {
-  const [activeIndex, setActiveIndex] = useState(Math.max(0, points.length - 1))
+  const latestIndex = Math.max(0, points.length - 1)
+  const latestKey = points[latestIndex]?.key
+  const [activeIndex, setActiveIndex] = useState(latestIndex)
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null)
   const plotWidth = CHART_WIDTH - CHART_MARGIN.left - CHART_MARGIN.right
   const plotHeight = CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom
   const values = [0, ...points.flatMap((point) => [point.revenue, point.expenses, point.netProfit])]
@@ -401,12 +404,22 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
     { key: 'netProfit', label: 'Net Profit', color: '#fbbf24', gradientId: 'profit-gradient' },
   ] as const
 
-  const choosePoint = (clientX: number, element: SVGSVGElement) => {
-    if (points.length === 0) return
+  useEffect(() => {
+    setActiveIndex(latestIndex)
+    setPinnedIndex(null)
+  }, [latestIndex, latestKey])
+
+  const pointIndexAt = (clientX: number, element: SVGSVGElement) => {
+    if (points.length === 0) return null
     const bounds = element.getBoundingClientRect()
     const chartX = ((clientX - bounds.left) / Math.max(1, bounds.width)) * CHART_WIDTH
     const relative = (chartX - CHART_MARGIN.left) / Math.max(1, plotWidth)
-    setActiveIndex(Math.min(points.length - 1, Math.max(0, Math.round(relative * (points.length - 1)))))
+    return Math.min(points.length - 1, Math.max(0, Math.round(relative * (points.length - 1))))
+  }
+
+  const pinPoint = (index: number) => {
+    setActiveIndex(index)
+    setPinnedIndex(index)
   }
 
   return (
@@ -434,6 +447,20 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
           <div className="bg-[#222222] p-3">
             <p className="text-[8px] font-bold uppercase tracking-wider text-white/30">Selected day</p>
             <p className="mt-1 text-sm font-semibold text-white/80">{activePoint.label}</p>
+            {pinnedIndex === null ? (
+              <p className="mt-1 text-[8px] uppercase tracking-wider text-white/25">Latest by default · hover to preview</p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setPinnedIndex(null)
+                  setActiveIndex(latestIndex)
+                }}
+                className="mt-1 text-[8px] font-bold uppercase tracking-wider text-[#C4CEFF] hover:text-white"
+              >
+                Show latest
+              </button>
+            )}
           </div>
           {series.map((item) => (
             <div key={item.key} className="bg-[#222222] p-3">
@@ -450,24 +477,33 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
         className="overflow-x-auto p-3 sm:p-5"
         role="group"
         tabIndex={0}
-        aria-label="Seven-day financial trend. Use the left and right arrow keys to inspect each day."
+        aria-label="Seven-day financial trend. Click a day to keep it selected, or use the left and right arrow keys."
         onKeyDown={(event) => {
           if (event.key === 'ArrowLeft') {
             event.preventDefault()
-            setActiveIndex((index) => Math.max(0, index - 1))
+            pinPoint(Math.max(0, selectedIndex - 1))
           }
           if (event.key === 'ArrowRight') {
             event.preventDefault()
-            setActiveIndex((index) => Math.min(points.length - 1, index + 1))
+            pinPoint(Math.min(points.length - 1, selectedIndex + 1))
           }
         }}
       >
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-          className="min-w-[720px]"
+          className="min-w-[720px] cursor-crosshair"
           role="img"
           aria-label="Curved line graph of revenue, expenses, and net profit over seven days"
-          onPointerMove={(event) => choosePoint(event.clientX, event.currentTarget)}
+          onPointerMove={(event) => {
+            if (pinnedIndex !== null) return
+            const index = pointIndexAt(event.clientX, event.currentTarget)
+            if (index !== null) setActiveIndex(index)
+          }}
+          onPointerLeave={() => setActiveIndex(pinnedIndex ?? latestIndex)}
+          onClick={(event) => {
+            const index = pointIndexAt(event.clientX, event.currentTarget)
+            if (index !== null) pinPoint(index)
+          }}
         >
           <defs>
             {series.map((item) => (
