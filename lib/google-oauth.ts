@@ -1,7 +1,9 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { getSiteUrl } from '@/lib/site-url'
 
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
+// Limit access to files and folders created or explicitly opened by Fico Mana.
+// This avoids requesting unrestricted access to the user's entire Drive.
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const PROFILE_SCOPES = ['openid', 'email']
 
 function env(name: string) {
@@ -32,8 +34,15 @@ export function googleOAuthAppConfigured() {
   return Boolean(env('GOOGLE_CLIENT_ID') && env('GOOGLE_CLIENT_SECRET'))
 }
 
+export function googleOAuthSiteUrl() {
+  if (process.env.NODE_ENV !== 'production') return getSiteUrl()
+
+  const adminHostname = env('ADMIN_HOSTNAME') || 'admin.ficomana.com'
+  return new URL(`https://${adminHostname}`).origin
+}
+
 export function googleOAuthRedirectUri() {
-  return `${getSiteUrl()}/api/integrations/google-drive/callback`
+  return `${googleOAuthSiteUrl()}/api/integrations/google-drive/callback`
 }
 
 export function encryptGoogleRefreshToken(token: string) {

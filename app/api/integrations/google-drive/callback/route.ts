@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { getSiteUrl } from '@/lib/site-url'
 import {
   encryptGoogleRefreshToken,
   exchangeGoogleAuthorizationCode,
+  googleOAuthSiteUrl,
   verifyGoogleOAuthState,
 } from '@/lib/google-oauth'
 
 function redirectWith(params: Record<string, string>) {
-  const url = new URL('/admin/provisioning', getSiteUrl())
+  const url = new URL('/admin/provisioning', googleOAuthSiteUrl())
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
   return NextResponse.redirect(url)
 }

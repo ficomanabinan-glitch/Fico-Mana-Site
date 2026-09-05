@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
-import { buildGoogleAuthorizationUrl } from '@/lib/google-oauth'
+import { buildGoogleAuthorizationUrl, googleOAuthSiteUrl } from '@/lib/google-oauth'
 
 export async function GET() {
   const { error: authError } = await requireStaffAuth()
@@ -12,7 +12,7 @@ export async function GET() {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Google Drive connection could not start.'
     return NextResponse.redirect(
-      new URL(`/admin/provisioning?drive_error=${encodeURIComponent(message)}`, process.env.NEXT_PUBLIC_SITE_URL || 'https://ficomana.studio'),
+      new URL(`/admin/provisioning?drive_error=${encodeURIComponent(message)}`, googleOAuthSiteUrl()),
     )
   }
 }
