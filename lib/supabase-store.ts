@@ -93,7 +93,7 @@ export async function syncPackagesToDb(client: SupabaseClient): Promise<boolean>
     duration: p.duration, description: p.description, features: p.features, slot_type: p.slot_type,
     secondary_price_display: p.secondary_price_display ?? null, secondary_price_amount: p.secondary_price_amount ?? null,
     secondary_price_label: p.secondary_price_label ?? null, book_variants: p.book_variants ?? null, note: p.note ?? null,
-    is_active: true, sort_order: p.sort_order,
+    is_active: true, selection_limit: p.selection_limit, sort_order: p.sort_order,
   }))
   const { error } = await client.from('packages').upsert(rows, { onConflict: 'id' })
   if (error) { console.error('syncPackagesToDb:', error.message); return false }

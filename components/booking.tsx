@@ -13,7 +13,7 @@ import BpiQrDisplay from '@/components/bpi-qr-display'
 import { saveBooking, uploadReceipt, getBookingsForAvailability, getBooking, getBookingPackages, getBlockedSlots, getFicoSpotBlocks } from '@/lib/data-store'
 import { getBlockedSlot, type BlockedSlot } from '@/lib/blocked-slots'
 import { getFicoBookableLimit, getFicoSpotBlock, type FicoSpotBlock } from '@/lib/fico-spot-blocks'
-import { getBookingPackage, usesMakeupSlots, parsePackagePrice, packageRequiresDeposit, type BookingPackage, type BookingPackageCategory } from '@/lib/booking-packages'
+import { parsePackagePrice, type BookingPackage, type BookingPackageCategory } from '@/lib/booking-packages'
 import {
   GRADUATION_TOGA_NOTE,
   HOOD_COLOR_GRID,
@@ -206,18 +206,18 @@ function BookingForm() {
   useEffect(() => {
     const packageId = searchParams.get('package')
     if (!packageId) return
-    const pkg = getBookingPackage(packageId)
+    const pkg = packages.find((item) => item.id === packageId)
     if (!pkg) return
     setSelectedSession(pkg)
     setActiveCategory(pkg.category === 'creative' ? 'creative' : pkg.category)
     setStep(2)
-  }, [searchParams])
+  }, [packages, searchParams])
 
   const isGraduationPackage = selectedSession?.category === 'graduation'
   const requiresDeposit = selectedSession
-    ? packageRequiresDeposit(selectedSession.id)
+    ? selectedSession.category !== 'self-portrait'
     : activeCategory !== 'self-portrait'
-  const isMakeupPackage = selectedSession ? usesMakeupSlots(selectedSession.id) : false
+  const isMakeupPackage = selectedSession?.slotType === 'makeup'
   const dateKey = selectedDate ? formatDateKey(selectedDate) : ''
   const ficoBookableLimit =
     selectedDate && !isMakeupPackage ? getFicoBookableLimit(ficoSpotBlocks, dateKey) : FICO_DAILY_LIMIT
@@ -239,7 +239,7 @@ function BookingForm() {
     formatDateKey(new Date(viewYear, viewMonth, day))
   const isDayFull = (day: number) =>
     selectedSession
-      ? isDateFullForPackage(allBookings, dateKeyForDay(day), selectedSession.id, ficoSpotBlocks)
+      ? isDateFullForPackage(allBookings, dateKeyForDay(day), selectedSession.id, ficoSpotBlocks, selectedSession.slotType)
       : false
   const isSlotFull = (slotId: string) =>
     dateKey ? isMakeupSlotFull(allBookings, dateKey, slotId) : false
@@ -342,6 +342,8 @@ function BookingForm() {
         customerFbName: fbName,
         packageId: selectedSession.id,
         packageName: selectedSession.title,
+        packageSlotType: selectedSession.slotType,
+        selectionLimit: selectedSession.selectionLimit,
         bookingDate: dk,
         bookingTime: slot ? formatSlotBookingTime(slot) : FICO_BOOKING_TIME_LABEL,
         slotId: slot?.id,

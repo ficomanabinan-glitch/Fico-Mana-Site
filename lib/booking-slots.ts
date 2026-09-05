@@ -223,7 +223,7 @@ export function getMakeupSlotId(booking: Booking): string | null {
 }
 
 export function getFicoBookingCount(bookings: Booking[], dateKey: string): number {
-  return getBookingsForDate(bookings, dateKey).filter((b) => !usesMakeupSlots(b.packageId)).length
+  return getBookingsForDate(bookings, dateKey).filter((b) => !usesMakeupSlots(b.packageId, b.packageSlotType)).length
 }
 
 export function getFicoRemainingCapacity(
@@ -244,7 +244,7 @@ export function isFicoDateFull(
 }
 
 export function getMakeupBookingsCount(bookings: Booking[], dateKey: string): number {
-  return getBookingsForDate(bookings, dateKey).filter((b) => usesMakeupSlots(b.packageId)).length
+  return getBookingsForDate(bookings, dateKey).filter((b) => usesMakeupSlots(b.packageId, b.packageSlotType)).length
 }
 
 export function getMakeupSlotBookingCount(
@@ -253,7 +253,7 @@ export function getMakeupSlotBookingCount(
   slotId: string,
 ): number {
   return getBookingsForDate(bookings, dateKey).filter(
-    (b) => usesMakeupSlots(b.packageId) && getSlotId(b) === slotId,
+    (b) => usesMakeupSlots(b.packageId, b.packageSlotType) && getSlotId(b) === slotId,
   ).length
 }
 
@@ -309,8 +309,9 @@ export function isDateFullForPackage(
   dateKey: string,
   packageId: string,
   ficoSpotBlocks: FicoSpotBlock[] = [],
+  packageSlotType?: 'makeup' | 'standard',
 ): boolean {
-  return usesMakeupSlots(packageId)
+  return usesMakeupSlots(packageId, packageSlotType)
     ? isMakeupDateFull(bookings, dateKey)
     : isFicoDateFull(bookings, dateKey, ficoSpotBlocks)
 }

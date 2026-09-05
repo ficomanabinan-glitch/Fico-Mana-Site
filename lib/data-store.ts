@@ -21,6 +21,7 @@ export interface Booking extends Record<string, unknown> {
   customerFbName: string
   packageId: string
   packageName: string
+  packageSlotType?: 'makeup' | 'standard'
   selectionLimit?: number
   bookingDate: string
   bookingTime: string
@@ -232,6 +233,7 @@ export async function getBookingsForAvailability(): Promise<Booking[]> {
         slotId?: string
         bookingTime?: string
         packageId: string
+        packageSlotType?: 'makeup' | 'standard'
         bookingStatus: Booking['bookingStatus']
       }>
       return data.map((a) => ({
@@ -242,6 +244,7 @@ export async function getBookingsForAvailability(): Promise<Booking[]> {
         customerFbLink: '',
         customerFbName: '',
         packageId: a.packageId,
+        packageSlotType: a.packageSlotType,
         packageName: '',
         bookingDate: a.bookingDate,
         bookingTime: a.bookingTime || '',

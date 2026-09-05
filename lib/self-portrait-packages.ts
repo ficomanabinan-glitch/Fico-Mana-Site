@@ -8,6 +8,7 @@ export type SelfPortraitPackage = {
   secondaryPriceLabel?: string
   badge?: string
   includes: string[]
+  selectionLimit?: number
   note?: string
   bookVariants?: { id: string; label: string }[]
 }

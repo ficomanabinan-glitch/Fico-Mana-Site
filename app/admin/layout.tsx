@@ -15,6 +15,7 @@ import {
   List,
   LogOut,
   Menu,
+  PackageOpen,
   ReceiptText,
   Settings,
   Users,
@@ -57,6 +58,7 @@ const navigationSections = [
   {
     label: 'System Management',
     items: [
+      { label: 'Package Manager', href: '/admin/packages', icon: PackageOpen },
       { label: 'Email Logs', href: '/admin/emails', icon: FileText },
       { label: 'System Settings', href: '/admin/system', icon: Settings },
     ],

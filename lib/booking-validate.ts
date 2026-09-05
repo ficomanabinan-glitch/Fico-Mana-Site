@@ -12,7 +12,7 @@ import {
 
 type AvailabilityBooking = Pick<
   Booking,
-  'id' | 'bookingDate' | 'slotId' | 'packageId' | 'bookingStatus' | 'bookingTime'
+  'id' | 'bookingDate' | 'slotId' | 'packageId' | 'packageSlotType' | 'bookingStatus' | 'bookingTime'
 >
 
 /** Server-side slot / capacity check before accepting a booking. */
@@ -33,11 +33,11 @@ export function validateBookingAvailability(
     (b) => b.id !== booking.id && isActiveBooking(b as Booking),
   )
 
-  if (isDateFullForPackage(others as Booking[], booking.bookingDate, booking.packageId, ficoSpotBlocks)) {
+  if (isDateFullForPackage(others as Booking[], booking.bookingDate, booking.packageId, ficoSpotBlocks, booking.packageSlotType)) {
     return { ok: false, error: 'This date is fully booked for the selected package.' }
   }
 
-  if (usesMakeupSlots(booking.packageId)) {
+  if (usesMakeupSlots(booking.packageId, booking.packageSlotType)) {
     const slotId =
       booking.slotId ||
       findSlotByBookingTime(booking.bookingTime || '')?.id

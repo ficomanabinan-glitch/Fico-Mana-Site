@@ -6,13 +6,27 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import {
-  ficoPackages,
-  manaPackages,
-  creativePackages,
-  type SelfPortraitPackage,
-} from '@/lib/self-portrait-packages'
-import { getBookingUrl } from '@/lib/booking-packages'
+import { type SelfPortraitPackage } from '@/lib/self-portrait-packages'
+import { getBookingUrl, type BookingPackage } from '@/lib/booking-packages'
+import { usePublicPackages } from '@/lib/use-public-packages'
+
+function toWebsitePackage(pkg: BookingPackage): SelfPortraitPackage {
+  const [tier, ...titleParts] = pkg.title.split(/\s+—\s+/)
+  return {
+    id: pkg.id,
+    tier: tier || pkg.title,
+    title: titleParts.join(' — ') || pkg.description || pkg.title,
+    subtitle: pkg.description || undefined,
+    price: pkg.price,
+    secondaryPrice: pkg.secondaryPrice,
+    secondaryPriceLabel: pkg.secondaryPriceLabel,
+    badge: pkg.badge,
+    includes: pkg.features,
+    selectionLimit: pkg.selectionLimit,
+    note: pkg.note,
+    bookVariants: pkg.bookVariants,
+  }
+}
 
 function IncludeItem({ item }: { item: string }) {
   const isHighlight = /ALL (ENHANCED|RAW)|\d+ ENHANCED/i.test(item)
@@ -56,6 +70,11 @@ function PackageCard({ pkg, index }: { pkg: SelfPortraitPackage; index: number }
         <p className="mt-4 text-lg md:text-xl font-light text-white tracking-[0.06em]">
           {pkg.price}
         </p>
+        {pkg.selectionLimit ? (
+          <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#C4CEFF]">
+            Client selects {pkg.selectionLimit} photo{pkg.selectionLimit === 1 ? '' : 's'} for editing
+          </p>
+        ) : null}
         {pkg.secondaryPrice && pkg.secondaryPriceLabel && (
           <p className="mt-2 text-[11px] md:text-xs font-light text-white/55 tracking-[0.04em] leading-relaxed">
             <span className="block text-white/40 uppercase tracking-[0.12em] text-[9px] mb-1">
@@ -173,6 +192,18 @@ type Tab = 'fico' | 'mana' | 'creative'
 
 export default function SelfPortraitPackages({ showBackLink = true }: { showBackLink?: boolean }) {
   const [activeTab, setActiveTab] = useState<Tab>('fico')
+  const catalog = usePublicPackages()
+  const selfPortrait = catalog.filter((pkg) => pkg.category === 'self-portrait')
+  const ficoPackages = selfPortrait
+    .filter((pkg) => pkg.id.startsWith('fico-') || /^FICO\b/i.test(pkg.title))
+    .map(toWebsitePackage)
+  const manaPackages = selfPortrait
+    .filter((pkg) => pkg.id.startsWith('mana-') || /^MANA\b/i.test(pkg.title))
+    .map(toWebsitePackage)
+  const nestedVariantIds = new Set(catalog.flatMap((pkg) => pkg.bookVariants?.map((variant) => variant.id) || []))
+  const creativePackages = catalog
+    .filter((pkg) => pkg.category === 'creative' && (!nestedVariantIds.has(pkg.id) || Boolean(pkg.bookVariants?.length)))
+    .map(toWebsitePackage)
 
   return (
     <section

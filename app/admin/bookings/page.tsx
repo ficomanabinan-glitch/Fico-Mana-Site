@@ -137,8 +137,9 @@ function BookingsManagement() {
 
   const walkInPackages = allPackages.filter(isWalkInEligiblePackage)
   const walkInPackagesInCategory = walkInPackages.filter((pkg) => pkg.category === walkInCategory)
-  const walkInNeedsSlot = usesMakeupSlots(walkInPackage)
   const selectedWalkInPackage = walkInPackages.find((pkg) => pkg.id === walkInPackage)
+  const packageSlotTypeFor = (packageId: string) => allPackages.find((pkg) => pkg.id === packageId)?.slotType
+  const walkInNeedsSlot = usesMakeupSlots(walkInPackage, selectedWalkInPackage?.slotType)
 
   const fetchBookings = async (silent = false) => {
     if (!silent) setRefreshing(true)
@@ -299,7 +300,7 @@ function BookingsManagement() {
     const slotFromTime = findSlotByBookingTime(b.bookingTime)
     const resolvedEditSlot = slotFromId ?? slotFromTime
     setEditTime(
-      usesMakeupSlots(b.packageId)
+      usesMakeupSlots(b.packageId, packageSlotTypeFor(b.packageId))
         ? resolvedEditSlot
           ? formatSlotBookingTime(resolvedEditSlot)
           : b.bookingTime
@@ -398,7 +399,7 @@ function BookingsManagement() {
 
     setSaveLoading(true)
     try {
-      const isMakeup = usesMakeupSlots(selectedBooking.packageId)
+      const isMakeup = usesMakeupSlots(selectedBooking.packageId, packageSlotTypeFor(selectedBooking.packageId))
       const resolvedSlot = isMakeup ? findSlotByBookingTime(editTime) : undefined
       if (isMakeup && !resolvedSlot) {
         toast.error('Invalid slot', 'Pick a valid MANA session time slot.')
@@ -435,7 +436,7 @@ function BookingsManagement() {
       setSelectedBooking(saved)
       setEditDate(saved.bookingDate)
       setEditTime(
-        usesMakeupSlots(saved.packageId) && saved.slotId && getSlotById(saved.slotId)
+        usesMakeupSlots(saved.packageId, packageSlotTypeFor(saved.packageId)) && saved.slotId && getSlotById(saved.slotId)
           ? formatSlotBookingTime(getSlotById(saved.slotId)!)
           : saved.bookingTime,
       )
@@ -1236,7 +1237,7 @@ function BookingsManagement() {
                           onChange={(e) => setEditTime(e.target.value)}
                           className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                         >
-                          {(usesMakeupSlots(selectedBooking.packageId)
+                          {(usesMakeupSlots(selectedBooking.packageId, packageSlotTypeFor(selectedBooking.packageId))
                             ? ALL_MANA_SLOTS.map((slot) => formatSlotBookingTime(slot))
                             : [FICO_BOOKING_TIME_LABEL]
                           ).map((slot) => (

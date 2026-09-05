@@ -31,7 +31,7 @@ function parseClockToMinutes(raw: string): number | null {
 
 /** Lower = earlier in the day. Used only as a fallback before staff sets studio arrival order. */
 export function getBookingTimeRank(
-  booking: Pick<Booking, 'slotId' | 'bookingTime' | 'arrivalTime' | 'shootTime' | 'packageId'>,
+  booking: Pick<Booking, 'slotId' | 'bookingTime' | 'arrivalTime' | 'shootTime' | 'packageId' | 'packageSlotType'>,
 ): number {
   const slotId = getSlotId(booking as Booking) || findSlotByBookingTime(booking.bookingTime || '')?.id
   if (slotId) {
@@ -48,7 +48,7 @@ export function getBookingTimeRank(
   const fromLabel = parseClockToMinutes(booking.bookingTime || '')
   if (fromLabel != null) return 1000 + fromLabel
 
-  if (!usesMakeupSlots(booking.packageId)) return 5000
+  if (!usesMakeupSlots(booking.packageId, booking.packageSlotType)) return 5000
   return 9000
 }
 

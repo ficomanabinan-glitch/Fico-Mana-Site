@@ -7,10 +7,18 @@ export type BookingPackage = {
   category: BookingPackageCategory
   title: string
   price: string
+  priceAmount?: number
   duration: string
   description: string
   features: string[]
   slotType: 'makeup' | 'standard'
+  selectionLimit: number
+  isActive?: boolean
+  sortOrder?: number
+  secondaryPrice?: string
+  secondaryPriceAmount?: number
+  secondaryPriceLabel?: string
+  bookVariants?: { id: string; label: string }[]
   badge?: string
   note?: string
   heroImage?: string
@@ -56,6 +64,7 @@ const graduationPackages: BookingPackage[] = [
       'Receive 5 enhanced photos 14 days after selection',
     ],
     slotType: 'standard',
+    selectionLimit: 5,
   },
   {
     id: 'mana-makeup',
@@ -78,6 +87,7 @@ const graduationPackages: BookingPackage[] = [
       'Receive 5 enhanced photos 14 days after selection',
     ],
     slotType: 'makeup',
+    selectionLimit: 5,
   },
   {
     id: 'capping-pinning',
@@ -96,6 +106,7 @@ const graduationPackages: BookingPackage[] = [
       '7–14 working days for editing process',
     ],
     slotType: 'makeup',
+    selectionLimit: 2,
     heroImage: '/capping_bg.jpg',
   },
 ]
@@ -110,6 +121,10 @@ const creativeBookingPackages: BookingPackage[] = creativePackages.flatMap((pkg)
     description: pkg.title,
     features: pkg.includes,
     slotType: 'makeup' as const,
+    selectionLimit: 20,
+    secondaryPrice: pkg.secondaryPrice,
+    secondaryPriceLabel: pkg.secondaryPriceLabel,
+    bookVariants: pkg.bookVariants,
   },
   {
     id: 'creative-package-makeup',
@@ -120,6 +135,7 @@ const creativeBookingPackages: BookingPackage[] = creativePackages.flatMap((pkg)
     description: pkg.title,
     features: [...pkg.includes, 'Hair & makeup for 2 pegs'],
     slotType: 'makeup' as const,
+    selectionLimit: 20,
   },
 ])
 
@@ -132,6 +148,12 @@ const selfPortraitPackages: BookingPackage[] = [...ficoPackages, ...manaPackages
   description: pkg.note ?? pkg.title,
   features: pkg.includes,
   slotType: pkg.id === 'fico-4' || /hair and makeup/i.test(pkg.title) ? ('makeup' as const) : ('standard' as const),
+  selectionLimit:
+    pkg.id === 'fico-3' || pkg.id === 'mana-1'
+      ? 10
+      : pkg.id === 'mana-3'
+        ? 15
+        : 5,
   badge: pkg.badge,
   note: pkg.note,
 }))
@@ -163,10 +185,26 @@ export function parsePackagePrice(price: string): number {
   return parseFloat(price.replace(/[^0-9.]/g, '')) || 0
 }
 
-export function usesMakeupSlots(packageId: string): boolean {
+export function usesMakeupSlots(
+  packageId: string,
+  packageSlotType?: 'makeup' | 'standard',
+): boolean {
+  if (packageSlotType) return packageSlotType === 'makeup'
   // Keep explicit fico-4 rule for older booking rows if package metadata is missing.
   if (packageId === 'fico-4') return true
   return getBookingPackage(packageId)?.slotType === 'makeup'
+}
+
+export function packageUsesMakeupSlots(
+  pkg: Pick<BookingPackage, 'id' | 'slotType'>,
+): boolean {
+  return usesMakeupSlots(pkg.id, pkg.slotType)
+}
+
+export function bookingPackageRequiresDeposit(
+  pkg: Pick<BookingPackage, 'category'>,
+): boolean {
+  return pkg.category !== 'self-portrait'
 }
 
 /** FICO / MANA self-portrait packages: no online deposit — pay in full at the studio. */

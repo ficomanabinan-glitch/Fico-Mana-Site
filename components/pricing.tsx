@@ -6,59 +6,13 @@ import Link from 'next/link'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { getBookingUrl } from '@/lib/booking-packages'
-
-const ficoIncludes = [
-  'Free use of Toga & Cap',
-  'Free use of Alampay',
-  'Professional Photographer',
-  '5 Edited/Enhanced Copies',
-  'Professional Light Setup',
-  '2 pegs (toga, uniform, or alampay)',
-  '2 pcs. 4R-sized Prints',
-  '4 pcs. Wallet-sized Prints',
-  '1 pc. 8R Glass-to-Glass Frame',
-  'Get ALL RAW Copies',
-  'Receive 5 enhanced photos 14 days after selection',
-]
-
-const cappingIncludes = [
-  'Free Makeup',
-  '2 edited/enhanced',
-  '1 layout/outfit',
-  'All raw copies',
-  '8r Glass to glass frame',
-  '2 pcs. 4r size printed copies',
-  '7-14 working days for editing process',
-]
-
-const packages = [
-  {
-    id: 'fico-package',
-    name: 'FICO PACKAGE',
-    subtitle: 'Available anytime from 8:00 AM – 4:00 PM',
-    price: 'Php 3,500',
-    includes: ficoIncludes,
-  },
-  {
-    id: 'mana-makeup',
-    name: 'MANA PACKAGE',
-    subtitle: 'With Hair and Makeup',
-    price: 'Php 6,500',
-    includes: ficoIncludes,
-  },
-]
-
-const otherPackages = [
-  {
-    id: 'capping-pinning',
-    name: 'CAPPING AND PINNING PHOTOSHOOT',
-    subtitle: 'Other service · 10 slots only per day',
-    price: 'Php 4,000',
-    includes: cappingIncludes,
-  },
-]
+import { usePublicPackages } from '@/lib/use-public-packages'
 
 export default function Pricing() {
+  const catalog = usePublicPackages()
+  const packages = catalog.filter((pkg) => pkg.category === 'graduation')
+  const otherPackages = catalog.filter((pkg) => pkg.category === 'capping-pinning')
+
   return (
     <>
       <section
@@ -102,11 +56,11 @@ export default function Pricing() {
               >
                 <div className="mb-6 pb-6 border-b border-white/10 text-center md:text-left">
                   <h3 className="text-sm md:text-[15px] font-semibold tracking-[0.18em] text-white uppercase">
-                    {pkg.name}
+                    {pkg.title}
                   </h3>
-                  {pkg.subtitle ? (
+                  {pkg.description ? (
                     <p className="mt-2 text-[11px] md:text-xs font-light text-white/50 tracking-[0.08em]">
-                      {pkg.subtitle}
+                      {pkg.description}
                     </p>
                   ) : (
                     <p className="mt-2 text-[11px] md:text-xs font-light text-transparent tracking-[0.08em] select-none">
@@ -116,6 +70,9 @@ export default function Pricing() {
                   <p className="mt-4 text-lg md:text-xl font-light text-white tracking-[0.06em]">
                     {pkg.price}
                   </p>
+                  <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#C4CEFF]">
+                    Client selects {pkg.selectionLimit} photo{pkg.selectionLimit === 1 ? '' : 's'} for editing
+                  </p>
                 </div>
 
                 <p className="text-[9px] font-medium tracking-[0.3em] uppercase text-white/35 mb-5 text-center md:text-left">
@@ -123,7 +80,7 @@ export default function Pricing() {
                 </p>
 
                 <ul className="divide-y divide-white/6 flex-1">
-                  {pkg.includes.map((item, i) => (
+                  {pkg.features.map((item, i) => (
                     <li
                       key={item}
                       className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0"
@@ -221,11 +178,11 @@ export default function Pricing() {
               >
                 <div className="mb-6 pb-6 border-b border-white/10 text-center md:text-left">
                   <h3 className="text-sm md:text-[15px] font-semibold tracking-[0.18em] text-white uppercase">
-                    {pkg.name}
+                    {pkg.title}
                   </h3>
-                  {pkg.subtitle ? (
+                  {pkg.description ? (
                     <p className="mt-2 text-[11px] md:text-xs font-light text-white/50 tracking-[0.08em]">
-                      {pkg.subtitle}
+                      {pkg.description}
                     </p>
                   ) : (
                     <p className="mt-2 text-[11px] md:text-xs font-light text-transparent tracking-[0.08em] select-none">
@@ -235,6 +192,9 @@ export default function Pricing() {
                   <p className="mt-4 text-lg md:text-xl font-light text-white tracking-[0.06em]">
                     {pkg.price}
                   </p>
+                  <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#C4CEFF]">
+                    Client selects {pkg.selectionLimit} photo{pkg.selectionLimit === 1 ? '' : 's'} for editing
+                  </p>
                 </div>
 
                 <p className="text-[9px] font-medium tracking-[0.3em] uppercase text-white/35 mb-5 text-center md:text-left">
@@ -242,7 +202,7 @@ export default function Pricing() {
                 </p>
 
                 <ul className="divide-y divide-white/6 flex-1">
-                  {pkg.includes.map((item, i) => (
+                  {pkg.features.map((item, i) => (
                     <li
                       key={item}
                       className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0"

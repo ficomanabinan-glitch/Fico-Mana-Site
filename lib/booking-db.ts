@@ -215,6 +215,9 @@ export type DbPackageRow = {
   note: string | null
   is_active: boolean
   sort_order: number
+  selection_limit: number | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 function parseFeatures(raw: unknown): string[] {
@@ -241,6 +244,12 @@ export function mapDbPackageRow(row: DbPackageRow) {
     description: row.description ?? undefined,
     features: parseFeatures(row.features),
     slotType: row.slot_type,
+    selectionLimit: Number(row.selection_limit ?? 5),
+    isActive: Boolean(row.is_active),
+    sortOrder: Number(row.sort_order ?? 0),
+    createdAt: row.created_at ?? undefined,
+    updatedAt: row.updated_at ?? undefined,
+    secondaryPrice: row.secondary_price_display ?? undefined,
     secondaryPriceDisplay: row.secondary_price_display ?? undefined,
     secondaryPriceAmount: row.secondary_price_amount != null ? Number(row.secondary_price_amount) : undefined,
     secondaryPriceLabel: row.secondary_price_label ?? undefined,

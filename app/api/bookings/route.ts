@@ -9,6 +9,7 @@ import {
   saveBookingToDb,
   addNotificationToDb,
 } from '@/lib/supabase-store'
+import { mapDbPackageRow, type DbPackageRow } from '@/lib/booking-db'
 import { validateBookingAvailability } from '@/lib/booking-validate'
 import { listBlockedSlots } from '@/lib/server-blocked-slots'
 import { listFicoSpotBlocks } from '@/lib/server-fico-spot-blocks'
@@ -19,7 +20,13 @@ import {
   sendBookingSubmittedEmail,
 } from '@/lib/email'
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
-import { usesMakeupSlots, packageRequiresDeposit } from '@/lib/booking-packages'
+import {
+  bookingPackageRequiresDeposit,
+  getBookingPackage,
+  packageUsesMakeupSlots,
+  parsePackagePrice,
+  type BookingPackage,
+} from '@/lib/booking-packages'
 import {
   findSlotByBookingTime,
   formatSlotBookingTime,
@@ -34,8 +41,8 @@ import {
 } from '@/lib/booking-provisioning'
 
 /** Keep slotId in sync with bookingTime so reschedules pass capacity checks. */
-function normalizeBookingSchedule(booking: Booking): Booking {
-  if (usesMakeupSlots(booking.packageId)) {
+function normalizeBookingSchedule(booking: Booking, isMakeupPackage: boolean): Booking {
+  if (isMakeupPackage) {
     const slot = findSlotByBookingTime(booking.bookingTime) ?? (booking.slotId ? getSlotById(booking.slotId) : undefined)
     if (!slot) return booking
     return {
@@ -55,6 +62,32 @@ function normalizeBookingSchedule(booking: Booking): Booking {
   }
 }
 
+async function loadPackageDefinition(packageId: string): Promise<BookingPackage | null> {
+  const catalogPackage = getBookingPackage(packageId)
+  const fallback = catalogPackage ? { ...catalogPackage, isActive: true } : null
+  if (!isSupabaseConfigured()) return fallback
+  const admin = getSupabaseAdmin()
+  if (!admin) return null
+  const { data, error } = await admin.from('packages').select('*').eq('id', packageId).maybeSingle()
+  if (error || !data) return null
+  const mapped = mapDbPackageRow(data as DbPackageRow)
+  return {
+    id: mapped.id,
+    category: mapped.category as BookingPackage['category'],
+    title: mapped.title,
+    price: mapped.price,
+    priceAmount: mapped.priceAmount,
+    duration: mapped.duration || 'Studio session',
+    description: mapped.description || '',
+    features: mapped.features,
+    slotType: mapped.slotType === 'makeup' ? 'makeup' : 'standard',
+    selectionLimit: mapped.selectionLimit,
+    isActive: mapped.isActive,
+    sortOrder: mapped.sortOrder,
+    note: mapped.note,
+  }
+}
+
 function depositPaymentFromBooking(booking: Booking): PaymentRecord | undefined {
   const history = booking.paymentHistory || []
   return history.find((p) => p.type === 'Deposit') ?? history[history.length - 1]
@@ -71,14 +104,24 @@ async function loadAvailabilityBookings(): Promise<Booking[]> {
   const admin = getSupabaseAdmin()
   if (!admin) return []
 
-  const { data, error } = await admin
-    .from('bookings')
-    .select('id, booking_date, slot_id, package_id, booking_status, booking_time')
-    .order('created_at', { ascending: false })
+  const [bookingsResult, packagesResult] = await Promise.all([
+    admin
+      .from('bookings')
+      .select('id, booking_date, slot_id, package_id, booking_status, booking_time')
+      .order('created_at', { ascending: false }),
+    admin.from('packages').select('id, slot_type'),
+  ])
 
-  if (error || !data) return []
+  if (bookingsResult.error || !bookingsResult.data) return []
 
-  return data.map((b) => ({
+  const packageSlotTypes = new Map<string, 'makeup' | 'standard'>(
+    (packagesResult.data ?? []).map((pkg) => [
+      String(pkg.id),
+      pkg.slot_type === 'makeup' ? 'makeup' : 'standard',
+    ]),
+  )
+
+  return bookingsResult.data.map((b) => ({
     id: String(b.id),
     customerName: '',
     customerEmail: '',
@@ -86,6 +129,7 @@ async function loadAvailabilityBookings(): Promise<Booking[]> {
     customerFbLink: '',
     customerFbName: '',
     packageId: String(b.package_id),
+    packageSlotType: packageSlotTypes.get(String(b.package_id)),
     packageName: '',
     bookingDate: String(b.booking_date),
     bookingTime: String(b.booking_time ?? ''),
@@ -151,15 +195,32 @@ export async function POST(request: Request) {
     if (isExisting && staffAuthError) return staffAuthError
 
     const isStaffCreate = !isExisting && !!staffUser && !staffAuthError
-    const requiresDeposit = packageRequiresDeposit(incoming.packageId)
+    const packageDefinition = await loadPackageDefinition(incoming.packageId)
+    if (!packageDefinition) {
+      return NextResponse.json({ error: 'The selected package is not available.' }, { status: 400 })
+    }
+    if (!isExisting && !packageDefinition.isActive) {
+      return NextResponse.json({ error: 'The selected package is no longer bookable.' }, { status: 409 })
+    }
+    const requiresDeposit = bookingPackageRequiresDeposit(packageDefinition)
+    const packageChanged = !priorBooking || priorBooking.packageId !== incoming.packageId
+    const trustedIncoming: Booking = {
+      ...incoming,
+      packageName: packageChanged ? packageDefinition.title : incoming.packageName,
+      price: packageChanged
+        ? packageDefinition.priceAmount ?? parsePackagePrice(packageDefinition.price)
+        : incoming.price,
+      selectionLimit: packageChanged ? packageDefinition.selectionLimit : incoming.selectionLimit,
+      packageSlotType: packageDefinition.slotType,
+    }
 
     const booking = normalizeBookingSchedule(
       isExisting
-        ? incoming
+        ? trustedIncoming
         : isStaffCreate
           ? {
-              ...incoming,
-              depositAmount: Number(incoming.depositAmount) || (requiresDeposit ? 500 : 0),
+              ...trustedIncoming,
+              depositAmount: Number(trustedIncoming.depositAmount) || (requiresDeposit ? 500 : 0),
               driveLink: undefined,
               rawPhotoLink: undefined,
               rawPhotoStatus: undefined,
@@ -172,7 +233,7 @@ export async function POST(request: Request) {
             }
           : requiresDeposit
             ? {
-                ...incoming,
+                ...trustedIncoming,
                 bookingStatus: 'Pending Verification',
                 paymentStatus: 'Pending Verification',
                 rejectionReason: undefined,
@@ -191,15 +252,15 @@ export async function POST(request: Request) {
                   {
                     id: 'PAY-' + Math.floor(1000 + Math.random() * 9000),
                     amount: Number(incoming.depositAmount) || 500,
-                    method: incoming.paymentHistory?.[0]?.method || 'BPI',
+                    method: trustedIncoming.paymentHistory?.[0]?.method || 'BPI',
                     type: 'Deposit',
-                    transactionRef: incoming.transactionRef || incoming.paymentHistory?.[0]?.transactionRef,
+                    transactionRef: trustedIncoming.transactionRef || trustedIncoming.paymentHistory?.[0]?.transactionRef,
                     date: new Date().toISOString(),
                   },
                 ],
               }
             : {
-                ...incoming,
+                ...trustedIncoming,
                 bookingStatus: 'Confirmed',
                 paymentStatus: 'Unpaid',
                 rejectionReason: undefined,
@@ -218,6 +279,7 @@ export async function POST(request: Request) {
                 depositAmount: 0,
                 paymentHistory: [],
               },
+      packageUsesMakeupSlots(packageDefinition),
     )
 
     const scheduleUnchanged =

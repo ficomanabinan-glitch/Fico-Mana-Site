@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { Cloud, Database, ExternalLink, Mail, ShieldCheck } from 'lucide-react'
+import { Cloud, Database, ExternalLink, Mail, PackageOpen, ShieldCheck } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import { adminBtnGhost, adminPage, adminPanel } from '@/lib/admin-ui'
 
@@ -101,6 +101,20 @@ export default function SystemPage() {
         </div>
         <Link href="/admin/provisioning" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
           Manage Google Drive <ExternalLink className="size-3.5" />
+        </Link>
+      </section>
+
+      <section className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
+        <div className="flex items-start gap-3">
+          <PackageOpen className="mt-0.5 size-5 shrink-0 text-[#C4CEFF]" />
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Website catalog</p>
+            <h2 className="mt-1 text-sm font-semibold">Packages and client photo-selection rules</h2>
+            <p className="mt-1 text-xs text-white/40">Update prices, inclusions, visibility, and the number of photos clients select for each package.</p>
+          </div>
+        </div>
+        <Link href="/admin/packages" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
+          Manage Packages <ExternalLink className="size-3.5" />
         </Link>
       </section>
     </div>

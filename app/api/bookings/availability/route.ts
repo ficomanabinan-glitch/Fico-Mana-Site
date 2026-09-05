@@ -7,13 +7,18 @@ import type { Booking } from '@/lib/data-store'
 import { getSlotId } from '@/lib/booking-slots'
 import { usesMakeupSlots } from '@/lib/booking-packages'
 
-function mapDbBookingToAvailability(b: Record<string, unknown>) {
+function mapDbBookingToAvailability(
+  b: Record<string, unknown>,
+  packageSlotTypes: Map<string, 'makeup' | 'standard'>,
+) {
+  const packageId = String(b.package_id)
   const draft = {
     id: String(b.id),
     bookingDate: String(b.booking_date),
     slotId: b.slot_id ? String(b.slot_id) : undefined,
     bookingTime: b.booking_time ? String(b.booking_time) : '',
-    packageId: String(b.package_id),
+    packageId,
+    packageSlotType: packageSlotTypes.get(packageId),
     bookingStatus: String(b.booking_status) as Booking['bookingStatus'],
     customerName: '',
     customerEmail: '',
@@ -30,7 +35,7 @@ function mapDbBookingToAvailability(b: Record<string, unknown>) {
 
   // Resolve slot from time when slot_id is missing (imported / legacy rows)
   const resolvedSlotId =
-    usesMakeupSlots(draft.packageId) ? getSlotId(draft) ?? draft.slotId : draft.slotId
+    usesMakeupSlots(draft.packageId, draft.packageSlotType) ? getSlotId(draft) ?? draft.slotId : draft.slotId
 
   return toAvailability({
     id: draft.id,
@@ -38,18 +43,20 @@ function mapDbBookingToAvailability(b: Record<string, unknown>) {
     slotId: resolvedSlotId,
     bookingTime: draft.bookingTime,
     packageId: draft.packageId,
+    packageSlotType: draft.packageSlotType,
     bookingStatus: draft.bookingStatus,
   })
 }
 
 function bookingToAvailability(b: Booking) {
-  const resolvedSlotId = usesMakeupSlots(b.packageId) ? getSlotId(b) ?? b.slotId : b.slotId
+  const resolvedSlotId = usesMakeupSlots(b.packageId, b.packageSlotType) ? getSlotId(b) ?? b.slotId : b.slotId
   return toAvailability({
     id: b.id,
     bookingDate: b.bookingDate,
     slotId: resolvedSlotId,
     bookingTime: b.bookingTime,
     packageId: b.packageId,
+    packageSlotType: b.packageSlotType,
     bookingStatus: b.bookingStatus,
   })
 }
@@ -67,16 +74,26 @@ export async function GET() {
       return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
     }
 
-    const { data, error } = await admin
-      .from('bookings')
-      .select('id, booking_date, slot_id, booking_time, package_id, booking_status')
-      .order('created_at', { ascending: false })
+    const [bookingsResult, packagesResult] = await Promise.all([
+      admin
+        .from('bookings')
+        .select('id, booking_date, slot_id, booking_time, package_id, booking_status')
+        .order('created_at', { ascending: false }),
+      admin.from('packages').select('id, slot_type'),
+    ])
 
-    if (error || !data) {
+    if (bookingsResult.error || !bookingsResult.data) {
       return NextResponse.json([])
     }
 
-    return NextResponse.json(data.map(mapDbBookingToAvailability))
+    const packageSlotTypes = new Map<string, 'makeup' | 'standard'>(
+      (packagesResult.data ?? []).map((pkg) => [
+        String(pkg.id),
+        pkg.slot_type === 'makeup' ? 'makeup' : 'standard',
+      ]),
+    )
+
+    return NextResponse.json(bookingsResult.data.map((booking) => mapDbBookingToAvailability(booking, packageSlotTypes)))
   } catch (error) {
     console.error('GET /api/bookings/availability', error)
     return NextResponse.json({ error: 'Failed to load availability' }, { status: 500 })
