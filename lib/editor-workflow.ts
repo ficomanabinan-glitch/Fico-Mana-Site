@@ -26,6 +26,8 @@ export type EditingJobStatus =
   | 'DELIVERED'
   | 'UPLOAD_FAILED'
 
+export type DownloadScope = 'day' | 'week' | 'month'
+
 type Actor = { type: 'client' | 'staff' | 'system'; id?: string | null }
 type UploadFileInput = {
   bookingId: string
@@ -113,32 +115,6 @@ async function audit(
     metadata: input.metadata || {},
   })
   if (error) console.error('Workflow audit write failed:', error.message)
-}
-
-export async function getWorkspaceForStaff(userId: string) {
-  const admin = adminClient()
-  const { data: membership, error } = await admin
-    .from('workspace_members')
-    .select('workspace_id,role,workspaces(name,slug,status)')
-    .eq('user_id', userId)
-    .limit(1)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  if (membership?.workspace_id) return String(membership.workspace_id)
-
-  const { data: workspace, error: workspaceError } = await admin
-    .from('workspaces')
-    .select('id')
-    .eq('slug', 'fico-mana')
-    .single()
-  if (workspaceError || !workspace) throw new Error('Studio workspace is not configured.')
-  const { error: memberError } = await admin.from('workspace_members').insert({
-    workspace_id: workspace.id,
-    user_id: userId,
-    role: 'admin',
-  })
-  if (memberError) throw new Error(memberError.message)
-  return String(workspace.id)
 }
 
 async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
@@ -267,8 +243,12 @@ export async function getBatchList(workspaceId: string) {
           bookingId: String(job.booking_id),
           clientId: String(job.client_id),
           clientName: String(booking?.customer_name || job.booking_id),
+          packageName: String(booking?.package_name || ''),
           status: String(job.status),
           selectedCount: Number(job.selected_count || 0),
+          assignedEditorId: job.assigned_editor_id ? String(job.assigned_editor_id) : null,
+          assignedEditorName: job.assigned_editor_name ? String(job.assigned_editor_name) : null,
+          photographerName: job.photographer_name ? String(job.photographer_name) : null,
         }
       }),
       driveDayFolderUrl: String(batch.drive_day_folder_url || driveFolderUrl(batch.drive_day_folder_id)),
@@ -302,10 +282,10 @@ export async function getBatchDetail(workspaceId: string, displayId: string) {
   const bookingIds = (jobs || []).map((job) => String(job.booking_id))
   if (!bookingIds.length) return { ...listEntry, jobs: [], auditLogs: [] }
 
-  const [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult] = await Promise.all([
+  const [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult] = await Promise.all([
     admin.from('bookings').select('*').in('id', bookingIds),
     admin.from('photo_selections').select('*').in('booking_id', bookingIds),
-    admin.from('gallery_files').select('booking_id').in('booking_id', bookingIds),
+    admin.from('gallery_files').select('booking_id,created_at').in('booking_id', bookingIds),
     admin.from('deliverable_files').select('booking_id').in('booking_id', bookingIds),
     admin.from('drive_folders').select('*').in('booking_id', bookingIds),
     admin
@@ -315,8 +295,15 @@ export async function getBatchDetail(workspaceId: string, displayId: string) {
       .eq('batch_id', batch.id)
       .order('created_at', { ascending: false })
       .limit(80),
+    admin
+      .from('workflow_match_reviews')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('batch_id', batch.id)
+      .order('created_at', { ascending: false })
+      .limit(100),
   ])
-  const failed = [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult].find((result) => result.error)
+  const failed = [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult].find((result) => result.error)
   if (failed?.error) throw new Error(failed.error.message)
   const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
   const selectionMap = new Map((selectionsResult.data || []).map((selection) => [String(selection.booking_id), selection]))
@@ -352,6 +339,18 @@ export async function getBatchDetail(workspaceId: string, displayId: string) {
         editedFolderDriveId: folder('EDITED'),
         deliverablesFolderDriveId: folder('DELIVERABLES'),
         deliverableCount: (deliveryResult.data || []).filter((row) => row.booking_id === bookingId).length,
+        lastUploadAt:
+          (galleryResult.data || [])
+            .filter((row) => row.booking_id === bookingId)
+            .map((row) => String(row.created_at || ''))
+            .sort()
+            .at(-1) || null,
+        assignedEditorId: job.assigned_editor_id ? String(job.assigned_editor_id) : null,
+        assignedEditorName: job.assigned_editor_name ? String(job.assigned_editor_name) : null,
+        photographerName: job.photographer_name ? String(job.photographer_name) : null,
+        downloadedBy: job.downloaded_by ? String(job.downloaded_by) : null,
+        downloadedAt: job.downloaded_at || null,
+        downloadLockExpiresAt: job.download_lock_expires_at || null,
         lastError: job.last_error || null,
       }
     }),
@@ -363,7 +362,89 @@ export async function getBatchDetail(workspaceId: string, displayId: string) {
       timestamp: String(row.created_at),
       metadata: row.metadata || {},
     })),
+    needsReview: (reviewsResult.data || []).map((row) => ({
+      id: String(row.id),
+      sourceFolderName: String(row.source_folder_name),
+      suggestedBookingId: row.suggested_booking_id ? String(row.suggested_booking_id) : null,
+      resolvedBookingId: row.resolved_booking_id ? String(row.resolved_booking_id) : null,
+      status: String(row.status),
+      reason: String(row.reason),
+      createdAt: String(row.created_at),
+    })),
   }
+}
+
+export async function recordMatchReviews(
+  workspaceId: string,
+  displayId: string,
+  folders: Array<{ name: string; reason?: string }>,
+  actorId: string,
+) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const clean = folders
+    .map((folder) => ({ name: safeSegment(folder.name), reason: String(folder.reason || 'No trusted manifest or internal ID matched this folder.') }))
+    .filter((folder) => folder.name)
+    .slice(0, 100)
+  if (!clean.length) throw new Error('No unmatched client folders were provided.')
+  const { data: existing } = await admin
+    .from('workflow_match_reviews')
+    .select('source_folder_name,status')
+    .eq('workspace_id', workspaceId)
+    .eq('batch_id', batch.id)
+  const active = new Set((existing || []).filter((row) => row.status !== 'DISMISSED').map((row) => String(row.source_folder_name).toLowerCase()))
+  const rows = clean.filter((folder) => !active.has(folder.name.toLowerCase())).map((folder) => ({
+    workspace_id: workspaceId,
+    batch_id: batch.id,
+    source_folder_name: folder.name,
+    status: 'NEEDS_REVIEW',
+    reason: folder.reason.slice(0, 500),
+  }))
+  if (rows.length) {
+    const { error } = await admin.from('workflow_match_reviews').insert(rows)
+    if (error) throw new Error(error.message)
+  }
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'UPLOAD_MATCH_NEEDS_REVIEW', {
+    batchId: batch.id,
+    metadata: { folders: clean.map((folder) => folder.name), newReviewCount: rows.length },
+  })
+  return { recorded: rows.length }
+}
+
+export async function resolveMatchReview(
+  workspaceId: string,
+  reviewId: string,
+  bookingId: string,
+  actorId: string,
+) {
+  const admin = adminClient()
+  const { data: review, error } = await admin
+    .from('workflow_match_reviews')
+    .select('*,editing_batches!inner(workspace_id)')
+    .eq('id', reviewId)
+    .eq('editing_batches.workspace_id', workspaceId)
+    .maybeSingle()
+  if (error || !review) throw new Error(error?.message || 'Matching review item not found.')
+  const { data: job } = await admin
+    .from('editing_jobs')
+    .select('id,batch_id')
+    .eq('workspace_id', workspaceId)
+    .eq('batch_id', review.batch_id)
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (!job) throw new Error('The selected client is not part of this batch.')
+  const timestamp = nowIso()
+  const { error: updateError } = await admin
+    .from('workflow_match_reviews')
+    .update({ status: 'RESOLVED', resolved_booking_id: bookingId, resolved_by: actorId, resolved_at: timestamp, updated_at: timestamp })
+    .eq('id', reviewId)
+  if (updateError) throw new Error(updateError.message)
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'UPLOAD_MATCH_RESOLVED', {
+    bookingId,
+    batchId: review.batch_id,
+    metadata: { reviewId, sourceFolderName: review.source_folder_name },
+  })
+  return { success: true, reviewId, bookingId }
 }
 
 async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingId: string) {
@@ -483,6 +564,59 @@ async function ensureBookingFolders(admin: SupabaseClient, workspaceId: string, 
   )
   if (foldersError) throw new Error(foldersError.message)
   return { hierarchy, batch, portal, booking }
+}
+
+export async function reconcileBookingFolders(
+  workspaceId: string,
+  bookingId: string,
+  actorId: string,
+  repair = false,
+) {
+  const admin = adminClient()
+  if (repair) {
+    const [provisioningReset, folderReset] = await Promise.all([
+      admin
+        .from('booking_provisioning')
+        .update({ drive_client_folder_id: null, drive_client_folder_url: null, updated_at: nowIso() })
+        .eq('workspace_id', workspaceId)
+        .eq('booking_id', bookingId),
+      admin
+        .from('drive_folders')
+        .delete()
+        .eq('workspace_id', workspaceId)
+        .eq('booking_id', bookingId),
+    ])
+    if (provisioningReset.error) throw new Error(provisioningReset.error.message)
+    if (folderReset.error) throw new Error(folderReset.error.message)
+  }
+  const prepared = await ensureBookingFolders(admin, workspaceId, bookingId)
+  await audit(
+    admin,
+    workspaceId,
+    { type: 'staff', id: actorId },
+    repair ? 'DRIVE_FOLDERS_REPAIRED' : 'DRIVE_FOLDERS_REFRESHED',
+    {
+      bookingId,
+      batchId: prepared.batch.id,
+      metadata: {
+        clientFolderId: prepared.hierarchy.client.id,
+        rawFolderId: prepared.hierarchy.raw.id,
+        selectedFolderId: prepared.hierarchy.selected.id,
+        editedFolderId: prepared.hierarchy.edited.id,
+        deliverablesFolderId: prepared.hierarchy.deliverables.id,
+      },
+    },
+  )
+  return {
+    status: 'READY',
+    bookingId,
+    clientFolderId: prepared.hierarchy.client.id,
+    clientFolderUrl: prepared.hierarchy.clientUrl,
+    rawFolderId: prepared.hierarchy.raw.id,
+    selectedFolderId: prepared.hierarchy.selected.id,
+    editedFolderId: prepared.hierarchy.edited.id,
+    deliverablesFolderId: prepared.hierarchy.deliverables.id,
+  }
 }
 
 export async function saveRawFile(input: {
@@ -893,6 +1027,97 @@ export async function setEditingJobStatus(
   return { success: true }
 }
 
+export async function getWorkflowMembers(workspaceId: string) {
+  const admin = adminClient()
+  const { data: members, error } = await admin
+    .from('workspace_members')
+    .select('user_id,role,display_name,created_at')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  const userIds = new Set((members || []).map((member) => String(member.user_id)))
+  const users = new Map<string, { email?: string | null }>()
+  let page = 1
+  while (userIds.size && page <= 10) {
+    const { data, error: usersError } = await admin.auth.admin.listUsers({ page, perPage: 100 })
+    if (usersError) throw new Error(usersError.message)
+    for (const user of data.users) {
+      if (userIds.has(user.id)) users.set(user.id, { email: user.email })
+    }
+    if (data.users.length < 100 || users.size >= userIds.size) break
+    page += 1
+  }
+  return (members || []).map((member) => {
+    const user = users.get(String(member.user_id))
+    const email = String(user?.email || '')
+    return {
+      id: String(member.user_id),
+      role: String(member.role),
+      displayName: String(member.display_name || email.split('@')[0] || member.role),
+      email,
+    }
+  })
+}
+
+export async function assignEditingJob(
+  workspaceId: string,
+  bookingId: string,
+  actorId: string,
+  assigneeId: string | null,
+  allowReassign: boolean,
+) {
+  const admin = adminClient()
+  const { data: job, error } = await admin
+    .from('editing_jobs')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (error || !job) throw new Error(error?.message || 'Editing job not found.')
+  if (job.assigned_editor_id && job.assigned_editor_id !== actorId && !allowReassign) {
+    throw new Error('This job is already assigned to another editor.')
+  }
+  if (job.assigned_editor_id === assigneeId) {
+    return {
+      success: true,
+      assignedEditorId: assigneeId,
+      assignedEditorName: job.assigned_editor_name ? String(job.assigned_editor_name) : null,
+    }
+  }
+
+  let assigneeName: string | null = null
+  if (assigneeId) {
+    const { data: member, error: memberError } = await admin
+      .from('workspace_members')
+      .select('user_id,role,display_name')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', assigneeId)
+      .in('role', ['owner', 'admin', 'editor'])
+      .maybeSingle()
+    if (memberError || !member) throw new Error(memberError?.message || 'The assignee is not an editor in this workspace.')
+    const { data: userData } = await admin.auth.admin.getUserById(assigneeId)
+    assigneeName = String(member.display_name || userData.user?.email?.split('@')[0] || 'Editor')
+  }
+
+  const timestamp = nowIso()
+  const { error: updateError } = await admin
+    .from('editing_jobs')
+    .update({
+      assigned_editor_id: assigneeId,
+      assigned_editor_name: assigneeName,
+      claimed_at: assigneeId ? timestamp : null,
+      updated_at: timestamp,
+    })
+    .eq('id', job.id)
+  if (updateError) throw new Error(updateError.message)
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'JOB_REASSIGNED', {
+    bookingId,
+    batchId: job.batch_id,
+    metadata: { from: job.assigned_editor_id || null, to: assigneeId, assigneeName },
+  })
+  return { success: true, assignedEditorId: assigneeId, assignedEditorName: assigneeName }
+}
+
 function uniqueClientFolderNames(bookings: Array<{ id: string; name: string }>) {
   const counts = new Map<string, number>()
   for (const booking of bookings) {
@@ -907,16 +1132,38 @@ function uniqueClientFolderNames(bookings: Array<{ id: string; name: string }>) 
   )
 }
 
-export async function prepareBatchDownload(workspaceId: string, displayId: string) {
+export async function prepareBatchDownload(
+  workspaceId: string,
+  displayId: string,
+  actorId: string,
+  allowOverride = false,
+) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
-  const { data: jobs, error } = await admin
+  const { data: readyJobs, error } = await admin
     .from('editing_jobs')
     .select('*')
     .eq('batch_id', batch.id)
     .eq('status', 'READY_FOR_EDITING')
   if (error) throw new Error(error.message)
-  if (!jobs?.length) throw new Error('No jobs are currently READY FOR EDITING in this batch.')
+  const now = Date.now()
+  const jobs = (readyJobs || []).filter((job) => {
+    if (allowOverride) return true
+    const assignedElsewhere = job.assigned_editor_id && job.assigned_editor_id !== actorId
+    const lockedElsewhere =
+      job.download_locked_by !== actorId &&
+      job.download_lock_expires_at &&
+      new Date(job.download_lock_expires_at).getTime() > now
+    return !assignedElsewhere && !lockedElsewhere
+  })
+  if (!jobs.length) throw new Error('No unclaimed READY FOR EDITING jobs are available in this batch.')
+  const lockExpiresAt = new Date(now + 2 * 60 * 60 * 1000).toISOString()
+  const { error: lockError } = await admin
+    .from('editing_jobs')
+    .update({ download_locked_by: actorId, download_lock_expires_at: lockExpiresAt, updated_at: nowIso() })
+    .in('id', jobs.map((job) => job.id))
+    .eq('status', 'READY_FOR_EDITING')
+  if (lockError) throw new Error(lockError.message)
   const bookingIds = jobs.map((job) => String(job.booking_id))
   const [{ data: bookings }, { data: portals }, { data: selections }] = await Promise.all([
     admin.from('bookings').select('id,customer_name').in('id', bookingIds),
@@ -962,6 +1209,8 @@ export async function prepareBatchDownload(workspaceId: string, displayId: strin
         deliverables_folder_drive_id: folderMap.get(`${job.booking_id}:DELIVERABLES`)?.drive_folder_id || null,
         portal_id: portalMap.get(String(job.booking_id)) || null,
         customer_name: String(booking?.customer_name || job.booking_id),
+        assigned_editor_id: job.assigned_editor_id || null,
+        assigned_editor_name: job.assigned_editor_name || null,
       }
     }),
   }
@@ -994,7 +1243,14 @@ export async function markBatchDownloaded(workspaceId: string, batchId: string, 
   const timestamp = nowIso()
   await admin
     .from('editing_jobs')
-    .update({ status: 'DOWNLOADED', downloaded_at: timestamp, updated_at: timestamp })
+    .update({
+      status: 'DOWNLOADED',
+      downloaded_at: timestamp,
+      downloaded_by: actorId,
+      download_locked_by: null,
+      download_lock_expires_at: null,
+      updated_at: timestamp,
+    })
     .in('id', jobs.map((job) => job.id))
     .eq('status', 'READY_FOR_EDITING')
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'BATCH_DOWNLOADED', {
@@ -1007,11 +1263,61 @@ export async function markBatchDownloaded(workspaceId: string, batchId: string, 
   })
 }
 
+function dateInDownloadScope(date: string, scope: DownloadScope, key: string) {
+  if (scope === 'day') return date === key
+  if (scope === 'month') return date.startsWith(`${key}-`) || date.startsWith(key)
+  const start = new Date(`${key}T00:00:00Z`)
+  if (Number.isNaN(start.getTime())) return false
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 7)
+  const current = new Date(`${date}T00:00:00Z`)
+  return current >= start && current < end
+}
+
+export async function prepareBatchCollectionDownload(
+  workspaceId: string,
+  scope: DownloadScope,
+  key: string,
+  actorId: string,
+  allowOverride = false,
+) {
+  const batches = (await getBatchList(workspaceId)).filter((batch) =>
+    dateInDownloadScope(batch.shootDate, scope, key),
+  )
+  const prepared: Awaited<ReturnType<typeof prepareBatchDownload>>[] = []
+  for (const batch of batches) {
+    if (batch.counts.readyForEditing === 0) continue
+    try {
+      prepared.push(await prepareBatchDownload(workspaceId, batch.id, actorId, allowOverride))
+    } catch (error) {
+      if (!/No unclaimed READY FOR EDITING/.test(error instanceof Error ? error.message : '')) throw error
+    }
+  }
+  if (!prepared.length) throw new Error(`No downloadable jobs are available for this ${scope}.`)
+  const manifest = {
+    schema_version: 1,
+    scope,
+    key,
+    workspace_id: workspaceId,
+    generated_at: nowIso(),
+    batches: prepared.map((item) => item.manifest),
+  }
+  return {
+    fileName: `FICO-MANA-${scope.toUpperCase()}-${key}.zip`,
+    entries: [
+      { name: 'manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') },
+      ...prepared.flatMap((item) => item.entries),
+    ],
+    prepared,
+  }
+}
+
 export async function createBatchUploadRun(
   workspaceId: string,
   displayId: string,
   bookingIds: string[],
   actorId: string,
+  allowOverride = false,
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
@@ -1023,6 +1329,8 @@ export async function createBatchUploadRun(
     .in('booking_id', uniqueIds)
   if (error) throw new Error(error.message)
   if (!jobs?.length || jobs.length !== uniqueIds.length) throw new Error('Upload manifest contains unknown batch clients.')
+  const assignedElsewhere = jobs.find((job) => job.assigned_editor_id && job.assigned_editor_id !== actorId)
+  if (assignedElsewhere && !allowOverride) throw new Error(`${assignedElsewhere.booking_id} is assigned to another editor.`)
   const invalid = jobs.find((job) => !['DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'].includes(job.status))
   if (invalid) throw new Error(`${invalid.booking_id} is not ready for deliverable upload.`)
   const { data: run, error: runError } = await admin
@@ -1069,6 +1377,11 @@ export async function createDeliverableUploadSession(
   const checksum = input.checksum.toLowerCase()
   if (!/^[a-f0-9]{64}$/.test(checksum)) throw new Error('A SHA-256 file checksum is required.')
   if (input.fileSize <= 0) throw new Error('Empty files cannot be uploaded.')
+  if (input.fileSize > 500 * 1024 * 1024) throw new Error('Edited photo files are limited to 500 MB each.')
+  const photoExtension = /\.(jpe?g|png|webp|tiff?|heic|heif)$/i.test(input.fileName)
+  if (!input.mimeType.startsWith('image/') && !(input.mimeType === 'application/octet-stream' && photoExtension)) {
+    throw new Error('Only supported edited photo files can be uploaded.')
+  }
   const { data: prior } = await admin
     .from('deliverable_files')
     .select('*')

@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getAdminUser } from '@/lib/supabase/server'
+import { getAdminUser, getStaffUser } from '@/lib/supabase/server'
+import {
+  canUseWorkflow,
+  getWorkflowAccess,
+  type WorkflowCapability,
+} from '@/lib/auth/workflow'
 
 /** API authorization is server-side RBAC, not merely "has a Supabase session". */
 export async function requireStaffAuth() {
@@ -8,6 +13,27 @@ export async function requireStaffAuth() {
     return { user: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
   return { user, error: null }
+}
+
+/** Editor-portal authorization uses workspace membership, not editable client metadata. */
+export async function requireWorkflowAuth(capability: WorkflowCapability = 'view') {
+  const user = await getStaffUser()
+  if (!user) {
+    return {
+      user: null,
+      access: null,
+      error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    }
+  }
+  const access = await getWorkflowAccess(user)
+  if (!access || !canUseWorkflow(access, capability)) {
+    return {
+      user,
+      access,
+      error: NextResponse.json({ error: 'This staff role cannot perform that action.' }, { status: 403 }),
+    }
+  }
+  return { user, access, error: null }
 }
 
 /** Minimal booking fields safe to expose publicly for slot availability. */

@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js'
 
 const DEFAULT_ADMIN_HOSTNAME = 'admin.ficomana.com'
+const DEFAULT_EDITOR_HOSTNAME = 'editor.ficomana.com'
 
 function normalizeHost(host: string | null | undefined) {
   return (host ?? '').split(':')[0]?.trim().toLowerCase() || ''
@@ -12,6 +13,14 @@ export function isAdminHost(host: string | null | undefined) {
     process.env.ADMIN_HOSTNAME?.trim().toLowerCase() || DEFAULT_ADMIN_HOSTNAME
 
   return normalized === configured || normalized === 'admin.localhost'
+}
+
+export function isEditorHost(host: string | null | undefined) {
+  const normalized = normalizeHost(host)
+  const configured =
+    process.env.EDITOR_HOSTNAME?.trim().toLowerCase() || DEFAULT_EDITOR_HOSTNAME
+
+  return normalized === configured || normalized === 'editor.localhost'
 }
 
 function adminEmailAllowlist() {

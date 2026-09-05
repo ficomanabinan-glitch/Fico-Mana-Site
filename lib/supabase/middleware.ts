@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdminHost, isAdminUser } from '@/lib/auth/admin'
+import { isAdminHost, isAdminUser, isEditorHost } from '@/lib/auth/admin'
 import { getSupabaseUrl, getSupabaseKey } from '@/lib/supabase/env'
 
 const INQUIRY_LIMIT = 20
@@ -59,6 +59,35 @@ function maybeEnforceAdminSubdomain(request: NextRequest) {
   const url = request.nextUrl.clone()
   url.protocol = 'https:'
   url.host = process.env.ADMIN_HOSTNAME?.trim() || 'admin.ficomana.com'
+  return NextResponse.redirect(url)
+}
+
+function maybeEnforceEditorSubdomain(request: NextRequest) {
+  if (process.env.EDITOR_ENFORCE_SUBDOMAIN !== 'true') return null
+  if (isEditorHost(request.headers.get('host'))) return null
+  if (!request.nextUrl.pathname.startsWith('/editor')) return null
+  const url = request.nextUrl.clone()
+  url.protocol = 'https:'
+  url.host = process.env.EDITOR_HOSTNAME?.trim() || 'editor.ficomana.com'
+  return NextResponse.redirect(url)
+}
+
+function isEditorHostPassThrough(pathname: string) {
+  return (
+    pathname.startsWith('/editor') ||
+    pathname.startsWith('/api/editor-workflow') ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/_next/') ||
+    isStaticAsset(pathname)
+  )
+}
+
+function editorSubdomainAlias(request: NextRequest) {
+  if (!isEditorHost(request.headers.get('host'))) return null
+  const { pathname } = request.nextUrl
+  if (isEditorHostPassThrough(pathname)) return null
+  const url = request.nextUrl.clone()
+  url.pathname = pathname === '/' ? '/editor' : `/editor${pathname}`
   return NextResponse.redirect(url)
 }
 
@@ -125,15 +154,23 @@ async function enforceInquiryRateLimit(request: NextRequest) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const editorAlias = editorSubdomainAlias(request)
+  if (editorAlias) return editorAlias
+
   const alias = adminSubdomainAlias(request)
   if (alias) return alias
 
   const enforceSubdomain = maybeEnforceAdminSubdomain(request)
   if (enforceSubdomain) return enforceSubdomain
 
+  const enforceEditorSubdomain = maybeEnforceEditorSubdomain(request)
+  if (enforceEditorSubdomain) return enforceEditorSubdomain
+
   const { pathname } = request.nextUrl
   const isAdminLogin = pathname === '/admin'
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isEditorLogin = pathname === '/editor/login'
+  const isEditorRoute = pathname === '/editor' || pathname.startsWith('/editor/')
   const isFilteringRoute = pathname === '/filtering' || pathname.startsWith('/filtering/')
   const isBookingApi = pathname === '/api/bookings' || pathname.startsWith('/api/bookings/')
   const isSensitiveApi =
@@ -143,13 +180,14 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/api/emails') ||
     pathname.startsWith('/api/sales') ||
     pathname.startsWith('/api/provisioning') ||
+    pathname.startsWith('/api/editor-workflow') ||
     pathname.startsWith('/api/integrations') ||
     pathname.startsWith('/api/sync')
   const isAuthCallback = pathname === '/auth/callback'
 
   // Broad matching is needed for admin.ficomana.com aliases. Avoid doing any
   // Supabase work for ordinary public-site requests.
-  if (!isAdminRoute && !isFilteringRoute && !isSensitiveApi && !isAuthCallback) {
+  if (!isAdminRoute && !isEditorRoute && !isFilteringRoute && !isSensitiveApi && !isAuthCallback) {
     return NextResponse.next()
   }
 
@@ -201,6 +239,20 @@ export async function updateSession(request: NextRequest) {
   if (isAdminLogin && admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin/dashboard'
+    url.search = ''
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
+  }
+
+  if (isEditorRoute && !isEditorLogin && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/editor/login'
+    url.search = ''
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
+  }
+
+  if (isEditorLogin && user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/editor'
     url.search = ''
     return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }

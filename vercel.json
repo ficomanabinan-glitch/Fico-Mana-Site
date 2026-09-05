@@ -1,8 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "alias": ["admin.ficomana.com"],
+  "alias": ["admin.ficomana.com", "editor.ficomana.com"],
   "env": {
     "ADMIN_HOSTNAME": "admin.ficomana.com",
-    "ADMIN_ENFORCE_SUBDOMAIN": "false"
+    "ADMIN_ENFORCE_SUBDOMAIN": "false",
+    "EDITOR_HOSTNAME": "editor.ficomana.com",
+    "EDITOR_ENFORCE_SUBDOMAIN": "false"
   }
 }

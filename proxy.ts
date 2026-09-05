@@ -14,6 +14,7 @@ function shouldDisableCaching(request: NextRequest) {
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml' ||
     pathname.startsWith('/admin') ||
+    pathname.startsWith('/editor') ||
     pathname.startsWith('/api/') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/portal/') ||
