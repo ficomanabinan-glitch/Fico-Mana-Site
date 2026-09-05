@@ -697,7 +697,24 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
       if (!storageError && object) return { data: Buffer.from(await object.arrayBuffer()), mimeType: 'image/jpeg' }
     }
     if (reference.startsWith('http')) {
-      return { data: await downloadDriveThumbnail(reference), mimeType: 'image/jpeg' }
+      try {
+        return { data: await downloadDriveThumbnail(reference), mimeType: 'image/jpeg' }
+      } catch {
+        // Google thumbnail URLs are short-lived. Refresh the file metadata and
+        // persist the replacement so future portal views use the current URL.
+        const freshFile = await getDriveFile(String(data.drive_file_id))
+        if (freshFile.thumbnailLink) {
+          const thumbnail = await downloadDriveThumbnail(freshFile.thumbnailLink)
+          await admin
+            .from('gallery_files')
+            .update({
+              thumbnail_reference: freshFile.thumbnailLink,
+              preview_reference: freshFile.thumbnailLink,
+            })
+            .eq('id', data.id)
+          return { data: thumbnail, mimeType: 'image/jpeg' }
+        }
+      }
     }
   }
   return {
