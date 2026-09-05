@@ -1,217 +1,88 @@
-import { cookies } from 'next/headers'
-import { CalendarDays, CheckCircle2, Clock3, Download, ExternalLink, FileText, Package, WalletCards } from 'lucide-react'
-import ClientPortalTrustedDevice from '@/components/client-portal-trusted-device'
-import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { mapDbBookingToModel } from '@/lib/booking-db'
-import { totalConfirmedPayments } from '@/lib/booking-provisioning'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import {
-  PORTAL_SESSION_COOKIE,
-  verifyPortalCookie,
-  verifyPortalSignature,
-} from '@/lib/client-portal'
+  CalendarDays, Check, CheckCircle2, Download, ExternalLink, FileText,
+  Image as ImageIcon, Lock, Package, WalletCards,
+} from 'lucide-react'
+import ClientPortalTrustedDevice from '@/components/client-portal-trusted-device'
 
-function money(value: number) {
-  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
+type GalleryFile={id:string;fileName:string;mimeType:string;driveFileId:string;previewUrl:string}
+type PortalResource={id:string;resource_type:string;title:string;url?:string|null;content?:string|null;created_at:string}
+type PortalData={
+  booking:{id:string;customerName:string;packageName:string;bookingDate:string;bookingTime:string;bookingStatus:string;paymentStatus:string;price:number;depositAmount:number;amountPaid:number}
+  portalId:string
+  selection:{id:string;status:'OPEN'|'SUBMITTED'|'SUBMITTING'|'COPY_FAILED';requiredCount:number;submittedAt?:string|null;reopenedAt?:string|null;selectedIds:string[]}|null
+  gallery:GalleryFile[]
+  galleryTotal:number
+  galleryOffset:number
+  galleryLimit:number
+  editingStatus:string
+  deliverables:Array<{id:string;fileName:string;mimeType:string;fileSize:number;publishedAt:string;previewUrl:string}>
+  resources:PortalResource[]
+  downloadAllUrl:string
 }
 
-function projectStage(booking: ReturnType<typeof mapDbBookingToModel>) {
-  if (booking.bookingStatus === 'Completed') return 'Completed'
-  if (booking.editedPhotoLink) return 'Ready for Delivery'
-  if (booking.rawPhotoApprovedAt) return 'Editing Photos'
-  if (booking.rawPhotoLink) return booking.rawPhotoStatus === 'Approved' ? 'Editing Photos' : 'Selecting Files'
-  const shoot = new Date(`${booking.bookingDate}T23:59:59+08:00`).getTime()
-  if (Number.isFinite(shoot) && shoot < Date.now()) return 'Shoot Completed'
-  if (booking.bookingStatus === 'Confirmed') return 'Shoot Scheduled'
-  return 'Booking Confirmed'
+function money(value:number){return new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP',maximumFractionDigits:0}).format(value)}
+function stageLabel(status:string){return status.replace(/_/g,' ').replace(/\b\w/g,(char)=>char.toUpperCase())}
+function AccessMessage({title,message}:{title:string;message:string}){return <main className="flex min-h-screen items-center justify-center bg-[#171717] p-6 text-white"><div className="w-full max-w-lg border border-white/10 bg-white/[0.03] p-8 text-center"><h1 className="text-xl font-semibold">{title}</h1><p className="mt-3 text-sm leading-relaxed text-white/50">{message}</p></div></main>}
+
+export default function ClientPortalPage(){
+  const params=useParams<{id:string}>();const searchParams=useSearchParams();const publicId=decodeURIComponent(params.id||'');const signature=searchParams.get('sig')||''
+  const [data,setData]=useState<PortalData|null>(null);const [loading,setLoading]=useState(true);const [loadingMore,setLoadingMore]=useState(false);const [error,setError]=useState('');const [selected,setSelected]=useState<string[]>([]);const [submitting,setSubmitting]=useState(false)
+  const signatureQuery=signature?`&sig=${encodeURIComponent(signature)}`:''
+
+  const load=async(offset=0)=>{
+    if(offset===0){setLoading(true);setError('')}else setLoadingMore(true)
+    try{
+      const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}?offset=${offset}&limit=48${signatureQuery}`,{cache:'no-store',credentials:'include'})
+      const body=(await response.json().catch(()=>({}))) as PortalData&{error?:string}
+      if(!response.ok)throw new Error(body.error||'This client portal is unavailable.')
+      setData((previous)=>offset===0?body:{...body,gallery:[...(previous?.gallery||[]),...body.gallery]})
+      setSelected(Array.isArray(body.selection?.selectedIds)?body.selection.selectedIds:[])
+    }catch(loadError){setError(loadError instanceof Error?loadError.message:'This client portal is unavailable.')}
+    finally{setLoading(false);setLoadingMore(false)}
+  }
+  useEffect(()=>{if(publicId)void load();else setLoading(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[publicId,signature])
+
+  const required=data?.selection?.requiredCount||0
+  const locked=data?.selection?.status==='SUBMITTED'||data?.selection?.status==='SUBMITTING'
+  const canSubmit=!locked&&required>0&&selected.length===required
+  const balance=data?Math.max(0,data.booking.price-data.booking.amountPaid):0
+  const toggle=(fileId:string)=>{if(locked)return;setSelected((previous)=>{if(previous.includes(fileId))return previous.filter((id)=>id!==fileId);if(previous.length>=required)return previous;return[...previous,fileId]})}
+  const submit=async()=>{
+    if(!canSubmit||!data)return;setSubmitting(true);setError('')
+    try{
+      const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/selection?sig=${encodeURIComponent(signature)}`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileIds:selected})})
+      const body=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(body.error||'Could not submit your selection.');await load()
+    }catch(submitError){setError(submitError instanceof Error?submitError.message:'Selection submission failed.')}
+    finally{setSubmitting(false)}
+  }
+
+  if(loading)return <main className="flex min-h-screen items-center justify-center bg-[#171717] text-sm text-white/40">Loading your FICO MANA project…</main>
+  if(error&&!data)return <AccessMessage title="Portal unavailable" message={error}/>
+  if(!data)return <AccessMessage title="Portal unavailable" message="This project could not be loaded."/>
+
+  return <main className="min-h-screen bg-[#171717] text-white"><div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+    <header className="border-b border-white/10 pb-6"><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#C4CEFF]">FICO MANA Client Portal</p><div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold sm:text-3xl">{data.booking.customerName}</h1><p className="mt-1 font-mono text-[10px] text-white/35">{data.booking.id}</p></div><div className="border border-white/10 bg-white/[0.03] px-4 py-3"><p className="text-[9px] uppercase tracking-wider text-white/35">Project Status</p><p className="mt-1 text-sm font-semibold text-[#C4CEFF]">{stageLabel(data.editingStatus)}</p></div></div></header>
+    {error?<div className="mt-5 border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200">{error}</div>:null}
+    <div className="mt-6 grid gap-5 lg:grid-cols-3"><section className="space-y-5 lg:col-span-2">
+      <div className="grid gap-4 sm:grid-cols-2"><InfoCard icon={CalendarDays} label="Your Session"><p className="font-semibold">{data.booking.bookingDate}</p><p className="mt-1 text-xs text-white/45">{data.booking.bookingTime}</p></InfoCard><InfoCard icon={Package} label="Your Package"><p className="font-semibold">{data.booking.packageName}</p><p className="mt-1 text-xs text-white/45">Booking {data.booking.bookingStatus}</p></InfoCard></div>
+      <section className="border border-white/10 bg-white/[0.02] p-5 sm:p-6"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2"><ImageIcon className="size-4 text-[#C4CEFF]"/><h2 className="text-sm font-semibold">Your Photos</h2></div><p className="mt-2 text-xs leading-relaxed text-white/45">Choose exactly {required||'the configured number of'} photo{required===1?'':'s'} for editing. Full-resolution studio RAW files are never exposed publicly.</p></div>{data.selection?<div className={`shrink-0 border px-3 py-2 text-center ${locked?'border-emerald-500/20 bg-emerald-500/10':'border-[#C4CEFF]/20 bg-[#C4CEFF]/5'}`}><p className="text-[9px] uppercase tracking-wider text-white/35">Photo Selection</p><p className={`mt-1 text-sm font-bold ${locked?'text-emerald-300':'text-[#C4CEFF]'}`}>{selected.length} / {required} Selected</p></div>:null}</div>
+        {data.selection?.status==='SUBMITTED'?<div className="mt-4 flex items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="size-3.5"/>Selection submitted and locked{data.selection.submittedAt?` · ${new Date(data.selection.submittedAt).toLocaleString('en-PH')}`:''}</div>:null}
+        {data.selection?.status==='COPY_FAILED'?<div className="mt-4 border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-200">Your selection was saved, but the studio copy is still retrying. You may submit again safely.</div>:null}
+        {data.gallery.length===0?<div className="mt-5 border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Your studio gallery is still being prepared.</div>:<div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{data.gallery.map((file)=>{const active=selected.includes(file.id);return <button key={file.id} type="button" disabled={locked} onClick={()=>toggle(file.id)} className={`group relative overflow-hidden border text-left transition-all ${active?'border-[#C4CEFF] ring-2 ring-[#C4CEFF]/25':'border-white/10 hover:border-white/25'} ${locked?'cursor-default':''}`}><div className="aspect-[4/5] bg-black/20"><img src={file.previewUrl} alt={file.fileName} loading="lazy" className="h-full w-full object-cover"/></div><div className="flex items-center justify-between gap-2 bg-[#1d1d1d] p-2"><span className="truncate text-[9px] text-white/45">{file.fileName}</span>{active?<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#C4CEFF] text-black"><Check className="size-3"/></span>:null}</div></button>})}</div>}
+        {data.gallery.length<data.galleryTotal?<button onClick={()=>void load(data.gallery.length)} disabled={loadingMore} className="mt-4 w-full border border-white/10 px-4 py-3 text-[10px] font-bold uppercase text-white/60 hover:border-white/25 disabled:opacity-40">{loadingMore?'Loading more…':`Load More Photos (${data.gallery.length} / ${data.galleryTotal})`}</button>:null}
+        {!locked&&data.gallery.length>0?<div className="mt-5 flex flex-col gap-3 border-t border-white/[0.07] pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-[11px] text-white/40">{selected.length<required?`Choose ${required-selected.length} more photo${required-selected.length===1?'':'s'}.`:'Your selection is complete. Submit when ready.'}</p><button onClick={()=>void submit()} disabled={!canSubmit||submitting} className="rounded-lg bg-primary px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-white disabled:opacity-35">{submitting?'Submitting…':'Submit Selection'}</button></div>:null}
+      </section>
+      <section className="border border-white/10 bg-white/[0.02] p-5 sm:p-6"><div className="flex items-center gap-2"><CheckCircle2 className="size-4 text-[#C4CEFF]"/><h2 className="text-sm font-semibold">Final Deliverables</h2></div>{data.deliverables.length===0?<p className="mt-4 text-xs text-white/40">Your edited photos will appear here automatically after the studio completes and verifies delivery.</p>:<><div className="mt-4 flex flex-col gap-3 border border-emerald-500/20 bg-emerald-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-emerald-200">Your Photos Are Ready</p><p className="mt-1 text-[11px] text-white/40">{data.deliverables.length} edited photo{data.deliverables.length===1?'':'s'}</p></div><a href={data.downloadAllUrl} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[10px] font-bold uppercase text-white"><Download className="size-3.5"/>Download All</a></div><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{data.deliverables.map((file)=><a key={file.id} href={file.previewUrl} target="_blank" rel="noopener noreferrer" className="overflow-hidden border border-white/10 hover:border-white/25"><div className="aspect-[4/5] bg-black/20"><img src={file.previewUrl} alt={file.fileName} loading="lazy" className="h-full w-full object-cover"/></div><div className="flex items-center justify-between gap-2 p-2 text-[9px] text-white/45"><span className="truncate">{file.fileName}</span><ExternalLink className="size-3 shrink-0"/></div></a>)}</div></>}</section>
+      {data.resources.length>0?<section className="border border-white/10 bg-white/[0.02] p-5 sm:p-6"><div className="flex items-center gap-2"><FileText className="size-4 text-[#C4CEFF]"/><h2 className="text-sm font-semibold">Project Files & Updates</h2></div><div className="mt-4 divide-y divide-white/[0.07] border border-white/[0.07]">{data.resources.map((resource)=><div key={resource.id} className="p-4"><p className="text-[9px] font-bold uppercase tracking-wider text-white/35">{resource.resource_type.replace(/_/g,' ')}</p><p className="mt-1 text-sm font-semibold">{resource.title}</p>{resource.content?<p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/45">{resource.content}</p>:null}{resource.url?<a href={resource.url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase text-[#C4CEFF]">Open Resource <ExternalLink className="size-3"/></a>:null}</div>)}</div></section>:null}
+    </section><aside className="space-y-5"><InfoCard icon={WalletCards} label="Payment Summary"><dl className="space-y-3 text-xs"><Row label="Booking Total" value={money(data.booking.price)}/><Row label="Paid" value={money(data.booking.amountPaid)} accent="text-emerald-300"/><Row label="Remaining" value={money(balance)} accent="text-[#C4CEFF]"/><Row label="Status" value={data.booking.paymentStatus}/></dl></InfoCard>{signature?<ClientPortalTrustedDevice publicId={publicId} signature={signature}/>:null}<div className="border border-[#C4CEFF]/15 bg-[#C4CEFF]/[0.04] p-5"><p className="text-[9px] font-bold uppercase tracking-wider text-[#C4CEFF]">Private Portal</p><p className="mt-2 text-[11px] leading-relaxed text-white/40">This unique link exposes only this booking&apos;s thumbnail gallery, approved project resources, and delivered files. Studio RAW originals remain protected.</p></div></aside></div>
+  </div></main>
 }
 
-function AccessMessage({ title, message }: { title: string; message: string }) {
-  return (
-    <main className="min-h-screen bg-[#171717] text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-lg border border-white/10 bg-white/[0.03] p-8 text-center">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="text-sm text-white/50 mt-3 leading-relaxed">{message}</p>
-      </div>
-    </main>
-  )
-}
-
-export default async function ClientPortalPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<{ sig?: string }>
-}) {
-  const { id: publicId } = await params
-  const query = await searchParams
-  const cookieStore = await cookies()
-  const cookieValue = cookieStore.get(PORTAL_SESSION_COOKIE)?.value
-  const signature = query.sig?.trim() || ''
-  const authorized = verifyPortalSignature(publicId, signature) || verifyPortalCookie(cookieValue, publicId)
-
-  if (!authorized) {
-    return <AccessMessage title="Secure portal link required" message="Open the Client Portal using the private link sent by FICO MANA Studio." />
-  }
-
-  const admin = getSupabaseAdmin()
-  if (!admin) return <AccessMessage title="Portal unavailable" message="The client portal service is temporarily unavailable." />
-
-  const { data: portal } = await admin
-    .from('client_portals')
-    .select('*')
-    .eq('public_id', publicId)
-    .maybeSingle()
-  if (!portal) return <AccessMessage title="Portal not found" message="This Client Portal is no longer available." />
-
-  if (portal.status === 'disabled') {
-    return <AccessMessage title="Portal disabled" message="Access to this Client Portal has been disabled. Contact FICO MANA Studio if you need assistance." />
-  }
-  if (portal.expires_at && new Date(portal.expires_at).getTime() <= Date.now()) {
-    await admin.from('client_portals').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', portal.id)
-    return <AccessMessage title="Portal expired" message="Client-facing access has expired. Your booking records and project files remain preserved by FICO MANA Studio." />
-  }
-  if (portal.status === 'expired') {
-    return <AccessMessage title="Portal expired" message="Client-facing access to this project has expired." />
-  }
-
-  const { data: bookingRow } = await admin.from('bookings').select('*').eq('id', portal.booking_id).maybeSingle()
-  if (!bookingRow) return <AccessMessage title="Booking unavailable" message="The booking attached to this portal could not be loaded." />
-  const booking = mapDbBookingToModel(bookingRow)
-  const amountPaid = await totalConfirmedPayments(admin, booking)
-  const balance = Math.max(0, Number(booking.price || 0) - amountPaid)
-
-  const [{ data: packageRow }, { data: resources }] = await Promise.all([
-    admin.from('packages').select('features,description').eq('id', booking.packageId).maybeSingle(),
-    admin
-      .from('client_portal_resources')
-      .select('id,resource_type,title,url,content,created_at')
-      .eq('booking_id', booking.id)
-      .eq('is_visible', true)
-      .order('created_at', { ascending: false }),
-  ])
-  const features = Array.isArray(packageRow?.features) ? packageRow.features.map(String) : []
-  const visibleResources = resources || []
-  const deliverables = visibleResources.filter((item) => ['photos', 'video'].includes(String(item.resource_type)))
-  const documents = visibleResources.filter((item) => !['photos', 'video'].includes(String(item.resource_type)))
-  const stage = projectStage(booking)
-
-  await admin.from('client_portals').update({ last_accessed_at: new Date().toISOString() }).eq('id', portal.id)
-  await admin.from('provisioning_audit').insert({
-    booking_id: booking.id,
-    action: 'portal_accessed',
-    actor_type: 'system',
-    external_resource_id: String(portal.id),
-    metadata: {},
-  })
-
-  return (
-    <main className="min-h-screen bg-[#171717] text-white">
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-        <header className="border-b border-white/10 pb-6 mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-[#C4CEFF] font-bold">FICO MANA Client Portal</p>
-            <h1 className="text-2xl sm:text-3xl font-semibold mt-2">{booking.customerName}</h1>
-            <p className="text-xs font-mono text-white/40 mt-1">Booking {booking.id}</p>
-          </div>
-          <div className="border border-white/10 bg-white/[0.03] px-4 py-3 min-w-[210px]">
-            <p className="text-[9px] uppercase tracking-wider text-white/40">Project progress</p>
-            <p className="text-sm font-semibold mt-1 text-[#C4CEFF]">{stage}</p>
-          </div>
-        </header>
-
-        <div className="grid gap-5 lg:grid-cols-3">
-          <section className="lg:col-span-2 space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="border border-white/10 bg-white/[0.02] p-5">
-                <div className="flex items-center gap-2 text-white/50"><CalendarDays className="w-4 h-4" /><span className="text-[10px] uppercase tracking-wider">Shoot</span></div>
-                <p className="font-semibold mt-3">{booking.bookingDate}</p>
-                <p className="text-xs text-white/45 mt-1">{booking.bookingTime}</p>
-                {booking.arrivalTime ? <p className="text-[11px] text-white/40 mt-2">Arrival: {booking.arrivalTime}</p> : null}
-                {booking.shootTime ? <p className="text-[11px] text-white/40">Shoot time: {booking.shootTime}</p> : null}
-              </div>
-              <div className="border border-white/10 bg-white/[0.02] p-5">
-                <div className="flex items-center gap-2 text-white/50"><Package className="w-4 h-4" /><span className="text-[10px] uppercase tracking-wider">Package</span></div>
-                <p className="font-semibold mt-3">{booking.packageName}</p>
-                {packageRow?.description ? <p className="text-xs text-white/45 mt-1">{String(packageRow.description)}</p> : null}
-              </div>
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.02] p-5 sm:p-6">
-              <h2 className="text-sm font-semibold">Package inclusions</h2>
-              {features.length ? (
-                <div className="grid sm:grid-cols-2 gap-2 mt-4">
-                  {features.map((feature) => (
-                    <div key={feature} className="flex items-start gap-2 text-xs text-white/65">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#C4CEFF] mt-0.5 shrink-0" />
-                      <span>{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="text-xs text-white/40 mt-3">Package details are available from the studio.</p>}
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.02] p-5 sm:p-6">
-              <div className="flex items-center gap-2"><Download className="w-4 h-4 text-[#C4CEFF]" /><h2 className="text-sm font-semibold">Approved deliverables</h2></div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {booking.editedPhotoLink ? (
-                  <a href={booking.editedPhotoLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-between gap-2 border border-[#C4CEFF]/30 bg-[#C4CEFF]/10 px-4 py-3 text-xs font-semibold text-[#C4CEFF] hover:bg-[#C4CEFF]/15">
-                    <span>Final edited photos</span><ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                  </a>
-                ) : null}
-                {deliverables.map((resource) => resource.url ? (
-                  <a key={resource.id} href={String(resource.url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-between gap-2 border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white/80 hover:border-white/25">
-                    <span>{resource.title}</span><ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                  </a>
-                ) : (
-                  <div key={resource.id} className="border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/65">{resource.content}</div>
-                ))}
-              </div>
-              {!booking.editedPhotoLink && deliverables.length === 0 ? (
-                <p className="text-xs text-white/45 mt-3">No final client deliverables have been released yet. Internal project folders remain private.</p>
-              ) : null}
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.02] p-5 sm:p-6">
-              <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-[#C4CEFF]" /><h2 className="text-sm font-semibold">Documents & updates</h2></div>
-              {documents.length ? (
-                <div className="mt-4 space-y-3">
-                  {documents.map((resource) => (
-                    <div key={resource.id} className="border border-white/10 bg-white/[0.025] p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div><p className="text-xs font-semibold">{resource.title}</p><p className="text-[9px] uppercase tracking-wider text-white/35 mt-1">{String(resource.resource_type).replace(/_/g, ' ')}</p></div>
-                        {resource.url ? <a href={String(resource.url)} target="_blank" rel="noopener noreferrer" className="text-[#C4CEFF] hover:text-white"><ExternalLink className="w-4 h-4" /></a> : null}
-                      </div>
-                      {resource.content ? <p className="text-xs text-white/55 leading-relaxed mt-3 whitespace-pre-wrap">{resource.content}</p> : null}
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="text-xs text-white/45 mt-3">No invoices, agreements, meeting documents, or project updates have been released yet.</p>}
-            </div>
-          </section>
-
-          <aside className="space-y-5">
-            <div className="border border-white/10 bg-white/[0.02] p-5">
-              <div className="flex items-center gap-2 text-white/50"><WalletCards className="w-4 h-4" /><span className="text-[10px] uppercase tracking-wider">Live payment summary</span></div>
-              <dl className="mt-4 space-y-3 text-xs">
-                <div className="flex justify-between gap-4"><dt className="text-white/45">Booking total</dt><dd className="font-semibold">{money(booking.price)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-white/45">Confirmed paid</dt><dd className="font-semibold text-green-300">{money(amountPaid)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-white/45">Required deposit</dt><dd className="font-semibold">{money(booking.depositAmount)}</dd></div>
-                <div className="flex justify-between gap-4 border-t border-white/10 pt-3"><dt className="text-white/45">Remaining balance</dt><dd className="font-bold text-[#C4CEFF]">{money(balance)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-white/45">Payment status</dt><dd className="font-semibold">{booking.paymentStatus}</dd></div>
-              </dl>
-            </div>
-
-            <div className="border border-white/10 bg-white/[0.02] p-5">
-              <div className="flex items-center gap-2 text-white/50"><Clock3 className="w-4 h-4" /><span className="text-[10px] uppercase tracking-wider">Portal access</span></div>
-              <p className="text-xs text-white/55 mt-3">Status: <span className="text-white font-semibold">Active</span></p>
-              {portal.expires_at ? <p className="text-[11px] text-white/40 mt-1">Available until {new Date(portal.expires_at).toLocaleDateString('en-PH')}</p> : <p className="text-[11px] text-white/40 mt-1">Expiration begins after final delivery.</p>}
-            </div>
-
-            {signature ? <ClientPortalTrustedDevice publicId={publicId} signature={signature} /> : null}
-          </aside>
-        </div>
-      </div>
-    </main>
-  )
-}
+function InfoCard({icon:Icon,label,children}:{icon:React.ComponentType<{className?:string}>;label:string;children:React.ReactNode}){return <div className="border border-white/10 bg-white/[0.02] p-5"><div className="flex items-center gap-2 text-white/45"><Icon className="size-4"/><span className="text-[9px] font-bold uppercase tracking-wider">{label}</span></div><div className="mt-4">{children}</div></div>}
+function Row({label,value,accent='text-white'}:{label:string;value:string;accent?:string}){return <div className="flex justify-between gap-4 border-b border-white/[0.06] pb-3 last:border-0 last:pb-0"><dt className="text-white/40">{label}</dt><dd className={`text-right font-semibold ${accent}`}>{value}</dd></div>}

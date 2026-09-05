@@ -6,8 +6,8 @@ type PriorityOverrides = ReadonlyMap<string, number> | Record<string, number>
 
 function overridePriority(overrides: PriorityOverrides | undefined, bookingId: string): number | undefined {
   if (!overrides) return undefined
-  if (overrides instanceof Map) return overrides.get(bookingId)
-  return overrides[bookingId]
+  if ('get' in overrides && typeof overrides.get === 'function') return overrides.get(bookingId)
+  return (overrides as Record<string, number>)[bookingId]
 }
 
 function parseClockToMinutes(raw: string): number | null {

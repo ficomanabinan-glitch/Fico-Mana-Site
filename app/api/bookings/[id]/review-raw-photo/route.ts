@@ -125,12 +125,12 @@ export async function POST(
       if (action === 'Approve') {
         const emailResult = await sendRawPhotoApprovedEmail(saved)
         if (emailResult && emailResult.success === false) {
-          emailErrors.push(emailResult.error || 'Failed to send approval email.')
+          emailErrors.push(('error' in emailResult && emailResult.error) || 'Failed to send approval email.')
         }
       } else {
         const emailResult = await sendRawPhotoRejectedEmail(saved, reason!, notes)
         if (emailResult && emailResult.success === false) {
-          emailErrors.push(emailResult.error || 'Failed to send rejection email.')
+          emailErrors.push(('error' in emailResult && emailResult.error) || 'Failed to send rejection email.')
         }
       }
     } catch (err) {

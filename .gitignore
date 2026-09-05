@@ -1,0 +1,19 @@
+node_modules/
+.next/
+.vercel/
+.staging-data/
+
+.env*
+!.env.example
+
+package-lock.json
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Recreated by scripts/ensure-public-assets.mjs during builds.
+public/grad/
+public/model/
+public/gray_bg.jpg
+public/green_bg.jpg
+public/retail_bg.jpg

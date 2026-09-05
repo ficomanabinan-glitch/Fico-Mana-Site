@@ -954,7 +954,7 @@ function BookingsManagement() {
 
       {/* TABLE */}
       <div className="border border-white/10 bg-white/[0.02] overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[1100px]">
+        <table className="w-full text-left border-collapse min-w-[1020px]">
           <thead>
             <tr className="bg-white/[0.03] border-b border-white/10 text-[10px] font-bold tracking-widest text-white/40 uppercase">
               <th className="p-4 pl-6">Client</th>
@@ -972,7 +972,7 @@ function BookingsManagement() {
           <tbody className="divide-y divide-white/5 text-xs">
             {filteredBookings.length === 0 ? (
               <tr>
-                <td colSpan={10} className="p-12 text-center text-white/45 font-semibold">
+                <td colSpan={9} className="p-12 text-center text-white/45 font-semibold">
                   No bookings matching current search criteria.
                 </td>
               </tr>

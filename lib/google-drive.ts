@@ -8,6 +8,8 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 export class GoogleDriveConfigError extends Error {}
 
+let cachedAccessToken: { value: string; expiresAt: number } | null = null
+
 function env(name: string) {
   return process.env[name]?.trim() || ''
 }
@@ -27,7 +29,8 @@ async function loadStoredRefreshToken() {
   }
 }
 
-async function getAccessToken(): Promise<string> {
+export async function getGoogleDriveAccessToken(): Promise<string> {
+  if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now()) return cachedAccessToken.value
   const stored = await loadStoredRefreshToken()
   const refreshToken = stored?.refreshToken || env('GOOGLE_REFRESH_TOKEN')
   let clientId = env('GOOGLE_CLIENT_ID')
@@ -59,15 +62,23 @@ async function getAccessToken(): Promise<string> {
     }),
     cache: 'no-store',
   })
-  const data = (await response.json().catch(() => ({}))) as { access_token?: string; error_description?: string }
+  const data = (await response.json().catch(() => ({}))) as {
+    access_token?: string
+    expires_in?: number
+    error_description?: string
+  }
   if (!response.ok || !data.access_token) {
     throw new Error(data.error_description || 'Google OAuth token refresh failed. Reconnect Google Drive from Provisioning.')
+  }
+  cachedAccessToken = {
+    value: data.access_token,
+    expiresAt: Date.now() + Math.max(60, Number(data.expires_in || 3600) - 300) * 1000,
   }
   return data.access_token
 }
 
 async function driveFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await getAccessToken()
+  const token = await getGoogleDriveAccessToken()
   const response = await fetch(`${DRIVE_API}${path}`, {
     ...init,
     cache: 'no-store',
@@ -103,6 +114,198 @@ export type DriveFolder = {
   name: string
   parents?: string[]
   webViewLink?: string
+}
+
+export type DriveFile = {
+  id: string
+  name: string
+  mimeType: string
+  size?: string
+  md5Checksum?: string
+  parents?: string[]
+  thumbnailLink?: string
+  webContentLink?: string
+  webViewLink?: string
+  appProperties?: Record<string, string>
+}
+
+const DRIVE_FILE_FIELDS =
+  'id,name,mimeType,size,md5Checksum,parents,thumbnailLink,webContentLink,webViewLink,appProperties'
+
+export async function listDriveFiles(parentId: string): Promise<DriveFile[]> {
+  const files: DriveFile[] = []
+  let pageToken = ''
+  do {
+    const q = [`'${escapeDriveQuery(parentId)}' in parents`, 'trashed = false'].join(' and ')
+    const params = new URLSearchParams({
+      q,
+      fields: `nextPageToken,files(${DRIVE_FILE_FIELDS})`,
+      pageSize: '1000',
+      spaces: 'drive',
+    })
+    if (pageToken) params.set('pageToken', pageToken)
+    const data = await driveFetch<{ files?: DriveFile[]; nextPageToken?: string }>(`/files?${params.toString()}`)
+    files.push(...(data.files || []).filter((file) => file.mimeType !== FOLDER_MIME))
+    pageToken = data.nextPageToken || ''
+  } while (pageToken)
+  return files
+}
+
+export async function getDriveFile(fileId: string): Promise<DriveFile> {
+  return driveFetch<DriveFile>(
+    `/files/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(DRIVE_FILE_FIELDS)}&supportsAllDrives=true`,
+  )
+}
+
+export async function downloadDriveFile(fileId: string): Promise<Buffer> {
+  const response = await openDriveFile(fileId)
+  return Buffer.from(await response.arrayBuffer())
+}
+
+export async function openDriveFile(fileId: string): Promise<Response> {
+  const token = await getGoogleDriveAccessToken()
+  const response = await fetch(`${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  })
+  if (!response.ok || !response.body) throw new Error(`Google Drive download failed (${response.status}).`)
+  return response
+}
+
+export async function downloadDriveThumbnail(thumbnailLink: string): Promise<Buffer> {
+  const token = await getGoogleDriveAccessToken()
+  const response = await fetch(thumbnailLink, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  })
+  if (!response.ok) throw new Error(`Google Drive thumbnail download failed (${response.status}).`)
+  return Buffer.from(await response.arrayBuffer())
+}
+
+export async function copyDriveFile(input: {
+  fileId: string
+  destinationFolderId: string
+  bookingId: string
+  galleryFileId: string
+}): Promise<DriveFile> {
+  const source = await getDriveFile(input.fileId)
+  const existing = (await listDriveFiles(input.destinationFolderId)).find(
+    (file) => file.appProperties?.galleryFileId === input.galleryFileId,
+  )
+  if (existing) return existing
+  return driveFetch<DriveFile>(
+    `/files/${encodeURIComponent(input.fileId)}/copy?fields=${encodeURIComponent(DRIVE_FILE_FIELDS)}&supportsAllDrives=true`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        name: source.name,
+        parents: [input.destinationFolderId],
+        appProperties: { bookingId: input.bookingId, galleryFileId: input.galleryFileId, purpose: 'selected' },
+      }),
+    },
+  )
+}
+
+export async function upsertDriveFile(input: {
+  destinationFolderId: string
+  bookingId: string
+  relativePath: string
+  fileName: string
+  mimeType: string
+  checksum: string
+  purpose?: 'raw' | 'deliverable'
+  data: Buffer
+}): Promise<{ file: DriveFile; duplicate: boolean }> {
+  const current = (await listDriveFiles(input.destinationFolderId)).find(
+    (file) =>
+      file.appProperties?.bookingId === input.bookingId &&
+      file.appProperties?.relativePath === input.relativePath,
+  )
+  if (current?.appProperties?.checksum === input.checksum) return { file: current, duplicate: true }
+
+  const token = await getGoogleDriveAccessToken()
+  const boundary = `fico-mana-${crypto.randomUUID()}`
+  const metadata = Buffer.from(
+    JSON.stringify({
+      name: normalizeDriveFolderName(input.fileName) || 'photo',
+      ...(current ? {} : { parents: [input.destinationFolderId] }),
+      appProperties: {
+        bookingId: input.bookingId,
+        relativePath: input.relativePath,
+        checksum: input.checksum,
+        purpose: input.purpose || 'deliverable',
+      },
+    }),
+  )
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`),
+    metadata,
+    Buffer.from(`\r\n--${boundary}\r\nContent-Type: ${input.mimeType}\r\n\r\n`),
+    input.data,
+    Buffer.from(`\r\n--${boundary}--`),
+  ])
+  const endpoint = current
+    ? `${DRIVE_UPLOAD_API}/files/${encodeURIComponent(current.id)}?uploadType=multipart&fields=${encodeURIComponent(DRIVE_FILE_FIELDS)}&supportsAllDrives=true`
+    : `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=${encodeURIComponent(DRIVE_FILE_FIELDS)}&supportsAllDrives=true`
+  const response = await fetch(endpoint, {
+    method: current ? 'PATCH' : 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+    },
+    body,
+    cache: 'no-store',
+  })
+  const data = (await response.json().catch(() => ({}))) as DriveFile & { error?: { message?: string } }
+  if (!response.ok) throw new Error(data.error?.message || `Google Drive upload failed (${response.status}).`)
+  return { file: data, duplicate: false }
+}
+
+export async function createDriveResumableUpload(input: {
+  destinationFolderId: string
+  existingDriveFileId?: string | null
+  bookingId: string
+  relativePath: string
+  fileName: string
+  mimeType: string
+  fileSize: number
+  checksum: string
+}): Promise<string> {
+  const token = await getGoogleDriveAccessToken()
+  const metadata = {
+    name: normalizeDriveFolderName(input.fileName) || 'photo',
+    ...(input.existingDriveFileId ? {} : { parents: [input.destinationFolderId] }),
+    appProperties: {
+      bookingId: input.bookingId,
+      relativePath: input.relativePath,
+      checksum: input.checksum,
+      purpose: 'deliverable',
+    },
+  }
+  const filePath = input.existingDriveFileId
+    ? `/files/${encodeURIComponent(input.existingDriveFileId)}`
+    : '/files'
+  const response = await fetch(
+    `${DRIVE_UPLOAD_API}${filePath}?uploadType=resumable&fields=${encodeURIComponent(DRIVE_FILE_FIELDS)}&supportsAllDrives=true`,
+    {
+      method: input.existingDriveFileId ? 'PATCH' : 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': input.mimeType,
+        'X-Upload-Content-Length': String(input.fileSize),
+      },
+      body: JSON.stringify(metadata),
+      cache: 'no-store',
+    },
+  )
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: { message?: string } }
+    throw new Error(data.error?.message || `Could not start Google Drive upload (${response.status}).`)
+  }
+  const location = response.headers.get('location')
+  if (!location) throw new Error('Google Drive did not return a resumable upload URL.')
+  return location
 }
 
 export async function getDriveFolder(id: string): Promise<DriveFolder> {
@@ -191,6 +394,7 @@ export async function ensureShootHierarchy(input: {
   bookingId: string
   shootDate: string
   clientName: string
+  selectionLimit?: number
   existingClientFolderId?: string | null
 }) {
   const root = await resolveDriveRootFolder(input.admin)
@@ -198,7 +402,7 @@ export async function ensureShootHierarchy(input: {
   if (Number.isNaN(date.getTime())) throw new Error('A valid shoot date is required for Drive provisioning.')
 
   const monthName = date.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }).toUpperCase()
-  const dayName = String(date.getUTCDate()).padStart(2, '0')
+  const dayName = `${monthName} ${date.getUTCDate()}`
   const month = await findOrCreateFolder(root.id, monthName)
   const day = await findOrCreateFolder(month.id, dayName)
 
@@ -220,11 +424,20 @@ export async function ensureShootHierarchy(input: {
       : await createFolder(day.id, baseClientName)
   }
 
+  const raw = await findOrCreateFolder(client.id, 'RAW')
+  const selected = await findOrCreateFolder(client.id, `${Math.max(0, input.selectionLimit ?? 5)} SELECTED PHOTOS`)
+  const edited = await findOrCreateFolder(client.id, 'EDITED PHOTOS')
+  const deliverables = await findOrCreateFolder(client.id, 'DELIVERABLES')
+
   return {
     root,
     month,
     day,
     client,
+    raw,
+    selected,
+    edited,
+    deliverables,
     clientUrl: client.webViewLink || `https://drive.google.com/drive/folders/${client.id}`,
   }
 }

@@ -34,10 +34,10 @@ export async function GET(request: Request) {
             category: p.category as BookingPackage['category'],
             title: p.title,
             price: p.price,
-            duration: p.duration,
-            description: p.description,
+            duration: p.duration || 'Studio session',
+            description: p.description || '',
             features: p.features,
-            slotType: p.slotType,
+            slotType: p.slotType === 'makeup' ? 'makeup' : 'standard',
             note: p.note,
           }),
         )

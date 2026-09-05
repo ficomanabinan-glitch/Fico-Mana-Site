@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { Booking } from '@/lib/data-store'
-import { calculateSalesSummary, type SalesExpense, type SalesSettings } from '@/lib/sales-finance'
+import type { Booking } from '../lib/data-store.ts'
+import { calculateSalesSummary, type SalesExpense, type SalesSettings } from '../lib/sales-finance.ts'
 
 const settings: SalesSettings = {
   monthlyRevenueTarget: 50000,

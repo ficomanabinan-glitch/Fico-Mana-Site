@@ -12,7 +12,7 @@ export interface PaymentRecord {
   date: string
 }
 
-export interface Booking {
+export interface Booking extends Record<string, unknown> {
   id: string
   customerName: string
   customerEmail: string
@@ -21,6 +21,7 @@ export interface Booking {
   customerFbName: string
   packageId: string
   packageName: string
+  selectionLimit?: number
   bookingDate: string
   bookingTime: string
   slotId?: string
@@ -442,11 +443,6 @@ export async function uploadReceiptForResubmit(
   const data = (await res.json().catch(() => ({}))) as { receiptUrl?: string; error?: string }
   if (res.ok && data.receiptUrl) return data.receiptUrl
 
-  // Fallback to client-side upload when service role storage is unavailable
-  if (res.status === 503) {
-    return uploadReceipt(bookingId, file)
-  }
-
   throw new Error(data.error || 'Failed to upload receipt.')
 }
 
@@ -665,48 +661,18 @@ export async function getEmailLogs(): Promise<EmailLog[]> {
 }
 
 export async function uploadReceipt(bookingId: string, file: File, email?: string): Promise<string> {
-  if (email) {
-    try {
-      const form = new FormData()
-      form.append('bookingId', bookingId)
-      form.append('email', email)
-      form.append('file', file)
-      const res = await fetch('/api/receipts/upload', { method: 'POST', body: form })
-      const data = (await res.json().catch(() => ({}))) as { receiptUrl?: string; error?: string }
-      if (res.ok && data.receiptUrl) return data.receiptUrl
-      if (res.status !== 503) {
-        console.warn('Server receipt upload failed:', data.error)
-      }
-    } catch (error) {
-      console.warn('Server receipt upload unavailable:', error)
-    }
-  }
-
-  const { supabase, isSupabaseConfigured } = await import('./supabase')
-  const fileName = `${bookingId}-${Date.now()}-${file.name.replace(/\s+/g, '-')}`
-
-  if (isSupabaseConfigured()) {
-    const { error } = await supabase.storage.from('receipts').upload(fileName, file)
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName)
-      return publicUrl
-    }
-    console.error('Supabase storage upload error:', error)
-  }
-
-  return mockUploadFile(file)
-}
-
-function mockUploadFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (file.size > 500000) resolve('/model/model_3.jpg')
-      else resolve(reader.result as string)
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
+  const form = new FormData()
+  form.append('bookingId', bookingId)
+  if (email) form.append('email', email)
+  form.append('file', file)
+  const res = await fetch('/api/receipts/upload', {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
   })
+  const data = (await res.json().catch(() => ({}))) as { receiptUrl?: string; error?: string }
+  if (res.ok && data.receiptUrl) return data.receiptUrl
+  throw new Error(data.error || 'Failed to upload receipt.')
 }
 
 export { mapDbBookingToModel, mapModelBookingToDb } from './booking-db'

@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
+import { requireStaffAuth } from '@/lib/auth-api'
 import { emailsMatch, loadBookingById } from '@/lib/booking-load'
 import { isValidBookingId, resolveBookingReference } from '@/lib/booking-id'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
@@ -65,6 +66,8 @@ export async function POST(request: Request) {
     const bookingId = resolveBookingReference(rawBookingId)
     const email = String(form.get('email') ?? '').trim()
     const file = form.get('file')
+    const staffAuth = email ? null : await requireStaffAuth()
+    const isStaffUpload = Boolean(staffAuth?.user && !staffAuth.error)
 
     if (!rawBookingId || !(file instanceof File)) {
       return NextResponse.json({ error: 'Booking reference and receipt image are required.' }, { status: 400 })
@@ -89,13 +92,13 @@ export async function POST(request: Request) {
     const booking = await loadBookingById(bookingId)
 
     if (booking) {
-      if (!email || !emailsMatch(booking.customerEmail, email)) {
+      if (!isStaffUpload && (!email || !emailsMatch(booking.customerEmail, email))) {
         return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
       }
       if (booking.bookingStatus !== 'Pending Payment') {
         return NextResponse.json({ error: 'This booking is not awaiting a new receipt.' }, { status: 409 })
       }
-    } else if (!email) {
+    } else if (!email && !isStaffUpload) {
       return NextResponse.json({ error: 'Email is required for new bookings.' }, { status: 400 })
     }
 

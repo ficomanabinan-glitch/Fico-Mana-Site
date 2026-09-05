@@ -104,9 +104,10 @@ async function ensurePortal(admin: SupabaseClient, bookingId: string, actor: Act
     .maybeSingle()
   if (existing) return existing
 
+  const { data: booking } = await admin.from('bookings').select('workspace_id').eq('id', bookingId).single()
   const { data, error } = await admin
     .from('client_portals')
-    .insert({ booking_id: bookingId, status: 'active' })
+    .insert({ booking_id: bookingId, workspace_id: booking?.workspace_id, status: 'active' })
     .select('*')
     .single()
   if (error || !data) throw new Error(error?.message || 'Client Portal creation failed.')
@@ -117,9 +118,10 @@ async function ensurePortal(admin: SupabaseClient, bookingId: string, actor: Act
 async function getProvisioningRow(admin: SupabaseClient, bookingId: string) {
   const { data } = await admin.from('booking_provisioning').select('*').eq('booking_id', bookingId).maybeSingle()
   if (data) return data
+  const { data: booking } = await admin.from('bookings').select('workspace_id').eq('id', bookingId).single()
   const { data: created, error } = await admin
     .from('booking_provisioning')
-    .insert({ booking_id: bookingId, status: 'NOT_STARTED' })
+    .insert({ booking_id: bookingId, workspace_id: booking?.workspace_id, status: 'NOT_STARTED' })
     .select('*')
     .single()
   if (error || !created) throw new Error(error?.message || 'Could not initialize provisioning state.')
@@ -226,6 +228,7 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
       bookingId,
       shootDate: booking.bookingDate,
       clientName: booking.customerName,
+      selectionLimit: Number(booking.selectionLimit || 5),
       existingClientFolderId: row.drive_client_folder_id,
     })
     await updateProvisioning(admin, bookingId, {
@@ -251,8 +254,9 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   }
 
   try {
-    portal = await ensurePortal(admin, bookingId, actor)
-    await updateProvisioning(admin, bookingId, { client_portal_id: portal.id })
+    const ensuredPortal = await ensurePortal(admin, bookingId, actor)
+    portal = ensuredPortal
+    await updateProvisioning(admin, bookingId, { client_portal_id: ensuredPortal.id })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Client Portal provisioning failed.'
     errors.push(message)

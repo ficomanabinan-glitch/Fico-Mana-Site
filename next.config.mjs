@@ -3,13 +3,15 @@ import { fileURLToPath } from 'url'
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 
+const isDevelopment = process.env.NODE_ENV !== 'production'
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
+  `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""} https://va.vercel-scripts.com`,
   "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
@@ -19,7 +21,7 @@ const contentSecurityPolicy = [
   "frame-src 'self' https://www.google.com https://maps.google.com",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
-  'upgrade-insecure-requests',
+  ...(isDevelopment ? [] : ['upgrade-insecure-requests']),
 ].join('; ')
 
 const securityHeaders = [
@@ -65,9 +67,6 @@ const securityHeaders = [
 const nextConfig = {
   turbopack: {
     root: projectRoot,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
   },
   images: {
     unoptimized: true,

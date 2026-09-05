@@ -1,0 +1,1335 @@
+import { createHash } from 'node:crypto'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  copyDriveFile,
+  createDriveResumableUpload,
+  downloadDriveFile,
+  downloadDriveThumbnail,
+  ensureShootHierarchy,
+  getDriveFile,
+  listDriveFiles,
+  upsertDriveFile,
+} from '@/lib/google-drive'
+import { portalUrl } from '@/lib/client-portal'
+import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
+import { sendEditedPhotosEmail } from '@/lib/email'
+import { getSupabaseAdmin } from '@/lib/supabase/admin'
+
+export type EditingJobStatus =
+  | 'WAITING_FOR_SELECTION'
+  | 'READY_FOR_EDITING'
+  | 'DOWNLOADED'
+  | 'EDITING'
+  | 'READY_TO_UPLOAD'
+  | 'UPLOADING'
+  | 'DELIVERED'
+  | 'UPLOAD_FAILED'
+
+type Actor = { type: 'client' | 'staff' | 'system'; id?: string | null }
+type UploadFileInput = {
+  bookingId: string
+  relativePath: string
+  fileName: string
+  mimeType: string
+  fileSize: number
+  checksum: string
+}
+
+const ACTIVE_BOOKING_EXCLUSIONS = new Set(['Cancelled', 'Rejected', 'Archived'])
+const MAX_PORTAL_PAGE_SIZE = 80
+
+function adminClient() {
+  const admin = getSupabaseAdmin()
+  if (!admin) throw new Error('Database admin client unavailable.')
+  return admin
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function sha256(data: Buffer) {
+  return createHash('sha256').update(data).digest('hex')
+}
+
+function safeSegment(value: string) {
+  return value
+    .normalize('NFKC')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140)
+}
+
+function safeRelativePath(value: string) {
+  const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '')
+  const parts = normalized.split('/').filter((part) => part && part !== '.' && part !== '..')
+  if (!parts.length) throw new Error('A valid relative file path is required.')
+  return parts.map(safeSegment).filter(Boolean).join('/').slice(0, 500)
+}
+
+function driveFolderUrl(id: string | null | undefined) {
+  return id ? `https://drive.google.com/drive/folders/${encodeURIComponent(id)}` : ''
+}
+
+function batchCounts(jobs: Array<{ status: EditingJobStatus }>) {
+  return {
+    waitingForSelection: jobs.filter((job) => job.status === 'WAITING_FOR_SELECTION').length,
+    readyForEditing: jobs.filter((job) => job.status === 'READY_FOR_EDITING').length,
+    downloaded: jobs.filter((job) => job.status === 'DOWNLOADED').length,
+    editing: jobs.filter((job) => job.status === 'EDITING').length,
+    readyToUpload: jobs.filter((job) => job.status === 'READY_TO_UPLOAD').length,
+    uploading: jobs.filter((job) => job.status === 'UPLOADING').length,
+    delivered: jobs.filter((job) => job.status === 'DELIVERED').length,
+    failed: jobs.filter((job) => job.status === 'UPLOAD_FAILED').length,
+  }
+}
+
+function deriveBatchStatus(jobs: Array<{ status: EditingJobStatus }>) {
+  if (jobs.length > 0 && jobs.every((job) => job.status === 'DELIVERED')) return 'COMPLETED'
+  const delivered = jobs.some((job) => job.status === 'DELIVERED')
+  const failed = jobs.some((job) => job.status === 'UPLOAD_FAILED')
+  if (delivered || failed) return 'PARTIALLY_COMPLETED'
+  if (jobs.some((job) => !['WAITING_FOR_SELECTION', 'READY_FOR_EDITING'].includes(job.status))) return 'IN_PROGRESS'
+  if (jobs.some((job) => job.status === 'READY_FOR_EDITING')) return 'READY'
+  return 'WAITING'
+}
+
+async function audit(
+  admin: SupabaseClient,
+  workspaceId: string,
+  actor: Actor,
+  action: string,
+  input: { bookingId?: string | null; batchId?: string | null; metadata?: Record<string, unknown> } = {},
+) {
+  const { error } = await admin.from('workflow_audit_logs').insert({
+    workspace_id: workspaceId,
+    actor_type: actor.type,
+    actor_id: actor.id || null,
+    action,
+    booking_id: input.bookingId || null,
+    batch_id: input.batchId || null,
+    metadata: input.metadata || {},
+  })
+  if (error) console.error('Workflow audit write failed:', error.message)
+}
+
+export async function getWorkspaceForStaff(userId: string) {
+  const admin = adminClient()
+  const { data: membership, error } = await admin
+    .from('workspace_members')
+    .select('workspace_id,role,workspaces(name,slug,status)')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (membership?.workspace_id) return String(membership.workspace_id)
+
+  const { data: workspace, error: workspaceError } = await admin
+    .from('workspaces')
+    .select('id')
+    .eq('slug', 'fico-mana')
+    .single()
+  if (workspaceError || !workspace) throw new Error('Studio workspace is not configured.')
+  const { error: memberError } = await admin.from('workspace_members').insert({
+    workspace_id: workspace.id,
+    user_id: userId,
+    role: 'admin',
+  })
+  if (memberError) throw new Error(memberError.message)
+  return String(workspace.id)
+}
+
+async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
+  const rows: Record<string, unknown>[] = []
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await admin
+      .from('bookings')
+      .select(
+        'id,workspace_id,client_id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,booking_status,payment_status,price,deposit_amount,selection_limit,raw_photo_status,raw_photo_link,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_link,edited_photo_delivered_at',
+      )
+      .eq('workspace_id', workspaceId)
+      .order('booking_date', { ascending: false })
+      .range(offset, offset + 999)
+    if (error) throw new Error(error.message)
+    rows.push(...((data || []) as Record<string, unknown>[]))
+    if (!data || data.length < 1000) break
+  }
+  return rows.filter((booking) => !ACTIVE_BOOKING_EXCLUSIONS.has(String(booking.booking_status || '')))
+}
+
+export async function syncEditorWorkflow(workspaceId: string) {
+  const admin = adminClient()
+  const bookings = await loadActiveBookings(admin, workspaceId)
+  const { data: existingBatches, error: batchReadError } = await admin
+    .from('editing_batches')
+    .select('id,shoot_date,location_key,batch_sequence,display_id')
+    .eq('workspace_id', workspaceId)
+  if (batchReadError) throw new Error(batchReadError.message)
+  const batchByDate = new Map((existingBatches || []).map((batch) => [String(batch.shoot_date), batch]))
+  const missingDates = [...new Set(bookings.map((booking) => String(booking.booking_date)))].filter(
+    (date) => date && !batchByDate.has(date),
+  )
+  if (missingDates.length) {
+    const { error } = await admin.from('editing_batches').insert(
+      missingDates.map((shootDate) => ({
+        workspace_id: workspaceId,
+        display_id: `FM-BATCH-${shootDate}-MAIN`,
+        shoot_date: shootDate,
+        location_key: 'MAIN',
+        batch_sequence: 1,
+      })),
+    )
+    if (error) throw new Error(error.message)
+  }
+
+  const { data: batches, error: batchesError } = await admin
+    .from('editing_batches')
+    .select('id,shoot_date')
+    .eq('workspace_id', workspaceId)
+  if (batchesError) throw new Error(batchesError.message)
+  const liveBatchByDate = new Map((batches || []).map((batch) => [String(batch.shoot_date), String(batch.id)]))
+  const [{ data: selections }, { data: jobs }] = await Promise.all([
+    admin.from('photo_selections').select('booking_id').eq('workspace_id', workspaceId),
+    admin.from('editing_jobs').select('booking_id').eq('workspace_id', workspaceId),
+  ])
+  const selectionBookings = new Set((selections || []).map((row) => String(row.booking_id)))
+  const jobBookings = new Set((jobs || []).map((row) => String(row.booking_id)))
+
+  const missingSelections = bookings.filter((booking) => !selectionBookings.has(String(booking.id)))
+  if (missingSelections.length) {
+    const { error } = await admin.from('photo_selections').insert(
+      missingSelections.map((booking) => ({
+        workspace_id: workspaceId,
+        booking_id: booking.id,
+        status: booking.raw_photo_status === 'Approved' ? 'SUBMITTED' : 'OPEN',
+        required_count: Math.max(0, Number(booking.selection_limit || 5)),
+        submitted_at:
+          booking.raw_photo_status === 'Approved'
+            ? booking.raw_photo_approved_at || booking.raw_photo_submitted_at || nowIso()
+            : null,
+      })),
+    )
+    if (error) throw new Error(error.message)
+  }
+
+  const missingJobs = bookings.filter((booking) => !jobBookings.has(String(booking.id)))
+  if (missingJobs.length) {
+    const { error } = await admin.from('editing_jobs').insert(
+      missingJobs.map((booking) => ({
+        workspace_id: workspaceId,
+        batch_id: liveBatchByDate.get(String(booking.booking_date)),
+        booking_id: booking.id,
+        client_id: booking.client_id,
+        status: booking.edited_photo_delivered_at
+          ? 'DELIVERED'
+          : booking.raw_photo_status === 'Approved'
+            ? 'READY_FOR_EDITING'
+            : 'WAITING_FOR_SELECTION',
+        selected_count: 0,
+        expected_output_count: Math.max(0, Number(booking.selection_limit || 5)),
+        delivered_at: booking.edited_photo_delivered_at || null,
+      })),
+    )
+    if (error) throw new Error(error.message)
+  }
+  return bookings
+}
+
+export async function getBatchList(workspaceId: string) {
+  const admin = adminClient()
+  const bookings = await syncEditorWorkflow(workspaceId)
+  const [{ data: batches, error: batchError }, { data: jobs, error: jobsError }] = await Promise.all([
+    admin.from('editing_batches').select('*').eq('workspace_id', workspaceId).order('shoot_date', { ascending: false }),
+    admin.from('editing_jobs').select('*').eq('workspace_id', workspaceId),
+  ])
+  if (batchError) throw new Error(batchError.message)
+  if (jobsError) throw new Error(jobsError.message)
+  const bookingMap = new Map(bookings.map((booking) => [String(booking.id), booking]))
+
+  return (batches || []).map((batch) => {
+    const batchJobs = (jobs || []).filter((job) => job.batch_id === batch.id) as Array<Record<string, unknown> & { status: EditingJobStatus }>
+    const counts = batchCounts(batchJobs)
+    return {
+      id: String(batch.display_id),
+      internalId: String(batch.id),
+      workspaceId,
+      shootDate: String(batch.shoot_date),
+      locationKey: String(batch.location_key),
+      status: deriveBatchStatus(batchJobs),
+      totalClients: batchJobs.length,
+      totalSelectedPhotos: batchJobs.reduce((sum, job) => sum + Number(job.selected_count || 0), 0),
+      counts,
+      clients: batchJobs.map((job) => {
+        const booking = bookingMap.get(String(job.booking_id))
+        return {
+          bookingId: String(job.booking_id),
+          clientId: String(job.client_id),
+          clientName: String(booking?.customer_name || job.booking_id),
+          status: String(job.status),
+          selectedCount: Number(job.selected_count || 0),
+        }
+      }),
+      driveDayFolderUrl: String(batch.drive_day_folder_url || driveFolderUrl(batch.drive_day_folder_id)),
+    }
+  })
+}
+
+async function findBatch(admin: SupabaseClient, workspaceId: string, displayId: string) {
+  const { data, error } = await admin
+    .from('editing_batches')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('display_id', displayId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Editing batch not found.')
+  return data
+}
+
+export async function getBatchDetail(workspaceId: string, displayId: string) {
+  const admin = adminClient()
+  const listEntry = (await getBatchList(workspaceId)).find((batch) => batch.id === displayId)
+  if (!listEntry) return null
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const { data: jobs, error: jobsError } = await admin
+    .from('editing_jobs')
+    .select('*')
+    .eq('batch_id', batch.id)
+    .order('updated_at', { ascending: false })
+  if (jobsError) throw new Error(jobsError.message)
+  const bookingIds = (jobs || []).map((job) => String(job.booking_id))
+  if (!bookingIds.length) return { ...listEntry, jobs: [], auditLogs: [] }
+
+  const [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult] = await Promise.all([
+    admin.from('bookings').select('*').in('id', bookingIds),
+    admin.from('photo_selections').select('*').in('booking_id', bookingIds),
+    admin.from('gallery_files').select('booking_id').in('booking_id', bookingIds),
+    admin.from('deliverable_files').select('booking_id').in('booking_id', bookingIds),
+    admin.from('drive_folders').select('*').in('booking_id', bookingIds),
+    admin
+      .from('workflow_audit_logs')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('batch_id', batch.id)
+      .order('created_at', { ascending: false })
+      .limit(80),
+  ])
+  const failed = [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult].find((result) => result.error)
+  if (failed?.error) throw new Error(failed.error.message)
+  const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
+  const selectionMap = new Map((selectionsResult.data || []).map((selection) => [String(selection.booking_id), selection]))
+  const folderMap = new Map<string, Record<string, unknown>>()
+  for (const folder of foldersResult.data || []) folderMap.set(`${folder.booking_id}:${folder.folder_type}`, folder)
+
+  return {
+    ...listEntry,
+    jobs: (jobs || []).map((job) => {
+      const bookingId = String(job.booking_id)
+      const booking = bookingMap.get(bookingId)
+      const selection = selectionMap.get(bookingId)
+      const folder = (type: string) => folderMap.get(`${bookingId}:${type}`)?.drive_folder_id || null
+      return {
+        id: String(job.id),
+        bookingId,
+        clientId: String(job.client_id),
+        customerName: String(booking?.customer_name || bookingId),
+        customerEmail: String(booking?.customer_email || ''),
+        packageName: String(booking?.package_name || ''),
+        bookingTime: String(booking?.booking_time || ''),
+        bookingStatus: String(booking?.booking_status || ''),
+        paymentStatus: String(booking?.payment_status || ''),
+        status: job.status as EditingJobStatus,
+        selectedCount: Number(job.selected_count || 0),
+        expectedOutputCount: Number(job.expected_output_count || 0),
+        galleryCount: (galleryResult.data || []).filter((row) => row.booking_id === bookingId).length,
+        selectionStatus: String(selection?.status || 'OPEN'),
+        selectionRequiredCount: Number(selection?.required_count || job.expected_output_count || 0),
+        selectionSubmittedAt: selection?.submitted_at || null,
+        rawFolderDriveId: folder('RAW'),
+        selectedFolderDriveId: folder('SELECTED'),
+        editedFolderDriveId: folder('EDITED'),
+        deliverablesFolderDriveId: folder('DELIVERABLES'),
+        deliverableCount: (deliveryResult.data || []).filter((row) => row.booking_id === bookingId).length,
+        lastError: job.last_error || null,
+      }
+    }),
+    auditLogs: (auditsResult.data || []).map((row) => ({
+      id: String(row.id),
+      actor: String(row.actor_type),
+      action: String(row.action),
+      bookingId: row.booking_id || null,
+      timestamp: String(row.created_at),
+      metadata: row.metadata || {},
+    })),
+  }
+}
+
+async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+  const { data: existing, error } = await admin
+    .from('client_portals')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (existing) return existing
+  const { data, error: insertError } = await admin
+    .from('client_portals')
+    .insert({ booking_id: bookingId, workspace_id: workspaceId, status: 'active' })
+    .select('*')
+    .single()
+  if (insertError || !data) throw new Error(insertError?.message || 'Client portal creation failed.')
+  return data
+}
+
+async function ensureBookingFolders(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+  let { data: booking, error } = await admin
+    .from('bookings')
+    .select('id,workspace_id,client_id,customer_name,booking_date,selection_limit')
+    .eq('id', bookingId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!booking) throw new Error('Booking not found in this workspace.')
+  let batchResult = await admin
+    .from('editing_batches')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('display_id', `FM-BATCH-${booking.booking_date}-MAIN`)
+    .maybeSingle()
+  if (batchResult.error) throw new Error(batchResult.error.message)
+  if (!booking.client_id || !batchResult.data) {
+    await syncEditorWorkflow(workspaceId)
+    const bookingResult = await admin
+      .from('bookings')
+      .select('id,workspace_id,client_id,customer_name,booking_date,selection_limit')
+      .eq('id', bookingId)
+      .eq('workspace_id', workspaceId)
+      .single()
+    if (bookingResult.error) throw new Error(bookingResult.error.message)
+    booking = bookingResult.data
+    batchResult = await admin
+      .from('editing_batches')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('display_id', `FM-BATCH-${booking.booking_date}-MAIN`)
+      .single()
+    if (batchResult.error) throw new Error(batchResult.error.message)
+  }
+  const batch = batchResult.data
+  if (!batch) throw new Error('Editing batch could not be prepared for this booking.')
+  const { data: provisioning } = await admin
+    .from('booking_provisioning')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  const hierarchy = await ensureShootHierarchy({
+    admin,
+    bookingId,
+    shootDate: String(booking.booking_date),
+    clientName: String(booking.customer_name),
+    selectionLimit: Number(booking.selection_limit || 5),
+    existingClientFolderId: provisioning?.drive_client_folder_id || null,
+  })
+  const portal = await ensurePortal(admin, workspaceId, bookingId)
+  const { error: provisioningError } = await admin.from('booking_provisioning').upsert({
+    booking_id: bookingId,
+    workspace_id: workspaceId,
+    status: provisioning?.status || 'ACTIVE',
+    drive_root_folder_id: hierarchy.root.id,
+    drive_month_folder_id: hierarchy.month.id,
+    drive_day_folder_id: hierarchy.day.id,
+    drive_client_folder_id: hierarchy.client.id,
+    drive_client_folder_url: hierarchy.clientUrl,
+    client_portal_id: portal.id,
+    provisioned_at: provisioning?.provisioned_at || nowIso(),
+    last_error: null,
+    updated_at: nowIso(),
+  })
+  if (provisioningError) throw new Error(provisioningError.message)
+  await admin
+    .from('editing_batches')
+    .update({
+      drive_day_folder_id: hierarchy.day.id,
+      drive_day_folder_url: driveFolderUrl(hierarchy.day.id),
+      updated_at: nowIso(),
+    })
+    .eq('id', batch.id)
+
+  const records = [
+    { folder_type: 'ROOT', folder: hierarchy.root, booking_id: null, batch_id: null },
+    { folder_type: 'MONTH', folder: hierarchy.month, booking_id: null, batch_id: null },
+    { folder_type: 'DAY', folder: hierarchy.day, booking_id: null, batch_id: batch.id },
+    { folder_type: 'CLIENT', folder: hierarchy.client, booking_id: bookingId, batch_id: batch.id },
+    { folder_type: 'RAW', folder: hierarchy.raw, booking_id: bookingId, batch_id: batch.id },
+    { folder_type: 'SELECTED', folder: hierarchy.selected, booking_id: bookingId, batch_id: batch.id },
+    { folder_type: 'EDITED', folder: hierarchy.edited, booking_id: bookingId, batch_id: batch.id },
+    { folder_type: 'DELIVERABLES', folder: hierarchy.deliverables, booking_id: bookingId, batch_id: batch.id },
+  ]
+  const { error: foldersError } = await admin.from('drive_folders').upsert(
+    records.map((record) => ({
+      workspace_id: workspaceId,
+      booking_id: record.booking_id,
+      batch_id: record.batch_id,
+      folder_type: record.folder_type,
+      drive_folder_id: record.folder.id,
+      name: record.folder.name,
+      parent_drive_folder_id: record.folder.parents?.[0] || null,
+      web_view_url: driveFolderUrl(record.folder.id),
+      updated_at: nowIso(),
+    })),
+    { onConflict: 'workspace_id,drive_folder_id' },
+  )
+  if (foldersError) throw new Error(foldersError.message)
+  return { hierarchy, batch, portal, booking }
+}
+
+export async function saveRawFile(input: {
+  workspaceId: string
+  bookingId: string
+  actorId: string
+  fileName: string
+  mimeType: string
+  data: Buffer
+  thumbnail?: Buffer | null
+}) {
+  const admin = adminClient()
+  const { hierarchy, batch, booking } = await ensureBookingFolders(admin, input.workspaceId, input.bookingId)
+  const checksum = sha256(input.data)
+  const relativePath = `RAW/${safeSegment(input.fileName) || `photo-${checksum.slice(0, 8)}`}`
+  const uploaded = await upsertDriveFile({
+    destinationFolderId: hierarchy.raw.id,
+    bookingId: input.bookingId,
+    relativePath,
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    checksum,
+    data: input.data,
+    purpose: 'raw',
+  })
+  let thumbnailReference: string | null = uploaded.file.thumbnailLink || null
+  if (input.thumbnail?.length) {
+    const objectPath = `${input.workspaceId}/${input.bookingId}/${uploaded.file.id}.jpg`
+    const { error: storageError } = await admin.storage
+      .from('fico-mana-thumbnails')
+      .upload(objectPath, input.thumbnail, { contentType: 'image/jpeg', upsert: true })
+    if (!storageError) thumbnailReference = objectPath
+  }
+  const { data: gallery, error } = await admin
+    .from('gallery_files')
+    .upsert(
+      {
+        workspace_id: input.workspaceId,
+        booking_id: input.bookingId,
+        client_id: booking.client_id,
+        drive_file_id: uploaded.file.id,
+        file_name: uploaded.file.name,
+        mime_type: uploaded.file.mimeType || input.mimeType,
+        file_size: Number(uploaded.file.size || input.data.length),
+        checksum,
+        thumbnail_reference: thumbnailReference,
+        preview_reference: uploaded.file.thumbnailLink || null,
+      },
+      { onConflict: 'workspace_id,drive_file_id' },
+    )
+    .select('*')
+    .single()
+  if (error || !gallery) throw new Error(error?.message || 'Could not index the RAW photo.')
+  await audit(admin, input.workspaceId, { type: 'staff', id: input.actorId }, 'RAW_UPLOADED', {
+    bookingId: input.bookingId,
+    batchId: batch.id,
+    metadata: { galleryFileId: gallery.id, driveFileId: uploaded.file.id, duplicate: uploaded.duplicate },
+  })
+  return gallery
+}
+
+export async function indexRawFolder(workspaceId: string, bookingId: string, actorId: string) {
+  const admin = adminClient()
+  const { hierarchy, batch, booking } = await ensureBookingFolders(admin, workspaceId, bookingId)
+  const files = await listDriveFiles(hierarchy.raw.id)
+  const rows = files.map((file) => ({
+    workspace_id: workspaceId,
+    booking_id: bookingId,
+    client_id: booking.client_id,
+    drive_file_id: file.id,
+    file_name: file.name,
+    mime_type: file.mimeType || 'application/octet-stream',
+    file_size: file.size ? Number(file.size) : null,
+    checksum: file.md5Checksum || null,
+    thumbnail_reference: file.thumbnailLink || null,
+    preview_reference: file.thumbnailLink || null,
+  }))
+  if (rows.length) {
+    const { error } = await admin.from('gallery_files').upsert(rows, { onConflict: 'workspace_id,drive_file_id' })
+    if (error) throw new Error(error.message)
+  }
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'GALLERY_INDEXED', {
+    bookingId,
+    batchId: batch.id,
+    metadata: { rawFolderDriveId: hierarchy.raw.id, indexedFiles: rows.length },
+  })
+  return { indexed: rows.length }
+}
+
+async function portalRecord(publicId: string) {
+  const admin = adminClient()
+  const { data, error } = await admin
+    .from('client_portals')
+    .select('*')
+    .eq('public_id', publicId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Portal not found.')
+  if (data.status !== 'active') throw new Error('Portal disabled.')
+  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) throw new Error('Portal expired.')
+  return { admin, portal: data }
+}
+
+export async function getPortalData(publicId: string, offset = 0, limit = 48) {
+  const { admin, portal } = await portalRecord(publicId)
+  const bookingId = String(portal.booking_id)
+  const pageSize = Math.min(MAX_PORTAL_PAGE_SIZE, Math.max(1, limit))
+  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult] =
+    await Promise.all([
+      admin.from('bookings').select('*').eq('id', bookingId).single(),
+      admin.from('photo_selections').select('*').eq('booking_id', bookingId).maybeSingle(),
+      admin
+        .from('gallery_files')
+        .select('id,file_name,mime_type,drive_file_id,created_at', { count: 'exact' })
+        .eq('booking_id', bookingId)
+        .order('created_at', { ascending: true })
+        .range(Math.max(0, offset), Math.max(0, offset) + pageSize - 1),
+      admin.from('deliverable_files').select('*').eq('booking_id', bookingId).order('published_at', { ascending: false }),
+      admin.from('editing_jobs').select('status').eq('booking_id', bookingId).maybeSingle(),
+      admin.from('payments').select('amount').eq('booking_id', bookingId).eq('status', 'confirmed'),
+      admin
+        .from('client_portal_resources')
+        .select('id,resource_type,title,url,content,created_at')
+        .eq('booking_id', bookingId)
+        .eq('is_visible', true)
+        .order('created_at', { ascending: false }),
+    ])
+  if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
+  if (selectionResult.error) throw new Error(selectionResult.error.message)
+  const selectedIds = selectionResult.data
+    ? (
+        await admin
+          .from('photo_selection_items')
+          .select('gallery_file_id')
+          .eq('selection_id', selectionResult.data.id)
+      ).data?.map((row) => String(row.gallery_file_id)) || []
+    : []
+  await admin.from('client_portals').update({ last_accessed_at: nowIso() }).eq('id', portal.id)
+  const booking = bookingResult.data
+  return {
+    booking: {
+      id: String(booking.id),
+      customerName: String(booking.customer_name),
+      packageName: String(booking.package_name || ''),
+      bookingDate: String(booking.booking_date),
+      bookingTime: String(booking.booking_time || ''),
+      bookingStatus: String(booking.booking_status || ''),
+      paymentStatus: String(booking.payment_status || ''),
+      price: Number(booking.price || 0),
+      depositAmount: Number(booking.deposit_amount || 0),
+      amountPaid: (paymentsResult.data || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
+    },
+    portalId: String(portal.public_id),
+    selection: selectionResult.data
+      ? {
+          id: String(selectionResult.data.id),
+          status: String(selectionResult.data.status),
+          requiredCount: Number(selectionResult.data.required_count),
+          submittedAt: selectionResult.data.submitted_at || null,
+          reopenedAt: selectionResult.data.reopened_at || null,
+          selectedIds,
+        }
+      : null,
+    gallery: (galleryResult.data || []).map((file) => ({
+      id: String(file.id),
+      fileName: String(file.file_name),
+      mimeType: String(file.mime_type),
+      driveFileId: String(file.drive_file_id),
+    })),
+    galleryTotal: galleryResult.count || 0,
+    galleryOffset: Math.max(0, offset),
+    galleryLimit: pageSize,
+    editingStatus: String(jobResult.data?.status || 'WAITING_FOR_SELECTION'),
+    deliverables: (deliverablesResult.data || []).map((file) => ({
+      id: String(file.id),
+      fileName: String(file.file_name),
+      mimeType: String(file.mime_type),
+      fileSize: Number(file.file_size || 0),
+      publishedAt: String(file.published_at),
+    })),
+    resources: resourcesResult.data || [],
+  }
+}
+
+export async function getPortalFile(publicId: string, fileId: string, kind: 'gallery' | 'deliverable') {
+  const { admin, portal } = await portalRecord(publicId)
+  const table = kind === 'deliverable' ? 'deliverable_files' : 'gallery_files'
+  const { data, error } = await admin
+    .from(table)
+    .select('*')
+    .eq('id', fileId)
+    .eq('booking_id', portal.booking_id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Photo not found.')
+  if (kind === 'gallery') {
+    const reference = String(data.thumbnail_reference || data.preview_reference || '')
+    if (reference && !reference.startsWith('http')) {
+      const { data: object, error: storageError } = await admin.storage.from('fico-mana-thumbnails').download(reference)
+      if (!storageError && object) return { data: Buffer.from(await object.arrayBuffer()), mimeType: 'image/jpeg' }
+    }
+    if (reference.startsWith('http')) {
+      return { data: await downloadDriveThumbnail(reference), mimeType: 'image/jpeg' }
+    }
+  }
+  return {
+    data: await downloadDriveFile(String(data.drive_file_id)),
+    mimeType: String(data.mime_type || 'application/octet-stream'),
+    fileName: String(data.file_name || 'photo'),
+  }
+}
+
+export async function submitPhotoSelection(publicId: string, fileIds: string[]) {
+  const { admin, portal } = await portalRecord(publicId)
+  const bookingId = String(portal.booking_id)
+  const workspaceId = String(portal.workspace_id)
+  const { data: selection, error } = await admin
+    .from('photo_selections')
+    .update({ status: 'SUBMITTING', updated_at: nowIso() })
+    .eq('booking_id', bookingId)
+    .in('status', ['OPEN', 'COPY_FAILED'])
+    .select('*')
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!selection) throw new Error('This selection is already submitted and locked.')
+  const unique = [...new Set(fileIds)]
+  if (unique.length !== Number(selection.required_count)) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error(`Select exactly ${selection.required_count} photos before submitting.`)
+  }
+  const { data: gallery, error: galleryError } = await admin
+    .from('gallery_files')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .in('id', unique)
+  if (galleryError || !gallery || gallery.length !== unique.length) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('One or more selected photos do not belong to this portal.')
+  }
+  try {
+    const { hierarchy, batch } = await ensureBookingFolders(admin, workspaceId, bookingId)
+    const items: Record<string, unknown>[] = []
+    for (const file of gallery) {
+      const copy = await copyDriveFile({
+        fileId: String(file.drive_file_id),
+        destinationFolderId: hierarchy.selected.id,
+        bookingId,
+        galleryFileId: String(file.id),
+      })
+      items.push({
+        selection_id: selection.id,
+        gallery_file_id: file.id,
+        selected_drive_file_id: copy.id,
+        copied_at: nowIso(),
+      })
+    }
+    await admin.from('photo_selection_items').delete().eq('selection_id', selection.id)
+    const { error: itemError } = await admin.from('photo_selection_items').insert(items)
+    if (itemError) throw new Error(itemError.message)
+    const submittedAt = nowIso()
+    await Promise.all([
+      admin
+        .from('photo_selections')
+        .update({ status: 'SUBMITTED', submitted_at: submittedAt, updated_at: submittedAt })
+        .eq('id', selection.id),
+      admin
+        .from('editing_jobs')
+        .update({ status: 'READY_FOR_EDITING', selected_count: unique.length, last_error: null, updated_at: submittedAt })
+        .eq('booking_id', bookingId),
+      admin
+        .from('bookings')
+        .update({
+          raw_photo_status: 'Approved',
+          raw_photo_link: driveFolderUrl(hierarchy.selected.id),
+          raw_photo_submitted_at: submittedAt,
+          raw_photo_approved_at: submittedAt,
+        })
+        .eq('id', bookingId),
+    ])
+    await audit(admin, workspaceId, { type: 'client', id: publicId }, 'SELECTION_SUBMITTED', {
+      bookingId,
+      batchId: batch.id,
+      metadata: { galleryFileIds: unique, requiredCount: unique.length },
+    })
+    await audit(admin, workspaceId, { type: 'system' }, 'SELECTED_FILES_COPIED', {
+      bookingId,
+      batchId: batch.id,
+      metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, destructive: false },
+    })
+    return getPortalData(publicId)
+  } catch (copyError) {
+    const message = copyError instanceof Error ? copyError.message : 'Selected photo copy failed.'
+    await admin.from('photo_selections').update({ status: 'COPY_FAILED', updated_at: nowIso() }).eq('id', selection.id)
+    await admin.from('editing_jobs').update({ last_error: message, updated_at: nowIso() }).eq('booking_id', bookingId)
+    await audit(admin, workspaceId, { type: 'system' }, 'SELECTION_COPY_FAILED', {
+      bookingId,
+      metadata: { error: message },
+    })
+    throw copyError
+  }
+}
+
+export async function reopenPhotoSelection(workspaceId: string, bookingId: string, actorId: string) {
+  const admin = adminClient()
+  const { data: job } = await admin
+    .from('editing_jobs')
+    .select('id,batch_id,status')
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (!job) throw new Error('Editing job not found.')
+  const { data: selection } = await admin
+    .from('photo_selections')
+    .select('id,version')
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (!selection) throw new Error('Photo selection not found.')
+  const reopenedAt = nowIso()
+  const { error } = await admin
+    .from('photo_selections')
+    .update({ status: 'OPEN', reopened_at: reopenedAt, version: Number(selection.version || 1) + 1, updated_at: reopenedAt })
+    .eq('id', selection.id)
+  if (error) throw new Error(error.message)
+  if (job.status !== 'DELIVERED') {
+    await admin
+      .from('editing_jobs')
+      .update({ status: 'WAITING_FOR_SELECTION', last_error: null, updated_at: reopenedAt })
+      .eq('id', job.id)
+  }
+  await admin.from('bookings').update({ raw_photo_status: 'Pending Review', raw_photo_approved_at: null }).eq('id', bookingId)
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'SELECTION_REOPENED', {
+    bookingId,
+    batchId: job.batch_id,
+  })
+  return { success: true }
+}
+
+const ALLOWED_JOB_TRANSITIONS: Record<EditingJobStatus, EditingJobStatus[]> = {
+  WAITING_FOR_SELECTION: [],
+  READY_FOR_EDITING: ['DOWNLOADED', 'EDITING'],
+  DOWNLOADED: ['EDITING', 'READY_TO_UPLOAD'],
+  EDITING: ['READY_TO_UPLOAD'],
+  READY_TO_UPLOAD: ['EDITING', 'UPLOADING'],
+  UPLOADING: ['DELIVERED', 'UPLOAD_FAILED'],
+  DELIVERED: [],
+  UPLOAD_FAILED: ['READY_TO_UPLOAD', 'UPLOADING'],
+}
+
+export async function setEditingJobStatus(
+  workspaceId: string,
+  bookingId: string,
+  next: EditingJobStatus,
+  actorId: string,
+) {
+  const admin = adminClient()
+  const { data: job, error } = await admin
+    .from('editing_jobs')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (error || !job) throw new Error(error?.message || 'Editing job not found.')
+  const current = job.status as EditingJobStatus
+  if (current !== next && !ALLOWED_JOB_TRANSITIONS[current]?.includes(next)) {
+    throw new Error(`Invalid editor transition: ${current} to ${next}.`)
+  }
+  const timestamp = nowIso()
+  const patch: Record<string, unknown> = { status: next, last_error: null, updated_at: timestamp }
+  if (next === 'EDITING' && !job.editing_started_at) patch.editing_started_at = timestamp
+  if (next === 'READY_TO_UPLOAD') patch.ready_to_upload_at = timestamp
+  const { error: updateError } = await admin.from('editing_jobs').update(patch).eq('id', job.id)
+  if (updateError) throw new Error(updateError.message)
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, next === 'EDITING' ? 'EDITING_STARTED' : `JOB_STATUS_${next}`, {
+    bookingId,
+    batchId: job.batch_id,
+    metadata: { from: current, to: next },
+  })
+  return { success: true }
+}
+
+function uniqueClientFolderNames(bookings: Array<{ id: string; name: string }>) {
+  const counts = new Map<string, number>()
+  for (const booking of bookings) {
+    const base = safeSegment(booking.name).toUpperCase() || booking.id
+    counts.set(base, (counts.get(base) || 0) + 1)
+  }
+  return new Map(
+    bookings.map((booking) => {
+      const base = safeSegment(booking.name).toUpperCase() || booking.id
+      return [booking.id, (counts.get(base) || 0) > 1 ? `${base} - ${booking.id}` : base]
+    }),
+  )
+}
+
+export async function prepareBatchDownload(workspaceId: string, displayId: string) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const { data: jobs, error } = await admin
+    .from('editing_jobs')
+    .select('*')
+    .eq('batch_id', batch.id)
+    .eq('status', 'READY_FOR_EDITING')
+  if (error) throw new Error(error.message)
+  if (!jobs?.length) throw new Error('No jobs are currently READY FOR EDITING in this batch.')
+  const bookingIds = jobs.map((job) => String(job.booking_id))
+  const [{ data: bookings }, { data: portals }, { data: selections }] = await Promise.all([
+    admin.from('bookings').select('id,customer_name').in('id', bookingIds),
+    admin.from('client_portals').select('booking_id,public_id').in('booking_id', bookingIds),
+    admin.from('photo_selections').select('id,booking_id').in('booking_id', bookingIds),
+  ])
+  const names = uniqueClientFolderNames(
+    (bookings || []).map((booking) => ({ id: String(booking.id), name: String(booking.customer_name) })),
+  )
+  const selectionIds = (selections || []).map((selection) => selection.id)
+  const { data: items, error: itemsError } = await admin
+    .from('photo_selection_items')
+    .select('selection_id,gallery_file_id,selected_drive_file_id')
+    .in('selection_id', selectionIds)
+  if (itemsError) throw new Error(itemsError.message)
+  const galleryIds = (items || []).map((item) => item.gallery_file_id)
+  const { data: gallery, error: galleryError } = galleryIds.length
+    ? await admin.from('gallery_files').select('id,file_name,drive_file_id').in('id', galleryIds)
+    : { data: [], error: null }
+  if (galleryError) throw new Error(galleryError.message)
+  const galleryMap = new Map((gallery || []).map((file) => [String(file.id), file]))
+  const selectionMap = new Map((selections || []).map((selection) => [String(selection.booking_id), String(selection.id)]))
+  const portalMap = new Map((portals || []).map((portal) => [String(portal.booking_id), String(portal.public_id)]))
+  const foldersResult = await admin.from('drive_folders').select('*').in('booking_id', bookingIds)
+  const folderMap = new Map((foldersResult.data || []).map((folder) => [`${folder.booking_id}:${folder.folder_type}`, folder]))
+  const manifest = {
+    schema_version: 1,
+    workspace_id: workspaceId,
+    batch_id: displayId,
+    shoot_date: String(batch.shoot_date),
+    location_key: String(batch.location_key),
+    generated_at: nowIso(),
+    clients: jobs.map((job) => {
+      const booking = (bookings || []).find((row) => row.id === job.booking_id)
+      return {
+        booking_id: String(job.booking_id),
+        client_id: String(job.client_id),
+        folder_name: names.get(String(job.booking_id)) || String(job.booking_id),
+        selected_count: Number(job.selected_count),
+        expected_output_count: Number(job.expected_output_count),
+        selected_folder_drive_id: folderMap.get(`${job.booking_id}:SELECTED`)?.drive_folder_id || null,
+        edited_folder_drive_id: folderMap.get(`${job.booking_id}:EDITED`)?.drive_folder_id || null,
+        deliverables_folder_drive_id: folderMap.get(`${job.booking_id}:DELIVERABLES`)?.drive_folder_id || null,
+        portal_id: portalMap.get(String(job.booking_id)) || null,
+        customer_name: String(booking?.customer_name || job.booking_id),
+      }
+    }),
+  }
+  const entries: Array<{ name: string; data?: Buffer; driveFileId?: string }> = [
+    { name: `${batch.shoot_date}/manifest.json`, data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') },
+  ]
+  for (const job of jobs) {
+    const folderName = names.get(String(job.booking_id)) || String(job.booking_id)
+    const clientMeta = manifest.clients.find((client) => client.booking_id === job.booking_id)
+    entries.push({
+      name: `${batch.shoot_date}/${folderName}/.fico-client.json`,
+      data: Buffer.from(JSON.stringify(clientMeta, null, 2), 'utf8'),
+    })
+    entries.push({ name: `${batch.shoot_date}/${folderName}/EDITED/`, data: Buffer.alloc(0) })
+    const selectionId = selectionMap.get(String(job.booking_id))
+    for (const item of (items || []).filter((row) => String(row.selection_id) === selectionId)) {
+      const file = galleryMap.get(String(item.gallery_file_id))
+      if (!file) continue
+      entries.push({
+        name: `${batch.shoot_date}/${folderName}/SELECTED/${safeSegment(String(file.file_name)) || file.id}`,
+        driveFileId: String(item.selected_drive_file_id || file.drive_file_id),
+      })
+    }
+  }
+  return { fileName: `${displayId}.zip`, batch, jobs, manifest, entries }
+}
+
+export async function markBatchDownloaded(workspaceId: string, batchId: string, jobs: Array<Record<string, unknown>>, actorId: string) {
+  const admin = adminClient()
+  const timestamp = nowIso()
+  await admin
+    .from('editing_jobs')
+    .update({ status: 'DOWNLOADED', downloaded_at: timestamp, updated_at: timestamp })
+    .in('id', jobs.map((job) => job.id))
+    .eq('status', 'READY_FOR_EDITING')
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'BATCH_DOWNLOADED', {
+    batchId,
+    metadata: {
+      clientCount: jobs.length,
+      bookingIds: jobs.map((job) => job.booking_id),
+      selectedPhotos: jobs.reduce((sum, job) => sum + Number(job.selected_count || 0), 0),
+    },
+  })
+}
+
+export async function createBatchUploadRun(
+  workspaceId: string,
+  displayId: string,
+  bookingIds: string[],
+  actorId: string,
+) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const uniqueIds = [...new Set(bookingIds)]
+  const { data: jobs, error } = await admin
+    .from('editing_jobs')
+    .select('*')
+    .eq('batch_id', batch.id)
+    .in('booking_id', uniqueIds)
+  if (error) throw new Error(error.message)
+  if (!jobs?.length || jobs.length !== uniqueIds.length) throw new Error('Upload manifest contains unknown batch clients.')
+  const invalid = jobs.find((job) => !['DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'].includes(job.status))
+  if (invalid) throw new Error(`${invalid.booking_id} is not ready for deliverable upload.`)
+  const { data: run, error: runError } = await admin
+    .from('batch_upload_jobs')
+    .insert({ workspace_id: workspaceId, batch_id: batch.id, status: 'RUNNING', total_clients: jobs.length })
+    .select('*')
+    .single()
+  if (runError || !run) throw new Error(runError?.message || 'Could not start the batch upload.')
+  const { error: itemError } = await admin.from('batch_upload_items').insert(
+    jobs.map((job) => ({
+      upload_job_id: run.id,
+      editing_job_id: job.id,
+      booking_id: job.booking_id,
+      status: 'PENDING',
+      expected_files: job.expected_output_count,
+    })),
+  )
+  if (itemError) throw new Error(itemError.message)
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'BATCH_UPLOAD_STARTED', {
+    batchId: batch.id,
+    metadata: { uploadJobId: run.id, bookingIds: uniqueIds },
+  })
+  return { uploadJobId: String(run.id) }
+}
+
+export async function createDeliverableUploadSession(
+  workspaceId: string,
+  displayId: string,
+  uploadJobId: string,
+  input: UploadFileInput,
+) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const { data: item, error } = await admin
+    .from('batch_upload_items')
+    .select('*,editing_jobs!inner(id,batch_id,workspace_id,status,expected_output_count)')
+    .eq('upload_job_id', uploadJobId)
+    .eq('booking_id', input.bookingId)
+    .eq('editing_jobs.batch_id', batch.id)
+    .eq('editing_jobs.workspace_id', workspaceId)
+    .maybeSingle()
+  if (error || !item) throw new Error(error?.message || 'Upload client is not part of this batch run.')
+  const relativePath = safeRelativePath(input.relativePath)
+  const checksum = input.checksum.toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(checksum)) throw new Error('A SHA-256 file checksum is required.')
+  if (input.fileSize <= 0) throw new Error('Empty files cannot be uploaded.')
+  const { data: prior } = await admin
+    .from('deliverable_files')
+    .select('*')
+    .eq('booking_id', input.bookingId)
+    .eq('relative_path', relativePath)
+    .maybeSingle()
+  const { data: uploadFile, error: fileError } = await admin
+    .from('batch_upload_files')
+    .upsert(
+      {
+        upload_item_id: item.id,
+        relative_path: relativePath,
+        file_name: safeSegment(input.fileName),
+        checksum,
+        drive_file_id: prior?.drive_file_id || null,
+        status: prior?.checksum === checksum ? 'SKIPPED_DUPLICATE' : 'UPLOADING',
+        attempt_count: 1,
+        last_error: null,
+        updated_at: nowIso(),
+      },
+      { onConflict: 'upload_item_id,relative_path' },
+    )
+    .select('*')
+    .single()
+  if (fileError || !uploadFile) throw new Error(fileError?.message || 'Could not create upload file state.')
+  await admin
+    .from('batch_upload_items')
+    .update({ status: 'UPLOADING', attempt_count: Number(item.attempt_count || 0) + 1, updated_at: nowIso() })
+    .eq('id', item.id)
+  await admin.from('editing_jobs').update({ status: 'UPLOADING', last_error: null, updated_at: nowIso() }).eq('id', item.editing_job_id)
+  if (prior?.checksum === checksum) {
+    return { uploadFileId: String(uploadFile.id), duplicate: true, driveFileId: String(prior.drive_file_id) }
+  }
+  try {
+    const { hierarchy } = await ensureBookingFolders(admin, workspaceId, input.bookingId)
+    const uploadUrl = await createDriveResumableUpload({
+      destinationFolderId: hierarchy.edited.id,
+      existingDriveFileId: prior?.drive_file_id || null,
+      bookingId: input.bookingId,
+      relativePath,
+      fileName: input.fileName,
+      mimeType: input.mimeType || 'application/octet-stream',
+      fileSize: input.fileSize,
+      checksum,
+    })
+    return { uploadFileId: String(uploadFile.id), uploadUrl, duplicate: false }
+  } catch (uploadError) {
+    const message = uploadError instanceof Error ? uploadError.message : 'Could not initialize the Drive upload.'
+    await Promise.all([
+      admin.from('batch_upload_files').update({ status: 'FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() }).eq('id', uploadFile.id),
+      admin.from('batch_upload_items').update({ status: 'FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() }).eq('id', item.id),
+      admin.from('editing_jobs').update({ status: 'UPLOAD_FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() }).eq('id', item.editing_job_id),
+    ])
+    throw uploadError
+  }
+}
+
+export async function completeDeliverableUpload(
+  workspaceId: string,
+  uploadJobId: string,
+  uploadFileId: string,
+  driveFileId: string,
+  mimeType: string,
+) {
+  const admin = adminClient()
+  const { data: uploadFile, error } = await admin
+    .from('batch_upload_files')
+    .select('*,batch_upload_items!inner(id,upload_job_id,booking_id,editing_job_id)')
+    .eq('id', uploadFileId)
+    .eq('batch_upload_items.upload_job_id', uploadJobId)
+    .single()
+  if (error || !uploadFile) throw new Error(error?.message || 'Upload file state not found.')
+  const driveFile = await getDriveFile(driveFileId)
+  const bookingId = String(uploadFile.batch_upload_items.booking_id)
+  if (
+    driveFile.appProperties?.bookingId !== bookingId ||
+    driveFile.appProperties?.relativePath !== uploadFile.relative_path ||
+    driveFile.appProperties?.checksum !== uploadFile.checksum
+  ) {
+    throw new Error('Google Drive upload metadata does not match the batch manifest.')
+  }
+  const { data: job } = await admin
+    .from('editing_jobs')
+    .select('id,workspace_id')
+    .eq('id', uploadFile.batch_upload_items.editing_job_id)
+    .eq('workspace_id', workspaceId)
+    .single()
+  if (!job) throw new Error('Upload job is outside this workspace.')
+  const { error: deliveryError } = await admin.from('deliverable_files').upsert(
+    {
+      workspace_id: workspaceId,
+      booking_id: bookingId,
+      editing_job_id: job.id,
+      drive_file_id: driveFile.id,
+      relative_path: uploadFile.relative_path,
+      file_name: driveFile.name,
+      mime_type: driveFile.mimeType || mimeType || 'application/octet-stream',
+      file_size: Number(driveFile.size || 0),
+      checksum: uploadFile.checksum,
+      published_at: nowIso(),
+    },
+    { onConflict: 'booking_id,relative_path' },
+  )
+  if (deliveryError) throw new Error(deliveryError.message)
+  await admin
+    .from('batch_upload_files')
+    .update({ drive_file_id: driveFile.id, status: 'UPLOADED', last_error: null, updated_at: nowIso() })
+    .eq('id', uploadFileId)
+  return { success: true }
+}
+
+export async function failDeliverableUpload(workspaceId: string, uploadJobId: string, uploadFileId: string, message: string) {
+  const admin = adminClient()
+  const { data: file } = await admin
+    .from('batch_upload_files')
+    .select('*,batch_upload_items!inner(id,upload_job_id,booking_id,editing_job_id,editing_jobs!inner(workspace_id))')
+    .eq('id', uploadFileId)
+    .eq('batch_upload_items.upload_job_id', uploadJobId)
+    .eq('batch_upload_items.editing_jobs.workspace_id', workspaceId)
+    .maybeSingle()
+  if (!file) return
+  await admin
+    .from('batch_upload_files')
+    .update({ status: 'FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() })
+    .eq('id', uploadFileId)
+  await admin
+    .from('batch_upload_items')
+    .update({ status: 'FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() })
+    .eq('id', file.batch_upload_items.id)
+  await admin
+    .from('editing_jobs')
+    .update({ status: 'UPLOAD_FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() })
+    .eq('id', file.batch_upload_items.editing_job_id)
+}
+
+export async function finalizeClientUpload(
+  workspaceId: string,
+  displayId: string,
+  uploadJobId: string,
+  bookingId: string,
+  actorId: string,
+) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const { data: item, error } = await admin
+    .from('batch_upload_items')
+    .select('*,editing_jobs!inner(*)')
+    .eq('upload_job_id', uploadJobId)
+    .eq('booking_id', bookingId)
+    .eq('editing_jobs.batch_id', batch.id)
+    .maybeSingle()
+  if (error || !item) throw new Error(error?.message || 'Upload client state not found.')
+  const { count: uploadedCount, error: countError } = await admin
+    .from('deliverable_files')
+    .select('id', { count: 'exact', head: true })
+    .eq('booking_id', bookingId)
+  if (countError) throw new Error(countError.message)
+  const expected = Number(item.expected_files || item.editing_jobs.expected_output_count || 0)
+  const uploaded = uploadedCount || 0
+  const complete = uploaded >= expected && expected > 0
+  const timestamp = nowIso()
+  if (!complete) {
+    const message = `Expected ${expected} files, uploaded ${uploaded}.`
+    await admin
+      .from('batch_upload_items')
+      .update({ status: 'FAILED', uploaded_files: uploaded, last_error: message, updated_at: timestamp })
+      .eq('id', item.id)
+    await admin
+      .from('editing_jobs')
+      .update({ status: 'UPLOAD_FAILED', last_error: message, updated_at: timestamp })
+      .eq('id', item.editing_job_id)
+    await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'UPLOAD_FAILED', {
+      bookingId,
+      batchId: batch.id,
+      metadata: { expected, uploaded, missing: Math.max(0, expected - uploaded), uploadJobId },
+    })
+    return { bookingId, status: 'UPLOAD_FAILED', expected, uploaded, error: message }
+  }
+  const portal = await ensurePortal(admin, workspaceId, bookingId)
+  const url = portalUrl(String(portal.public_id))
+  await Promise.all([
+    admin
+      .from('batch_upload_items')
+      .update({ status: 'DELIVERED', uploaded_files: uploaded, last_error: null, updated_at: timestamp })
+      .eq('id', item.id),
+    admin
+      .from('editing_jobs')
+      .update({ status: 'DELIVERED', delivered_at: timestamp, last_error: null, updated_at: timestamp })
+      .eq('id', item.editing_job_id),
+    admin
+      .from('bookings')
+      .update({ edited_photo_link: url, edited_photo_delivered_at: timestamp })
+      .eq('id', bookingId),
+  ])
+  await setPortalExpiryFromDelivery(bookingId, timestamp)
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'DELIVERY_COMPLETED', {
+    bookingId,
+    batchId: batch.id,
+    metadata: { expected, uploaded, uploadJobId, portalId: portal.public_id },
+  })
+  const { data: booking } = await admin.from('bookings').select('*').eq('id', bookingId).single()
+  if (booking && !item.editing_jobs.delivered_at) {
+    const emailBooking = {
+      id: booking.id,
+      customerName: booking.customer_name,
+      customerEmail: booking.customer_email,
+      packageName: booking.package_name,
+      bookingDate: booking.booking_date,
+    }
+    try {
+      await sendEditedPhotosEmail(emailBooking, url)
+    } catch (emailError) {
+      console.error('Delivery notification email failed:', emailError)
+    }
+  }
+  return { bookingId, customerName: String(booking?.customer_name || bookingId), status: 'DELIVERED', expected, uploaded }
+}
+
+export async function finalizeBatchUpload(workspaceId: string, displayId: string, uploadJobId: string) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const { data: run } = await admin
+    .from('batch_upload_jobs')
+    .select('id')
+    .eq('id', uploadJobId)
+    .eq('workspace_id', workspaceId)
+    .eq('batch_id', batch.id)
+    .maybeSingle()
+  if (!run) throw new Error('Batch upload run not found in this workspace.')
+  const { data: items, error } = await admin
+    .from('batch_upload_items')
+    .select('*')
+    .eq('upload_job_id', uploadJobId)
+  if (error) throw new Error(error.message)
+  const completed = (items || []).filter((item) => item.status === 'DELIVERED').length
+  const failed = (items || []).filter((item) => item.status === 'FAILED').length
+  const photosUploaded = (items || []).reduce((sum, item) => sum + Number(item.uploaded_files || 0), 0)
+  const status = failed > 0 ? 'PARTIALLY_COMPLETED' : completed === (items || []).length ? 'COMPLETED' : 'RUNNING'
+  const completedAt = nowIso()
+  await admin
+    .from('batch_upload_jobs')
+    .update({
+      status,
+      completed_clients: completed,
+      failed_clients: failed,
+      photos_uploaded: photosUploaded,
+      completed_at: completedAt,
+    })
+    .eq('id', uploadJobId)
+    .eq('workspace_id', workspaceId)
+  const { data: allJobs } = await admin.from('editing_jobs').select('status').eq('batch_id', batch.id)
+  const batchStatus = deriveBatchStatus((allJobs || []) as Array<{ status: EditingJobStatus }>)
+  await admin.from('editing_batches').update({ status: batchStatus, updated_at: completedAt }).eq('id', batch.id)
+  return {
+    id: uploadJobId,
+    status,
+    totalClients: (items || []).length,
+    completedClients: completed,
+    failedClients: failed,
+    photosUploaded,
+    batchStatus,
+    failedBookingIds: (items || []).filter((item) => item.status === 'FAILED').map((item) => String(item.booking_id)),
+  }
+}
+
+export async function getBatchFailedBookingIds(workspaceId: string, displayId: string) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const { data, error } = await admin
+    .from('editing_jobs')
+    .select('booking_id')
+    .eq('batch_id', batch.id)
+    .eq('status', 'UPLOAD_FAILED')
+  if (error) throw new Error(error.message)
+  return (data || []).map((row) => String(row.booking_id))
+}
+
+export async function preparePortalDeliverables(publicId: string) {
+  const { admin, portal } = await portalRecord(publicId)
+  const { data, error } = await admin
+    .from('deliverable_files')
+    .select('drive_file_id,file_name')
+    .eq('booking_id', portal.booking_id)
+    .order('published_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data || []).map((file) => ({
+    name: safeSegment(String(file.file_name)) || String(file.drive_file_id),
+    driveFileId: String(file.drive_file_id),
+  }))
+}
+
+export function driveDownloadBuffer(fileId: string) {
+  return downloadDriveFile(fileId)
+}

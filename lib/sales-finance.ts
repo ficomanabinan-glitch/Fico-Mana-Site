@@ -1,4 +1,4 @@
-import type { Booking, PaymentRecord } from '@/lib/data-store'
+import type { Booking, PaymentRecord } from './data-store.ts'
 
 export type SalesPeriod = 'month' | 'quarter' | 'year'
 export type SalesExpense = {
@@ -128,7 +128,7 @@ function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period
       const next = new Date(cursor)
       next.setDate(next.getDate() + 1)
       buckets.push({
-        key: cursor.toISOString().slice(0, 10),
+        key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`,
         label: String(cursor.getDate()),
         revenue: fromMinor(bucketRevenue(bookings, cursor, next)),
         expenses: fromMinor(bucketExpenses(expenses, cursor, next, true)),
