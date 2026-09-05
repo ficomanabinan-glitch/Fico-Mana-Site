@@ -1,9 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { getSiteUrl } from '@/lib/site-url'
+import { GOOGLE_DRIVE_SCOPES } from '@/lib/google-drive-scopes'
 
-// Limit access to files and folders created or explicitly opened by Fico Mana.
-// This avoids requesting unrestricted access to the user's entire Drive.
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
+// Fico Mana creates and updates only app-managed files through drive.file.
+// Read-only Drive access is also required so staff can add photos directly in
+// Google Drive and then index those files into the private client gallery.
 const PROFILE_SCOPES = ['openid', 'email']
 
 function env(name: string) {
@@ -109,7 +110,7 @@ export function buildGoogleAuthorizationUrl(loginHint?: string) {
     access_type: 'offline',
     prompt: 'consent select_account',
     include_granted_scopes: 'true',
-    scope: [...PROFILE_SCOPES, DRIVE_SCOPE].join(' '),
+    scope: [...PROFILE_SCOPES, ...GOOGLE_DRIVE_SCOPES].join(' '),
     state: createGoogleOAuthState(),
   })
   if (loginHint?.trim()) params.set('login_hint', loginHint.trim())
@@ -152,7 +153,7 @@ export async function exchangeGoogleAuthorizationCode(code: string) {
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    scopes: data.scope || [...PROFILE_SCOPES, DRIVE_SCOPE].join(' '),
+    scopes: data.scope || [...PROFILE_SCOPES, ...GOOGLE_DRIVE_SCOPES].join(' '),
     email: profile.email,
     subject: profile.sub || null,
   }

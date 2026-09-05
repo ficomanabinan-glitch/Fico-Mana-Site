@@ -3,6 +3,7 @@ import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getDriveFolder, initializeDriveRootFolder } from '@/lib/google-drive'
 import { googleOAuthAppConfigured } from '@/lib/google-oauth'
+import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
 
 type Body = {
   rootFolderId?: string
@@ -31,6 +32,9 @@ export async function GET() {
     connected: Boolean(data?.refresh_token_encrypted),
     accountEmail: data?.account_email || null,
     grantedScopes: data?.granted_scopes || null,
+    needsReconnect: Boolean(
+      data?.refresh_token_encrypted && !hasRequiredGoogleDriveScopes(data.granted_scopes),
+    ),
     connectedAt: data?.connected_at || null,
     disconnectedAt: data?.disconnected_at || null,
     envRefreshTokenFallback: Boolean(process.env.GOOGLE_REFRESH_TOKEN?.trim()),

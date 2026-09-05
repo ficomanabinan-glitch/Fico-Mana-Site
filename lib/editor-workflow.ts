@@ -10,6 +10,7 @@ import {
   listDriveFiles,
   upsertDriveFile,
 } from '@/lib/google-drive'
+import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
 import { portalUrl } from '@/lib/client-portal'
 import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 import { sendEditedPhotosEmail } from '@/lib/email'
@@ -547,6 +548,18 @@ export async function indexRawFolder(workspaceId: string, bookingId: string, act
   const admin = adminClient()
   const { hierarchy, batch, booking } = await ensureBookingFolders(admin, workspaceId, bookingId)
   const files = await listDriveFiles(hierarchy.raw.id)
+  if (!files.length) {
+    const { data: settings } = await admin
+      .from('google_drive_settings')
+      .select('granted_scopes')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle()
+    if (!hasRequiredGoogleDriveScopes(settings?.granted_scopes)) {
+      throw new Error(
+        'Reconnect Google Drive from Client Portals to let Fico Mana read photos uploaded directly inside RAW folders.',
+      )
+    }
+  }
   const rows = files.map((file) => ({
     workspace_id: workspaceId,
     booking_id: bookingId,
