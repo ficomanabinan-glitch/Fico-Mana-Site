@@ -12,6 +12,7 @@ import {
 } from '../lib/security/file-validation.ts'
 import { isAllowedRequestOrigin } from '../lib/security/origin.ts'
 import { safeMetadata } from '../lib/security/audit-metadata.ts'
+import { receiptAccessUrl } from '../lib/security/receipt-reference.ts'
 import {
   bookingMutationSchema,
   editorUploadSessionSchema,
@@ -82,6 +83,19 @@ test('receipt images require matching MIME, extension, signature, and successful
   await assert.rejects(
     validateReceiptImageContent(Buffer.from('not an image'), 'image/jpeg', 'receipt.jpg'),
     /does not match|not a valid/,
+  )
+})
+
+test('receipt previews allow only known bundled demo images to bypass private resolution', () => {
+  assert.equal(receiptAccessUrl('/grad/grad_1.jpg'), '/grad/grad_1.jpg')
+  assert.equal(receiptAccessUrl('/model/model_4.webp'), '/model/model_4.webp')
+  assert.equal(
+    receiptAccessUrl('/grad/../private.jpg'),
+    '/api/receipts/view?ref=%2Fgrad%2F..%2Fprivate.jpg',
+  )
+  assert.equal(
+    receiptAccessUrl('https://example.supabase.co/storage/v1/object/public/receipts/a.jpg'),
+    '/api/receipts/view?ref=https%3A%2F%2Fexample.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Freceipts%2Fa.jpg',
   )
 })
 
