@@ -30,20 +30,24 @@ test('public gallery and reel load managed media while keeping bundled fallbacks
 })
 
 test('admin media uploads are authorized, rate limited, resumable, and finalized server-side', async () => {
-  const [route, page, migration, layout] = await Promise.all([
+  const [route, page, migration, uploadAuthMigration, layout] = await Promise.all([
     readFile('app/api/admin/website-media/route.ts', 'utf8'),
     readFile('app/admin/media/page.tsx', 'utf8'),
     readFile('supabase/migrations/20260907180000_website_media_manager.sql', 'utf8'),
+    readFile('supabase/migrations/20260906231248_fix_website_media_resumable_auth.sql', 'utf8'),
     readFile('app/admin/layout.tsx', 'utf8'),
   ])
 
   assert.match(route, /requireStaffAuth\(request\)/)
   assert.match(route, /canUseWorkflow\(access, 'admin'\)/)
   assert.match(route, /websiteMediaUpload/)
-  assert.match(route, /createSignedUploadUrl\(path\)/)
+  assert.match(route, /website_media_upload_grants[\s\S]*insert/)
   assert.match(route, /expectedPrefix/)
   assert.match(route, /website_media_slots[\s\S]*upsert|from\('website_media_slots'\)\.upsert/)
   assert.match(page, /new tus\.Upload/)
+  assert.match(page, /authorization: `Bearer \$\{accessToken\}`/)
+  assert.match(page, /apikey: getSupabaseKey\(\)/)
+  assert.doesNotMatch(page, /x-signature/)
   assert.match(page, /chunkSize: 6 \* 1024 \* 1024/)
   assert.match(page, /Uploading \$\{percent\}%/)
   assert.match(page, /Try:/)
@@ -51,4 +55,8 @@ test('admin media uploads are authorized, rate limited, resumable, and finalized
   assert.match(migration, /alter table public\.website_media_slots enable row level security/)
   assert.match(migration, /revoke all on table public\.website_media_slots from anon, authenticated/)
   assert.match(migration, /'website-media',[\s\S]*true/)
+  assert.match(uploadAuthMigration, /website_media_upload_grants/)
+  assert.match(uploadAuthMigration, /can_upload_website_media/)
+  assert.match(uploadAuthMigration, /auth\.jwt\(\) ->> 'aal'\) = 'aal2'/)
+  assert.match(uploadAuthMigration, /as restrictive[\s\S]*for insert/)
 })

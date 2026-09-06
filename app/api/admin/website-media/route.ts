@@ -19,6 +19,7 @@ const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif']
 const VIDEO_MIME_TYPES = ['video/mp4', 'video/webm'] as const
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024
 const VIDEO_MAX_BYTES = 250 * 1024 * 1024
+const UPLOAD_GRANT_LIFETIME_MS = 2 * 60 * 60 * 1000
 
 const slotKeySchema = z.enum([
   'gallery_1',
@@ -158,14 +159,19 @@ export async function POST(request: Request) {
       }
       const extension = storageExtension(value.mimeType)
       const path = `${auth.access.workspaceId}/${value.slotKey}/${Date.now()}-${randomUUID()}.${extension}`
-      const { data, error } = await admin.storage
-        .from(WEBSITE_MEDIA_BUCKET)
-        .createSignedUploadUrl(path)
-      if (error || !data?.token) throw new Error(error?.message || 'Signed upload could not be created.')
+      const { error: grantError } = await admin.from('website_media_upload_grants').insert({
+        workspace_id: auth.access.workspaceId,
+        user_id: auth.user.id,
+        slot_key: value.slotKey,
+        storage_path: path,
+        mime_type: value.mimeType,
+        file_size: value.fileSize,
+        expires_at: new Date(Date.now() + UPLOAD_GRANT_LIFETIME_MS).toISOString(),
+      })
+      if (grantError) throw new Error(grantError.message)
       return NextResponse.json({
         bucket: WEBSITE_MEDIA_BUCKET,
         path,
-        token: data.token,
         endpoint: resumableUploadEndpoint(),
       }, { status: 201, headers: noStoreHeaders })
     }
@@ -190,6 +196,24 @@ export async function POST(request: Request) {
     const expectedPrefix = `${auth.access.workspaceId}/${value.slotKey}/`
     if (!value.path.startsWith(expectedPrefix) || value.path.includes('..')) {
       return NextResponse.json({ error: 'That upload does not belong to this website slot.' }, { status: 403, headers: noStoreHeaders })
+    }
+
+    const { data: uploadGrant, error: grantError } = await admin
+      .from('website_media_upload_grants')
+      .select('id,mime_type,file_size,expires_at')
+      .eq('workspace_id', auth.access.workspaceId)
+      .eq('user_id', auth.user.id)
+      .eq('slot_key', value.slotKey)
+      .eq('storage_path', value.path)
+      .is('finalized_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+    if (grantError) throw new Error(grantError.message)
+    if (!uploadGrant) {
+      return NextResponse.json({ error: 'This upload session expired. Prepare and upload the file again.' }, { status: 403, headers: noStoreHeaders })
+    }
+    if (uploadGrant.mime_type !== value.mimeType || Number(uploadGrant.file_size) !== value.fileSize) {
+      return NextResponse.json({ error: 'The uploaded file does not match its secure upload session.' }, { status: 409, headers: noStoreHeaders })
     }
 
     const pathParts = value.path.split('/')
@@ -233,6 +257,13 @@ export async function POST(request: Request) {
       metadata: { slotKey: value.slotKey, fileName: safeFileName, fileSize: verifiedSize },
     })
     if (auditError) console.error('Website media audit write failed:', auditError)
+
+    const { error: finalizeGrantError } = await admin
+      .from('website_media_upload_grants')
+      .update({ finalized_at: new Date().toISOString() })
+      .eq('id', uploadGrant.id)
+      .is('finalized_at', null)
+    if (finalizeGrantError) throw new Error(finalizeGrantError.message)
 
     const media = await getWebsiteMediaForWorkspace(auth.access.workspaceId)
     return NextResponse.json(media.find((slot) => slot.slotKey === value.slotKey), {

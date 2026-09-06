@@ -8,6 +8,8 @@ import * as tus from 'tus-js-client'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { adminBtnGhost, adminBtnPrimary, adminInput, adminLabel, adminPage, adminPanel } from '@/lib/admin-ui'
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
+import { getSupabaseKey } from '@/lib/supabase/env'
 import {
   DEFAULT_WEBSITE_MEDIA,
   mergeWebsiteMedia,
@@ -24,7 +26,6 @@ type UploadState = {
 type UploadSession = {
   bucket: string
   path: string
-  token: string
   endpoint: string
   error?: string
 }
@@ -112,11 +113,16 @@ export default function WebsiteMediaPage() {
     slotKey: WebsiteMediaSlotKey,
     file: File,
     session: UploadSession,
+    accessToken: string,
   ) => new Promise<void>((resolve, reject) => {
     const upload = new tus.Upload(file, {
       endpoint: session.endpoint,
       retryDelays: [0, 3_000, 5_000, 10_000, 20_000],
-      headers: { 'x-signature': session.token },
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        apikey: getSupabaseKey(),
+        'x-upsert': 'false',
+      },
       uploadDataDuringCreation: true,
       removeFingerprintOnSuccess: true,
       chunkSize: 6 * 1024 * 1024,
@@ -170,7 +176,16 @@ export default function WebsiteMediaPage() {
       const session = (await sessionResponse.json().catch(() => ({}))) as UploadSession
       if (!sessionResponse.ok) throw new Error(session.error || 'Secure upload could not be prepared.')
 
-      await runResumableUpload(slot.slotKey, file, session)
+      // The access token is forwarded only to Supabase Storage. Authorization
+      // decisions remain enforced by the server route and Storage RLS policy.
+      const supabase = createSupabaseBrowserClient()
+      const { data: authData, error: authError } = await supabase.auth.getSession()
+      const accessToken = authData.session?.access_token
+      if (authError || !accessToken) {
+        throw new Error('Your secure session expired. Sign in and complete MFA again.')
+      }
+
+      await runResumableUpload(slot.slotKey, file, session, accessToken)
       setUploadState((current) => ({
         ...current,
         [slot.slotKey]: { status: 'publishing', percent: 100, message: 'Publishing to the website…' },
