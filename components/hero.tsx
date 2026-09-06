@@ -10,7 +10,6 @@ const ease = [0.22, 1, 0.36, 1] as const
 
 export default function Hero() {
   const { scrollY } = useScroll()
-  const imageY = useTransform(scrollY, [0, 600], [0, 80])
   const contentY = useTransform(scrollY, [0, 600], [0, 40])
   const contentOpacity = useTransform(scrollY, [0, 400], [1, 0.3])
 
@@ -37,42 +36,21 @@ export default function Hero() {
       id="home"
       className="relative h-[100svh] min-h-[100svh] w-full overflow-hidden bg-[#1c2e22] sm:h-auto sm:min-h-screen sm:min-h-[100dvh] sm:bg-black"
     >
-      {/* Mobile: static cover (no parallax) so the photo fills edge-to-edge with no top gap */}
-      <div className="absolute inset-0 z-0 sm:hidden">
+      {/* One responsive image avoids downloading separate hidden mobile and desktop copies. */}
+      <div className="absolute inset-0 z-0">
         <Image
           src="/model/model_2.jpg"
           alt="Graduation portrait at FICO MANA Studio"
           fill
-          className="object-cover object-center brightness-[1.08] contrast-[1.04]"
+          className="object-cover object-center brightness-[1.08] contrast-[1.04] sm:brightness-[1.1]"
           priority
-          sizes="(max-width: 639px) 100vw, 1px"
+          sizes="100vw"
         />
-        {/* Darken only the bottom for text/CTAs — keep the top of the photo clean */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent sm:hidden" />
+        <div className="absolute inset-0 hidden bg-gradient-to-r from-black/75 via-black/45 to-transparent sm:block" />
+        <div className="absolute inset-0 hidden bg-gradient-to-t from-black/80 via-transparent to-transparent sm:block md:from-black/70" />
+        <div className="absolute inset-0 hidden bg-gradient-to-t from-black/25 to-black/40 sm:block" />
       </div>
-
-      {/* Desktop / tablet: parallax image */}
-      <motion.div className="absolute inset-0 z-0 hidden sm:block" style={{ y: imageY }}>
-        <motion.div
-          className="absolute inset-0"
-          initial={{ scale: 1.05 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 14, ease: 'easeOut' }}
-        >
-          <Image
-            src="/model/model_2.jpg"
-            alt="Graduation portrait at FICO MANA Studio"
-            fill
-            className="object-cover object-center brightness-[1.1] contrast-[1.04]"
-            priority
-            sizes="(max-width: 639px) 1px, 100vw"
-          />
-        </motion.div>
-
-        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent md:from-black/70" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/25 to-black/40" />
-      </motion.div>
 
       <motion.div
         style={{ y: contentY, opacity: contentOpacity }}
