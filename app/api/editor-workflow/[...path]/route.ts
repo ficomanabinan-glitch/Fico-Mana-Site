@@ -14,6 +14,7 @@ import {
   getBatchDetail,
   getBatchFailedBookingIds,
   getBatchList,
+  getOnsiteBatchSummary,
   getUploadReport,
   getPortalData,
   getPortalFile,
@@ -253,11 +254,8 @@ async function handle(request: NextRequest, path: string[]) {
       const shootDate = request.nextUrl.searchParams.get('date') || ''
       if (!/^\d{4}-\d{2}-\d{2}$/.test(shootDate)) return json({ error: 'A valid shoot date is required.' }, 400)
       const synchronize = request.nextUrl.searchParams.get('fast') !== '1'
-      const batch = (await getBatchList(workspaceId, { synchronize })).find((item) => item.shootDate === shootDate)
-      const detail = batch
-        ? await getBatchDetail(workspaceId, batch.id, { batchListEntry: batch, synchronize: false })
-        : null
-      return json({ shootDate, batch: detail })
+      const batch = await getOnsiteBatchSummary(workspaceId, shootDate, { synchronize })
+      return json({ shootDate, batch })
     }
 
     if (path[0] === 'uploads' && path[1] === 'report' && method === 'GET') {

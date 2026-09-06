@@ -320,22 +320,15 @@
   }
 }
 
-@keyframes gallery-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
+.gallery-swipe-carousel {
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-.gallery-marquee-track {
-  animation: gallery-marquee var(--gallery-marquee-duration, 32s) linear infinite;
-  will-change: transform;
-}
-
-.gallery-marquee-track.is-paused {
-  animation-play-state: paused;
+.gallery-swipe-carousel::-webkit-scrollbar {
+  display: none;
 }
 
 /* Admin / filtering: softer blue accents on dark UI (not deep #0500D0) */

@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
@@ -39,15 +39,18 @@ function GalleryImage({
   item,
   className = '',
   onOpen,
+  isClone = false,
 }: {
   item: GalleryItem
   className?: string
   onOpen: (item: GalleryItem) => void
+  isClone?: boolean
 }) {
   return (
     <motion.button
       type="button"
       onClick={() => onOpen(item)}
+      tabIndex={isClone ? -1 : undefined}
       className={`relative overflow-hidden rounded-2xl md:rounded-3xl group cursor-pointer text-left ${className}`}
     >
       <div className="overflow-hidden">
@@ -56,6 +59,7 @@ function GalleryImage({
           alt={item.alt}
           width={IMAGE_WIDTH}
           height={IMAGE_HEIGHT}
+          draggable={false}
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
           className="w-full h-auto block transition-transform duration-700 ease-out will-change-transform group-hover:scale-110"
         />
@@ -74,48 +78,160 @@ function GalleryCarousel({
   items: GalleryItem[]
   onOpen: (item: GalleryItem) => void
 }) {
-  const [paused, setPaused] = useState(false)
-  const pauseTimerRef = useRef<number | null>(null)
-  const loopItems = [...items, ...items]
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const firstSequenceRef = useRef<HTMLDivElement | null>(null)
+  const pauseUntilRef = useRef(0)
+  const suppressClickRef = useRef(false)
+  const pointerRef = useRef<{
+    id: number
+    pointerType: string
+    startX: number
+    startScrollLeft: number
+    moved: boolean
+  } | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const reduceMotion = useReducedMotion()
 
-  const pauseBriefly = () => {
-    setPaused(true)
-    if (pauseTimerRef.current) window.clearTimeout(pauseTimerRef.current)
-    pauseTimerRef.current = window.setTimeout(() => setPaused(false), 5000)
+  const pauseIndefinitely = () => {
+    pauseUntilRef.current = Number.POSITIVE_INFINITY
+  }
+
+  const resumeAfterInteraction = (delay = 1400) => {
+    pauseUntilRef.current = performance.now() + delay
+  }
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    pauseIndefinitely()
+    pointerRef.current = {
+      id: event.pointerId,
+      pointerType: event.pointerType,
+      startX: event.clientX,
+      startScrollLeft: event.currentTarget.scrollLeft,
+      moved: false,
+    }
+    if (event.pointerType === 'mouse' && event.button === 0) {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      setDragging(true)
+    }
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const pointer = pointerRef.current
+    if (!pointer || pointer.id !== event.pointerId) return
+    const distance = event.clientX - pointer.startX
+    if (Math.abs(distance) > 6) {
+      pointer.moved = true
+      suppressClickRef.current = true
+    }
+    if (pointer.pointerType === 'mouse') {
+      event.currentTarget.scrollLeft = pointer.startScrollLeft - distance
+    }
+  }
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    const pointer = pointerRef.current
+    if (!pointer || pointer.id !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    pointerRef.current = null
+    setDragging(false)
+    resumeAfterInteraction()
+    window.setTimeout(() => {
+      suppressClickRef.current = false
+    }, 0)
   }
 
   useEffect(() => {
-    return () => {
-      if (pauseTimerRef.current) window.clearTimeout(pauseTimerRef.current)
+    let animationFrame = 0
+    let previousTime = performance.now()
+
+    const advance = (time: number) => {
+      const scroller = scrollerRef.current
+      const sequenceWidth = firstSequenceRef.current?.offsetWidth ?? 0
+      const elapsed = Math.min(64, Math.max(0, time - previousTime))
+      previousTime = time
+
+      if (
+        scroller &&
+        sequenceWidth > 0 &&
+        !reduceMotion &&
+        !document.hidden &&
+        time >= pauseUntilRef.current
+      ) {
+        const pixelsPerMillisecond = sequenceWidth / Math.max(1, items.length * 4000)
+        scroller.scrollLeft += pixelsPerMillisecond * elapsed
+        if (scroller.scrollLeft >= sequenceWidth) {
+          scroller.scrollLeft -= sequenceWidth
+        }
+      }
+
+      animationFrame = window.requestAnimationFrame(advance)
     }
-  }, [])
+
+    animationFrame = window.requestAnimationFrame(advance)
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+    }
+  }, [items.length, reduceMotion])
 
   return (
     <div
       className="relative overflow-hidden -mx-4 sm:-mx-6 md:-mx-8 lg:-mx-12"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
     >
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 md:w-16 bg-gradient-to-r from-black via-black/80 to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 md:w-20 bg-gradient-to-l from-black via-black/80 to-transparent" />
 
       <div
+        ref={scrollerRef}
+        role="region"
+        aria-label="Swipe through graduation gallery photos"
         className={cn(
-          'gallery-marquee-track flex w-max gap-3 md:gap-4 px-4 sm:px-6 md:px-8 lg:px-12',
-          paused && 'is-paused',
+          'gallery-swipe-carousel overflow-x-auto select-none',
+          dragging ? 'cursor-grabbing' : 'cursor-grab',
         )}
-        style={{ '--gallery-marquee-duration': `${items.length * 4}s` } as React.CSSProperties}
-        onTouchStart={pauseBriefly}
-        onPointerDown={pauseBriefly}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onWheel={() => resumeAfterInteraction(1200)}
+        onFocusCapture={pauseIndefinitely}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            resumeAfterInteraction(700)
+          }
+        }}
+        onClickCapture={(event) => {
+          if (!suppressClickRef.current) return
+          event.preventDefault()
+          event.stopPropagation()
+        }}
       >
-        {loopItems.map((item, index) => (
+        <div className="flex w-max">
+          {[0, 1].map((sequence) => (
+            <div
+              key={sequence}
+              ref={sequence === 0 ? firstSequenceRef : undefined}
+              className="flex shrink-0 gap-3 pl-4 sm:pl-6 md:gap-4 md:pl-8 lg:pl-12"
+              aria-hidden={sequence === 1 ? true : undefined}
+            >
+              {items.map((item) => (
+                <div
+                  key={`${sequence}-${item.id}`}
+                  className="shrink-0 w-[76vw] max-w-[300px] sm:max-w-[320px] md:w-[28vw] md:max-w-[360px] lg:max-w-[400px]"
+                >
+                  <GalleryImage item={item} onOpen={onOpen} isClone={sequence === 1} className="w-full" />
+                </div>
+              ))}
+            </div>
+          ))}
           <div
-            key={`${item.id}-${index}`}
-            className="shrink-0 w-[76vw] max-w-[300px] sm:max-w-[320px] md:w-[28vw] md:max-w-[360px] lg:max-w-[400px]"
+            aria-hidden="true"
+            className="w-4 shrink-0 sm:w-6 md:w-8 lg:w-12"
           >
-            <GalleryImage item={item} onOpen={onOpen} className="w-full" />
+            &nbsp;
           </div>
-        ))}
+        </div>
       </div>
     </div>
   )

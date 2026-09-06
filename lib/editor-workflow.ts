@@ -304,6 +304,116 @@ export async function getBatchList(
   })
 }
 
+/**
+ * Load only the fields needed by the onsite upload views.
+ *
+ * The full batch detail includes editing reports, selections, add-ons, print
+ * allocations, and audit history. None of those optional dependencies should
+ * prevent onsite staff from seeing today's clients or uploading RAW photos.
+ */
+export async function getOnsiteBatchSummary(
+  workspaceId: string,
+  shootDate: string,
+  { synchronize = true }: { synchronize?: boolean } = {},
+) {
+  const admin = adminClient()
+  if (synchronize) await syncEditorWorkflow(workspaceId)
+
+  const { data: batches, error: batchesError } = await admin
+    .from('editing_batches')
+    .select('id,display_id,shoot_date,batch_sequence')
+    .eq('workspace_id', workspaceId)
+    .eq('shoot_date', shootDate)
+    .order('batch_sequence', { ascending: true })
+  if (batchesError) throw new Error(batchesError.message)
+  if (!batches?.length) return null
+
+  const batchIds = batches.map((batch) => String(batch.id))
+  const { data: jobs, error: jobsError } = await admin
+    .from('editing_jobs')
+    .select('booking_id,last_error')
+    .eq('workspace_id', workspaceId)
+    .in('batch_id', batchIds)
+  if (jobsError) throw new Error(jobsError.message)
+
+  const bookingIds = [...new Set((jobs || []).map((job) => String(job.booking_id)))]
+  if (!bookingIds.length) {
+    return { id: String(batches[0].display_id), shootDate, jobs: [] }
+  }
+
+  const [bookingsResult, galleryResult, foldersResult] = await Promise.all([
+    admin
+      .from('bookings')
+      .select('id,customer_name,package_name,booking_time,booking_status')
+      .in('id', bookingIds),
+    admin
+      .from('gallery_files')
+      .select('booking_id,created_at')
+      .in('booking_id', bookingIds),
+    admin
+      .from('drive_folders')
+      .select('booking_id,drive_folder_id')
+      .in('booking_id', bookingIds)
+      .eq('folder_type', 'RAW'),
+  ])
+  if (bookingsResult.error) throw new Error(bookingsResult.error.message)
+  if (galleryResult.error) {
+    console.error('Onsite summary gallery read failed:', galleryResult.error.message)
+  }
+  if (foldersResult.error) {
+    console.error('Onsite summary Drive folder read failed:', foldersResult.error.message)
+  }
+
+  const bookingMap = new Map(
+    (bookingsResult.data || []).map((booking) => [String(booking.id), booking]),
+  )
+  const galleryByBooking = new Map<string, { count: number; lastUploadAt: string | null }>()
+  for (const file of galleryResult.error ? [] : galleryResult.data || []) {
+    const bookingId = String(file.booking_id)
+    const current = galleryByBooking.get(bookingId) || { count: 0, lastUploadAt: null }
+    const createdAt = String(file.created_at || '')
+    current.count += 1
+    if (createdAt && (!current.lastUploadAt || createdAt > current.lastUploadAt)) {
+      current.lastUploadAt = createdAt
+    }
+    galleryByBooking.set(bookingId, current)
+  }
+  const rawFolderByBooking = new Map(
+    (foldersResult.error ? [] : foldersResult.data || []).map((folder) => [
+      String(folder.booking_id),
+      String(folder.drive_folder_id),
+    ]),
+  )
+
+  const onsiteJobs = (jobs || [])
+    .map((job) => {
+      const bookingId = String(job.booking_id)
+      const booking = bookingMap.get(bookingId)
+      if (!booking || ACTIVE_BOOKING_EXCLUSIONS.has(String(booking.booking_status || ''))) return null
+      const gallery = galleryByBooking.get(bookingId)
+      return {
+        bookingId,
+        customerName: String(booking.customer_name || bookingId),
+        packageName: String(booking.package_name || ''),
+        bookingTime: String(booking.booking_time || ''),
+        galleryCount: gallery?.count || 0,
+        lastUploadAt: gallery?.lastUploadAt || null,
+        rawFolderDriveId: rawFolderByBooking.get(bookingId) || null,
+        lastError: job.last_error ? String(job.last_error) : null,
+      }
+    })
+    .filter((job): job is NonNullable<typeof job> => Boolean(job))
+    .sort((left, right) =>
+      left.bookingTime.localeCompare(right.bookingTime) || left.customerName.localeCompare(right.customerName),
+    )
+
+  return {
+    id: String(batches[0].display_id),
+    shootDate,
+    jobs: onsiteJobs,
+  }
+}
+
 async function findBatch(admin: SupabaseClient, workspaceId: string, displayId: string) {
   const { data, error } = await admin
     .from('editing_batches')
@@ -363,8 +473,17 @@ export async function getBatchDetail(
       .order('created_at', { ascending: false })
       .limit(100),
   ])
-  const failed = [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult].find((result) => result.error)
-  if (failed?.error) throw new Error(failed.error.message)
+  if (bookingsResult.error) throw new Error(bookingsResult.error.message)
+  for (const [name, result] of [
+    ['photo selections', selectionsResult],
+    ['gallery files', galleryResult],
+    ['deliverables', deliveryResult],
+    ['Drive folders', foldersResult],
+    ['audit history', auditsResult],
+    ['match reviews', reviewsResult],
+  ] as const) {
+    if (result.error) console.error(`Batch detail ${name} read failed:`, result.error.message)
+  }
   const selectionIds = (selectionsResult.data || []).map((selection) => String(selection.id))
   const [selectionItemsResult, printAllocationsResult, addonOrdersResult] = selectionIds.length
     ? await Promise.all([
@@ -373,8 +492,13 @@ export async function getBatchDetail(
         admin.from('client_addon_orders').select('selection_id,name_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,total_amount').in('selection_id', selectionIds),
       ])
     : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
-  const selectionDetailError = selectionItemsResult.error || printAllocationsResult.error || addonOrdersResult.error
-  if (selectionDetailError) throw new Error(selectionDetailError.message)
+  for (const [name, result] of [
+    ['selection items', selectionItemsResult],
+    ['print allocations', printAllocationsResult],
+    ['add-on orders', addonOrdersResult],
+  ] as const) {
+    if (result.error) console.error(`Batch detail ${name} read failed:`, result.error.message)
+  }
   const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
   const selectionMap = new Map((selectionsResult.data || []).map((selection) => [String(selection.booking_id), selection]))
   const galleryNameMap = new Map((galleryResult.data || []).map((file) => [String(file.id), String(file.file_name)]))
@@ -942,8 +1066,21 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .order('name', { ascending: true }),
     ])
   if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
-  if (selectionResult.error) throw new Error(selectionResult.error.message)
-  if (catalogResult.error) throw new Error(catalogResult.error.message)
+  const warnings: string[] = []
+  for (const [label, result] of [
+    ['photo selection', selectionResult],
+    ['gallery photos', galleryResult],
+    ['deliverables', deliverablesResult],
+    ['editing status', jobResult],
+    ['payments', paymentsResult],
+    ['project resources', resourcesResult],
+    ['add-ons', catalogResult],
+  ] as const) {
+    if (result.error) {
+      warnings.push(label)
+      console.error(`Client portal ${label} read failed:`, result.error.message)
+    }
+  }
   const selectionId = String(selectionResult.data?.id || '00000000-0000-0000-0000-000000000000')
   const [itemsResult, allocationsResult, ordersResult] = await Promise.all([
     admin
@@ -960,8 +1097,15 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       .eq('selection_id', selectionId)
       .order('created_at', { ascending: true }),
   ])
-  if (itemsResult.error || allocationsResult.error || ordersResult.error) {
-    throw new Error(itemsResult.error?.message || allocationsResult.error?.message || ordersResult.error?.message || 'Selection details unavailable.')
+  for (const [label, result] of [
+    ['selected-photo details', itemsResult],
+    ['print allocations', allocationsResult],
+    ['add-on orders', ordersResult],
+  ] as const) {
+    if (result.error) {
+      warnings.push(label)
+      console.error(`Client portal ${label} read failed:`, result.error.message)
+    }
   }
   const selectedItems = (itemsResult.data || []).map((row) => ({
     fileId: String(row.gallery_file_id),
@@ -984,6 +1128,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       amountPaid: (paymentsResult.data || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
     },
     portalId: String(portal.public_id),
+    warnings: [...new Set(warnings)],
     selection: selectionResult.data
       ? {
           id: String(selectionResult.data.id),

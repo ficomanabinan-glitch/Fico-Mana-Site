@@ -52,6 +52,7 @@ export default function EditorDashboard() {
   const [todayJobs, setTodayJobs] = useState<TodayJob[]>([])
   const [batchesLoading, setBatchesLoading] = useState(() => getCachedEditorBatches() === null)
   const [onsiteLoading, setOnsiteLoading] = useState(true)
+  const [onsiteError, setOnsiteError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [downloading, setDownloading] = useState('')
   const today = dateKey()
@@ -86,6 +87,12 @@ export default function EditorDashboard() {
         if (!response.ok) throw new Error('Today’s onsite work could not be loaded.')
         const onsite = (await response.json()) as { batch?: { jobs?: TodayJob[] } | null }
         setTodayJobs(onsite.batch?.jobs || [])
+        setOnsiteError('')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Today’s onsite work could not be loaded.'
+        const solution = `${message} Try: refresh the dashboard once. If it continues, open Onsite Upload and select today’s date.`
+        setOnsiteError(solution)
+        throw new Error(solution)
       } finally {
         setOnsiteLoading(false)
       }
@@ -180,6 +187,23 @@ export default function EditorDashboard() {
         {onsiteLoading ? (
           <div className="space-y-3 p-5 animate-pulse" aria-label="Loading today’s onsite clients">
             {Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-14 rounded bg-white/[0.06]" />)}
+          </div>
+        ) : onsiteError ? (
+          <div className="flex flex-col gap-4 bg-amber-500/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between" role="alert">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-300" />
+              <div>
+                <p className="text-xs font-semibold text-amber-200">Today’s onsite list is temporarily unavailable</p>
+                <p className="mt-1 max-w-2xl text-[10px] leading-relaxed text-amber-100/60">{onsiteError}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void load(false)}
+              className={`${adminBtnGhost} inline-flex shrink-0 items-center justify-center gap-2 px-3 py-2`}
+            >
+              <RefreshCw className="size-3.5" />Retry
+            </button>
           </div>
         ) : todayJobs.length === 0 ? (
           <div className="p-10 text-center text-xs text-white/35">No client shoots are scheduled today.</div>

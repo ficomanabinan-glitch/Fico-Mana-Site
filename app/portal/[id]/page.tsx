@@ -27,11 +27,12 @@ type PortalData={
   deliverables:Array<{id:string;fileName:string;mimeType:string;fileSize:number;publishedAt:string;previewUrl:string}>
   resources:PortalResource[]
   downloadAllUrl:string
+  warnings?:string[]
 }
 
 function money(value:number){return new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP',maximumFractionDigits:0}).format(value)}
 function stageLabel(status:string){return status.replace(/_/g,' ').replace(/\b\w/g,(char)=>char.toUpperCase())}
-function AccessMessage({title,message}:{title:string;message:string}){return <main className="flex min-h-screen items-center justify-center bg-[#171717] p-6 text-white"><div className="w-full max-w-lg border border-white/10 bg-white/[0.03] p-8 text-center"><h1 className="text-xl font-semibold">{title}</h1><p className="mt-3 text-sm leading-relaxed text-white/50">{message}</p></div></main>}
+function AccessMessage({title,message,onRetry}:{title:string;message:string;onRetry?:()=>void}){return <main className="flex min-h-screen items-center justify-center bg-[#171717] p-6 text-white"><div className="w-full max-w-lg border border-white/10 bg-white/[0.03] p-8 text-center"><h1 className="text-xl font-semibold">{title}</h1><p className="mt-3 text-sm leading-relaxed text-white/50">{message}</p>{onRetry?<button type="button" onClick={onRetry} className={`${portalPrimaryAction} mt-5 px-5 py-2.5 text-xs font-bold uppercase`}>Try Again</button>:null}</div></main>}
 
 const portalPrimaryAction='rounded-lg bg-primary text-white transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-[#0300a8] hover:shadow-[0_10px_28px_rgba(5,0,208,0.35)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#171717] disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none'
 export default function ClientPortalPage(){
@@ -43,10 +44,10 @@ export default function ClientPortalPage(){
       const credentialQuery=signature&&!data?`&sig=${encodeURIComponent(signature)}`:''
       const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}?offset=${offset}&limit=48${credentialQuery}`,{cache:'no-store',credentials:'include'})
       const body=(await response.json().catch(()=>({}))) as PortalData&{error?:string}
-      if(!response.ok)throw new Error(body.error||'This client portal is unavailable.')
+      if(!response.ok){const reason=body.error||'This client portal is unavailable.';throw new Error(`${reason} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)}
       setData((previous)=>offset===0?body:{...body,gallery:[...(previous?.gallery||[]),...body.gallery]})
       if(signature&&!data)window.history.replaceState(null,'',`/portal/${encodeURIComponent(publicId)}`)
-    }catch(loadError){setError(loadError instanceof Error?loadError.message:'This client portal is unavailable.')}
+    }catch(loadError){const message=loadError instanceof Error?loadError.message:'This client portal is unavailable.';setError(message.includes('Try:')?message:`${message} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)}
     finally{setLoading(false);setLoadingMore(false)}
   }
   useEffect(()=>{if(publicId)void load();else setLoading(false)
@@ -56,12 +57,13 @@ export default function ClientPortalPage(){
   const balance=data?Math.max(0,data.booking.price-data.booking.amountPaid):0
 
   if(loading)return <main className="flex min-h-screen items-center justify-center bg-[#171717] text-sm text-white/40">Loading your FICO MANA project…</main>
-  if(error&&!data)return <AccessMessage title="Portal unavailable" message={error}/>
-  if(!data)return <AccessMessage title="Portal unavailable" message="This project could not be loaded."/>
+  if(error&&!data)return <AccessMessage title="Portal unavailable" message={error} onRetry={()=>void load(0)}/>
+  if(!data)return <AccessMessage title="Portal unavailable" message="This project could not be loaded. Try: refresh this page or ask FICO MANA staff to reopen your private portal link." onRetry={()=>void load(0)}/>
 
   return <main className="min-h-screen bg-[#171717] text-white"><div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
     <header className="border-b border-white/10 pb-6"><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#C4CEFF]">FICO MANA Client Portal</p><div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold sm:text-3xl">{data.booking.customerName}</h1><p className="mt-1 font-mono text-[10px] text-white/35">{data.booking.id}</p></div><div className="border border-white/10 bg-white/[0.03] px-4 py-3"><p className="text-[9px] uppercase tracking-wider text-white/35">Project Status</p><p className="mt-1 text-sm font-semibold text-[#C4CEFF]">{stageLabel(data.editingStatus)}</p></div></div></header>
-    {error?<div className="mt-5 border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200">{error}</div>:null}
+    {error?<div className="mt-5 border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200" role="alert">{error}</div>:null}
+    {data.warnings?.length?<div className="mt-5 border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-relaxed text-amber-100" role="status"><strong>Some project details are temporarily unavailable:</strong> {data.warnings.join(', ')}. Try: refresh this page once; your booking and any available photos can still be viewed.</div>:null}
     <div className="mt-6 grid gap-5 lg:grid-cols-3"><section className="space-y-5 lg:col-span-2">
       <div className="grid gap-4 sm:grid-cols-2"><InfoCard icon={CalendarDays} label="Your Session"><p className="font-semibold">{data.booking.bookingDate}</p><p className="mt-1 text-xs text-white/45">{data.booking.bookingTime}</p></InfoCard><InfoCard icon={Package} label="Your Package"><p className="font-semibold">{data.booking.packageName}</p><p className="mt-1 text-xs text-white/45">Booking {data.booking.bookingStatus}</p></InfoCard></div>
       <ClientPhotoSelection publicId={publicId} selection={data.selection} gallery={data.gallery} galleryTotal={data.galleryTotal} loadingMore={loadingMore} addons={data.addonCatalog} onLoadMore={()=>void load(data.gallery.length)} onSubmitted={()=>load(0)}/>
