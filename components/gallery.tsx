@@ -7,33 +7,17 @@ import { X } from 'lucide-react'
 import SectionHeader from '@/components/section-header'
 import SectionShell from '@/components/section-shell'
 import { cn } from '@/lib/utils'
+import { useWebsiteMedia } from '@/lib/website-media-client'
 
 const IMAGE_WIDTH = 2040
 const IMAGE_HEIGHT = 2560
 
 type GalleryItem = {
-  id: number
+  id: string
   image: string
   category: string
   alt: string
 }
-
-const topRowItems: GalleryItem[] = [
-  { id: 1, image: '/grad/grad_3.jpg', category: 'Graduation', alt: 'Graduation portrait in toga' },
-  { id: 2, image: '/grad/grad_1.jpg', category: 'Graduation', alt: 'Graduation portrait with toga and cap' },
-  { id: 3, image: '/grad/grad_8.jpg', category: 'Graduation', alt: 'Graduation portrait with toga and cap' },
-]
-
-const bottomRowItems: GalleryItem[] = [
-  { id: 4, image: '/grad/grad_4.jpg', category: 'Graduation', alt: 'Graduation toga portrait' },
-  { id: 5, image: '/grad/grad_5.jpg', category: 'Graduation', alt: 'Graduation glamour portrait' },
-  { id: 6, image: '/grad/grad_2.jpg', category: 'Graduation', alt: 'Graduation studio portrait' },
-  { id: 7, image: '/grad/grad_6.jpg', category: 'Graduation', alt: 'Graduation portrait session' },
-  { id: 8, image: '/grad/grad_7.jpg', category: 'Graduation', alt: 'Graduation portrait details' },
-  { id: 9, image: '/grad/grad_9.jpg', category: 'Graduation', alt: 'Graduation sablay portrait' },
-]
-
-const allItems = [...topRowItems, ...bottomRowItems]
 
 function GalleryImage({
   item,
@@ -239,6 +223,15 @@ function GalleryCarousel({
 
 export default function Gallery() {
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null)
+  const media = useWebsiteMedia()
+  const galleryItems: GalleryItem[] = media
+    .filter((slot) => slot.kind === 'image')
+    .map((slot) => ({
+      id: slot.slotKey,
+      image: slot.url,
+      category: 'Graduation',
+      alt: slot.altText,
+    }))
 
   useEffect(() => {
     if (!lightbox) return
@@ -257,7 +250,7 @@ export default function Gallery() {
         description="Celebrate your achievement with professionally captured graduation portraits — elegant, timeless, and uniquely yours."
       />
 
-      <GalleryCarousel items={allItems} onOpen={setLightbox} />
+      <GalleryCarousel items={galleryItems} onOpen={setLightbox} />
 
       {lightbox && (
         <div

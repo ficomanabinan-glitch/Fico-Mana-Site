@@ -8,6 +8,7 @@ import {
   Bell,
   CalendarDays,
   CheckSquare,
+  Clapperboard,
   FileText,
   FolderHeart,
   Image,
@@ -67,6 +68,7 @@ const navigationSections = [
     label: 'System Management',
     items: [
       { label: 'Package Manager', href: '/admin/packages', icon: PackageOpen },
+      { label: 'Website Media', href: '/admin/media', icon: Clapperboard },
       { label: 'Email Logs', href: '/admin/emails', icon: FileText },
       { label: 'System Settings', href: '/admin/system', icon: Settings },
     ],

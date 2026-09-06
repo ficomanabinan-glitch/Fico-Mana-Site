@@ -74,6 +74,13 @@ const nextConfig = {
     imageSizes: [32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 2592000,
     localPatterns: [{ pathname: '/**' }],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        pathname: '/storage/v1/object/public/website-media/**',
+      },
+    ],
   },
   async headers() {
     return [

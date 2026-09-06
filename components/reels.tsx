@@ -3,27 +3,41 @@
 import { motion } from 'framer-motion'
 import { Volume2, VolumeX, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useWebsiteMedia } from '@/lib/website-media-client'
 
-const REEL_VIDEO = '/breanna-reel.mp4'
 const PLAY_LEAD_VH = 0.35
 const PRELOAD_LEAD_VH = 1
 const PAUSE_ABOVE_VH = 1.2
 
-function loadReel(video: HTMLVideoElement) {
+function loadReel(video: HTMLVideoElement, source: string) {
   if (video.dataset.loaded === 'true') return
   video.dataset.loaded = 'true'
-  video.src = REEL_VIDEO
+  video.src = source
   video.preload = 'metadata'
   video.load()
 }
 
 export default function Reels() {
+  const media = useWebsiteMedia()
+  const reelSource = media.find((slot) => slot.kind === 'video')?.url || '/breanna-reel.mp4'
   const sectionRef = useRef<HTMLElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const shouldPlayRef = useRef(false)
   const preloadStartedRef = useRef(false)
   const [muted, setMuted] = useState(true)
   const [playing, setPlaying] = useState(false)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    shouldPlayRef.current = false
+    preloadStartedRef.current = false
+    video.pause()
+    video.removeAttribute('src')
+    video.dataset.loaded = 'false'
+    video.load()
+    setPlaying(false)
+  }, [reelSource])
 
   useEffect(() => {
     const video = videoRef.current
@@ -76,7 +90,7 @@ export default function Reels() {
 
       if (top <= preloadThreshold && !preloadStartedRef.current) {
         preloadStartedRef.current = true
-        loadReel(video)
+        loadReel(video, reelSource)
       }
 
       const wantsPlay = top <= playThreshold && bottom > 0
@@ -131,12 +145,12 @@ export default function Reels() {
       observer.disconnect()
       video.pause()
     }
-  }, [muted])
+  }, [muted, reelSource])
 
   const toggleMute = () => {
     const video = videoRef.current
     if (!video) return
-    loadReel(video)
+    loadReel(video, reelSource)
     const next = !muted
     setMuted(next)
     video.muted = next
@@ -147,7 +161,7 @@ export default function Reels() {
   const tapToPlay = () => {
     const video = videoRef.current
     if (!video) return
-    loadReel(video)
+    loadReel(video, reelSource)
     shouldPlayRef.current = true
     void video.play().then(() => setPlaying(true)).catch(() => {})
   }
