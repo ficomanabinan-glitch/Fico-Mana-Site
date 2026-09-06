@@ -157,7 +157,7 @@ export default function EditorDashboard() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Onsite Clients Today" value={todayJobs.length} tone="text-cyan-300" icon={ImagePlus} />
-        <Metric label="Ready to Download" value={totals.download} tone="text-amber-300" icon={Download} />
+        <Metric label="Pending Download" value={totals.download} tone="text-amber-300" icon={Download} />
         <Metric label="Uploading" value={totals.uploading} tone="text-violet-300" icon={UploadCloud} />
         <Metric label="Upload Failed" value={totals.failed} tone="text-red-300" icon={AlertTriangle} />
       </div>
@@ -243,7 +243,7 @@ export default function EditorDashboard() {
                       <p className="text-base font-semibold">{dayLabel(batch.shootDate)}</p>
                       <p className="mt-1 font-mono text-[9px] text-white/30">{batch.id}</p>
                       <p className="mt-2 text-[10px] text-white/40">
-                        {batch.totalClients} clients · {batch.counts.readyForEditing} ready to download · {batch.counts.readyToUpload} ready to upload
+                        {batch.totalClients} clients · {batch.counts.readyForEditing} pending download · {batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.uploading} downloaded
                       </p>
                     </div>
                     <div>
@@ -264,11 +264,11 @@ export default function EditorDashboard() {
                       <button
                         type="button"
                         onClick={() => startDownload(batch)}
-                        disabled={!batch.counts.readyForEditing || downloading === batch.id}
+                        disabled={!(batch.counts.readyForEditing + batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.failed) || downloading === batch.id}
                         className={`${adminBtnPrimary} inline-flex items-center gap-2 px-3 py-2 disabled:opacity-35`}
                       >
                         <Download className="size-3.5" />
-                        {downloading === batch.id ? 'Preparing…' : 'Download Batch'}
+                        {downloading === batch.id ? 'Preparing…' : batch.counts.downloaded > 0 ? 'Download Batch Again' : 'Download Batch'}
                       </button>
                       <Link
                         href={`/editor/upload?batch=${encodeURIComponent(batch.id)}${batch.counts.failed ? '&retry=1' : ''}`}

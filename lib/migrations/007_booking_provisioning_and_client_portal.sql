@@ -3,6 +3,16 @@ create extension if not exists pgcrypto;
 alter table public.bookings
   add column if not exists confirmed_at timestamptz null;
 
+create table if not exists public.payments (
+  id text primary key,
+  booking_id varchar not null references public.bookings(id) on delete cascade,
+  amount numeric(12, 2) not null check (amount >= 0),
+  method text not null,
+  payment_type text not null,
+  transaction_ref text null,
+  created_at timestamptz not null default now()
+);
+
 alter table public.payments
   add column if not exists status varchar(32) not null default 'confirmed',
   add column if not exists verified_at timestamptz null,
@@ -11,6 +21,13 @@ alter table public.payments
 create unique index if not exists payments_provider_event_id_uidx
   on public.payments(provider_event_id)
   where provider_event_id is not null;
+
+create index if not exists payments_booking_created_idx
+  on public.payments(booking_id, created_at desc);
+
+alter table public.payments enable row level security;
+revoke all on public.payments from anon, authenticated;
+grant all on public.payments to service_role;
 
 create table if not exists public.google_drive_settings (
   id smallint primary key default 1 check (id = 1),

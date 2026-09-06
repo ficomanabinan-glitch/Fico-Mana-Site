@@ -32,7 +32,7 @@ export type EditorBatchSummary = {
 export type EditorQueueUiState = {
   groupMode: 'day' | 'week' | 'month'
   dateSortOrder: 'asc' | 'desc'
-  filter: 'ALL' | 'WAITING_FOR_SELECTION' | 'READY_FOR_EDITING' | 'EDITING' | 'READY_TO_UPLOAD' | 'DELIVERED' | 'UPLOAD_FAILED'
+  filter: 'ALL' | 'WAITING_FOR_SELECTION' | 'READY_FOR_EDITING' | 'DOWNLOADED' | 'DELIVERED' | 'UPLOAD_FAILED'
   search: string
   packageFilter: string
 }

@@ -20,19 +20,29 @@ on conflict (slug) do update set name = excluded.name, updated_at = now();
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null check (role in ('owner', 'admin', 'editor', 'staff')),
+  role text not null check (role in ('owner', 'admin', 'editor', 'onsite', 'staff')),
   created_at timestamptz not null default now(),
   primary key (workspace_id, user_id)
 );
 
 insert into public.workspace_members (workspace_id, user_id, role)
-select w.id, u.id, 'admin'
+select w.id,
+       u.id,
+       case
+         when u.raw_app_meta_data ->> 'role' in ('owner','admin','editor','onsite','staff')
+           then u.raw_app_meta_data ->> 'role'
+         when coalesce(u.raw_app_meta_data -> 'roles', '[]'::jsonb) ? 'owner' then 'owner'
+         when coalesce(u.raw_app_meta_data -> 'roles', '[]'::jsonb) ? 'admin' then 'admin'
+         when coalesce(u.raw_app_meta_data -> 'roles', '[]'::jsonb) ? 'editor' then 'editor'
+         when coalesce(u.raw_app_meta_data -> 'roles', '[]'::jsonb) ? 'onsite' then 'onsite'
+         else 'staff'
+       end
 from public.workspaces w
 cross join auth.users u
 where w.slug = 'fico-mana'
   and (
-    u.raw_app_meta_data ->> 'role' = 'admin'
-    or coalesce(u.raw_app_meta_data -> 'roles', '[]'::jsonb) ? 'admin'
+    u.raw_app_meta_data ->> 'role' in ('owner','admin','editor','onsite','staff')
+    or coalesce(u.raw_app_meta_data -> 'roles', '[]'::jsonb) ?| array['owner','admin','editor','onsite','staff']
   )
 on conflict (workspace_id, user_id) do nothing;
 

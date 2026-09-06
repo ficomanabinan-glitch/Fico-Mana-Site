@@ -52,8 +52,43 @@ export const publicReceiptResubmitSchema = z
   })
   .strict()
 
+const portalEnhancementPreferenceSchema = z.enum(['standard', 'less', 'raw'])
+const portalPrintCategorySchema = z.enum([
+  'TOGA_PICTURE_4R',
+  'ALAMPAY_BARONG_4R',
+  'FRAME_8R',
+  'WALLET_SIZE',
+])
+
 export const portalSelectionSchema = z
-  .object({ fileIds: z.array(z.string().uuid()).min(1).max(500) })
+  .object({
+    // fileIds remains accepted for older portal links. New clients send the
+    // explicit included/extra arrays so the server can price Extra Edit safely.
+    fileIds: z.array(z.string().uuid()).min(1).max(205),
+    includedFileIds: z.array(z.string().uuid()).max(5).optional(),
+    extraEditFileIds: z.array(z.string().uuid()).max(200).optional(),
+    preferences: z
+      .array(z.object({ fileId: z.string().uuid(), preference: portalEnhancementPreferenceSchema }).strict())
+      .max(205)
+      .default([]),
+    printAllocations: z
+      .array(
+        z
+          .object({ category: portalPrintCategorySchema, fileId: z.string().uuid(), quantity: z.number().int().min(1).max(4) })
+          .strict(),
+      )
+      .max(4)
+      .default([]),
+    addons: z
+      .array(
+        z
+          .object({ addonId: z.string().uuid(), quantity: z.number().int().min(1).max(500), photoCount: z.number().int().min(0).max(200).default(0) })
+          .strict(),
+      )
+      .max(4)
+      .default([]),
+    acknowledgeNoRevision: z.boolean().default(false),
+  })
   .strict()
 
 const databaseIdSchema = z.string().uuid()
@@ -66,7 +101,12 @@ const uploadMimeTypeSchema = z
   .regex(/^(?:image\/(?:jpeg|png|webp|tiff|heic|heif)|application\/octet-stream)$/i)
 
 export const editorBatchUploadStartSchema = z
-  .object({ bookingIds: z.array(bookingReferenceSchema).min(1).max(500) })
+  .object({
+    clients: z.array(z.object({
+      bookingId: bookingReferenceSchema,
+      expectedFiles: z.number().int().min(1).max(1_000),
+    }).strict()).min(1).max(500),
+  })
   .strict()
 
 export const editorUploadSessionSchema = z
@@ -117,6 +157,20 @@ export const editorJobStatusSchema = z
       'UPLOADING',
       'DELIVERED',
       'UPLOAD_FAILED',
+    ]),
+  })
+  .strict()
+
+export const clientSelectionStatusSchema = z
+  .object({
+    status: z.enum([
+      'Not Started',
+      'Selection In Progress',
+      'Submitted',
+      'Editing',
+      'Ready for Printing',
+      'Ready for Release',
+      'Released',
     ]),
   })
   .strict()

@@ -5,6 +5,11 @@
 alter table public.workspace_members
   add column if not exists display_name text;
 
+alter table public.workspace_members drop constraint if exists workspace_members_role_check;
+alter table public.workspace_members
+  add constraint workspace_members_role_check
+  check (role in ('owner','admin','editor','onsite','staff'));
+
 alter table public.editing_jobs
   add column if not exists assigned_editor_id uuid references auth.users(id) on delete set null,
   add column if not exists assigned_editor_name text,

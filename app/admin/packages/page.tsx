@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import AddonCatalogManager from '@/components/addon-catalog-manager'
 import {
   BOOKING_PACKAGE_CATEGORY_LABELS,
   type BookingPackageCategory,
@@ -300,6 +301,8 @@ export default function PackageManagerPage() {
           <div className={`${adminPanel} col-span-full p-10 text-center text-sm text-white/40`}>No packages match these filters.</div>
         ) : null}
       </div>
+
+      <AddonCatalogManager />
 
       {draft ? (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm">

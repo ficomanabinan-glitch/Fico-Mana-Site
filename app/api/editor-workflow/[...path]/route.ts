@@ -28,6 +28,7 @@ import {
   reopenPhotoSelection,
   resolveMatchReview,
   saveRawFile,
+  setClientSelectionStatus,
   setEditingJobStatus,
   submitPhotoSelection,
   type EditingJobStatus,
@@ -42,6 +43,7 @@ import {
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/lib/security/file-validation'
 import {
+  clientSelectionStatusSchema,
   editorBatchUploadFinalizeSchema,
   editorBatchUploadStartSchema,
   editorClientUploadFinalizeSchema,
@@ -175,7 +177,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
   if (path[2] === 'selection' && method === 'POST') {
     const parsed = portalSelectionSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return json({ error: 'A valid photo selection is required.' }, 400)
-    return json(await submitPhotoSelection(publicId, parsed.data.fileIds))
+    return json(await submitPhotoSelection(publicId, parsed.data))
   }
   if (path[2] === 'file' && path[3] && method === 'GET') {
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'gallery'
@@ -343,7 +345,7 @@ async function handle(request: NextRequest, path: string[]) {
         if (denied) return denied
         const parsed = editorBatchUploadStartSchema.safeParse(await request.json().catch(() => null))
         if (!parsed.success) return json({ error: 'A valid batch upload manifest is required.' }, 400)
-        return json(await createBatchUploadRun(workspaceId, batchId, parsed.data.bookingIds, actorId))
+        return json(await createBatchUploadRun(workspaceId, batchId, parsed.data.clients, actorId))
       }
       if (path[2] === 'upload-session' && method === 'POST') {
         const denied = requireCapability('edit')
@@ -468,6 +470,13 @@ async function handle(request: NextRequest, path: string[]) {
       const denied = requireCapability('admin')
       if (denied) return denied
       return json(await reopenPhotoSelection(workspaceId, decodeURIComponent(path[1]), actorId))
+    }
+    if (path[0] === 'selections' && path[1] && path[2] === 'status' && method === 'PATCH') {
+      const denied = requireCapability('admin')
+      if (denied) return denied
+      const parsed = clientSelectionStatusSchema.safeParse(await request.json().catch(() => null))
+      if (!parsed.success) return json({ error: 'A valid client selection status is required.' }, 400)
+      return json(await setClientSelectionStatus(workspaceId, decodeURIComponent(path[1]), parsed.data.status, actorId))
     }
     if (path[0] === 'jobs' && path[1] && path[2] === 'assign' && method === 'POST') {
       const denied = requireCapability('edit')

@@ -352,7 +352,7 @@ export default function EditorUploadPhotos({
                     <p className={result.status === 'DELIVERED' ? 'text-emerald-300' : 'text-red-300'}>
                       {result.status === 'DELIVERED' ? 'Uploaded' : 'Upload failed'}
                     </p>
-                    <p className="mt-1 text-[10px] text-white/35">Expected {result.expected} · Uploaded {result.uploaded}</p>
+                    <p className="mt-1 text-[10px] text-white/35">Folder files {result.expected} · Registered {result.uploaded}</p>
                     {result.error ? <p className="mt-1 max-w-lg text-[10px] text-red-300/70">{result.error}</p> : null}
                   </div>
                 </div>

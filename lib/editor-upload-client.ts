@@ -277,6 +277,10 @@ export async function uploadDetectedBatch(
     throw new Error(options.failedOnly ? 'This folder has no failed clients to retry.' : 'This batch has no clients ready for upload.')
   }
   const work = createUploadWork(batch, allowedBookingIds)
+  const emptyClient = work.find((item) => item.edited.length === 0)
+  if (emptyClient) {
+    throw new Error(`${emptyClient.client.customer_name || emptyClient.client.booking_id} has no photos inside its EDITED folder.`)
+  }
   const filesTotal = work.reduce((sum, item) => sum + item.edited.length, 0)
   const bytesTotal = work.reduce(
     (sum, item) => sum + item.edited.reduce((fileSum, upload) => fileSum + upload.file.size, 0),
@@ -306,7 +310,12 @@ export async function uploadDetectedBatch(
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bookingIds: work.map((item) => item.client.booking_id) }),
+      body: JSON.stringify({
+        clients: work.map((item) => ({
+          bookingId: item.client.booking_id,
+          expectedFiles: item.edited.length,
+        })),
+      }),
     },
   )
   const start = await responseJson(startResponse)
@@ -401,7 +410,7 @@ export async function uploadDetectedBatch(
         bookingId,
         customerName,
         status: 'UPLOAD_FAILED',
-        expected: Number(item.client.expected_output_count || 0),
+        expected: item.edited.length,
         uploaded: 0,
         error: clientError || (error instanceof Error ? error.message : 'Upload failed.'),
       }

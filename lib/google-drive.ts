@@ -211,6 +211,7 @@ export async function copyDriveFile(input: {
   destinationFolderId: string
   bookingId: string
   galleryFileId: string
+  purpose?: string
 }): Promise<DriveFile> {
   const source = await getDriveFile(input.fileId)
   const existing = (await listDriveFiles(input.destinationFolderId)).find(
@@ -224,7 +225,7 @@ export async function copyDriveFile(input: {
       body: JSON.stringify({
         name: source.name,
         parents: [input.destinationFolderId],
-        appProperties: { bookingId: input.bookingId, galleryFileId: input.galleryFileId, purpose: 'selected' },
+        appProperties: { bookingId: input.bookingId, galleryFileId: input.galleryFileId, purpose: input.purpose || 'selected' },
       }),
     },
   )

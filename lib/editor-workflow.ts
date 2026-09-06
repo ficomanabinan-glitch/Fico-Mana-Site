@@ -6,6 +6,7 @@ import {
   downloadDriveFile,
   downloadDriveThumbnail,
   ensureShootHierarchy,
+  findOrCreateFolder,
   getDriveFile,
   hashDriveFileSha256,
   listDriveFiles,
@@ -40,8 +41,30 @@ type UploadFileInput = {
   checksum: string
 }
 
+export type PortalSelectionInput = {
+  fileIds: string[]
+  includedFileIds?: string[]
+  extraEditFileIds?: string[]
+  preferences?: Array<{ fileId: string; preference: 'standard' | 'less' | 'raw' }>
+  printAllocations?: Array<{ category: 'TOGA_PICTURE_4R' | 'ALAMPAY_BARONG_4R' | 'FRAME_8R' | 'WALLET_SIZE'; fileId: string; quantity: number }>
+  addons?: Array<{ addonId: string; quantity: number; photoCount: number }>
+  acknowledgeNoRevision?: boolean
+}
+
 const ACTIVE_BOOKING_EXCLUSIONS = new Set(['Cancelled', 'Rejected', 'Archived'])
 const MAX_PORTAL_PAGE_SIZE = 80
+const PRINT_CATEGORY_LIMITS = {
+  TOGA_PICTURE_4R: 1,
+  ALAMPAY_BARONG_4R: 1,
+  FRAME_8R: 1,
+  WALLET_SIZE: 4,
+} as const
+const PRINT_CATEGORY_LABELS = {
+  TOGA_PICTURE_4R: 'TOGA PICTURE - 4R',
+  ALAMPAY_BARONG_4R: 'ALAMPAY BARONG - 4R',
+  FRAME_8R: 'FRAME - 8R',
+  WALLET_SIZE: 'WALLET SIZE',
+} as const
 
 function adminClient() {
   const admin = getSupabaseAdmin()
@@ -195,6 +218,7 @@ export async function syncEditorWorkflow(workspaceId: string) {
         booking_id: booking.id,
         status: booking.raw_photo_status === 'Approved' ? 'SUBMITTED' : 'OPEN',
         required_count: Math.max(0, Number(booking.selection_limit || 5)),
+        included_limit: Math.min(5, Math.max(0, Number(booking.selection_limit || 5))),
         submitted_at:
           booking.raw_photo_status === 'Approved'
             ? booking.raw_photo_approved_at || booking.raw_photo_submitted_at || nowIso()
@@ -321,7 +345,7 @@ export async function getBatchDetail(
   const [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult] = await Promise.all([
     admin.from('bookings').select('*').in('id', bookingIds),
     admin.from('photo_selections').select('*').in('booking_id', bookingIds),
-    admin.from('gallery_files').select('booking_id,created_at').in('booking_id', bookingIds),
+    admin.from('gallery_files').select('id,booking_id,file_name,created_at').in('booking_id', bookingIds),
     admin.from('deliverable_files').select('booking_id').in('booking_id', bookingIds),
     admin.from('drive_folders').select('*').in('booking_id', bookingIds),
     admin
@@ -341,8 +365,19 @@ export async function getBatchDetail(
   ])
   const failed = [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult].find((result) => result.error)
   if (failed?.error) throw new Error(failed.error.message)
+  const selectionIds = (selectionsResult.data || []).map((selection) => String(selection.id))
+  const [selectionItemsResult, printAllocationsResult, addonOrdersResult] = selectionIds.length
+    ? await Promise.all([
+        admin.from('photo_selection_items').select('selection_id,gallery_file_id,enhancement_preference,is_extra_edit').in('selection_id', selectionIds),
+        admin.from('print_allocations').select('selection_id,category,gallery_file_id,quantity,label_snapshot').in('selection_id', selectionIds),
+        admin.from('client_addon_orders').select('selection_id,name_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,total_amount').in('selection_id', selectionIds),
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
+  const selectionDetailError = selectionItemsResult.error || printAllocationsResult.error || addonOrdersResult.error
+  if (selectionDetailError) throw new Error(selectionDetailError.message)
   const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
   const selectionMap = new Map((selectionsResult.data || []).map((selection) => [String(selection.booking_id), selection]))
+  const galleryNameMap = new Map((galleryResult.data || []).map((file) => [String(file.id), String(file.file_name)]))
   const folderMap = new Map<string, Record<string, unknown>>()
   for (const folder of foldersResult.data || []) folderMap.set(`${folder.booking_id}:${folder.folder_type}`, folder)
 
@@ -352,6 +387,7 @@ export async function getBatchDetail(
       const bookingId = String(job.booking_id)
       const booking = bookingMap.get(bookingId)
       const selection = selectionMap.get(bookingId)
+      const selectionId = String(selection?.id || '')
       const folder = (type: string) => folderMap.get(`${bookingId}:${type}`)?.drive_folder_id || null
       return {
         id: String(job.id),
@@ -368,8 +404,31 @@ export async function getBatchDetail(
         expectedOutputCount: Number(job.expected_output_count || 0),
         galleryCount: (galleryResult.data || []).filter((row) => row.booking_id === bookingId).length,
         selectionStatus: String(selection?.status || 'OPEN'),
+        selectionClientStatus: String(selection?.client_status || 'Not Started'),
         selectionRequiredCount: Number(selection?.required_count || job.expected_output_count || 0),
         selectionSubmittedAt: selection?.submitted_at || null,
+        enhancementPreferences: (selectionItemsResult.data || []).filter((row) => String(row.selection_id) === selectionId).map((row) => ({
+          fileId: String(row.gallery_file_id),
+          fileName: galleryNameMap.get(String(row.gallery_file_id)) || String(row.gallery_file_id),
+          preference: String(row.enhancement_preference || 'standard'),
+          extraEdit: Boolean(row.is_extra_edit),
+        })),
+        printAllocations: (printAllocationsResult.data || []).filter((row) => String(row.selection_id) === selectionId).map((row) => ({
+          category: String(row.category),
+          label: String(row.label_snapshot || row.category),
+          fileId: String(row.gallery_file_id),
+          fileName: galleryNameMap.get(String(row.gallery_file_id)) || String(row.gallery_file_id),
+          quantity: Number(row.quantity || 1),
+        })),
+        addonOrders: (addonOrdersResult.data || []).filter((row) => String(row.selection_id) === selectionId).map((row) => ({
+          name: String(row.name_snapshot),
+          pricingType: String(row.pricing_type_snapshot),
+          unitPrice: Number(row.unit_price_snapshot || 0),
+          quantity: Number(row.quantity || 0),
+          photoCount: Number(row.photo_count || 0),
+          total: Number(row.total_amount || 0),
+        })),
+        totalAddonAmount: Number(selection?.total_addon_amount || 0),
         rawFolderDriveId: folder('RAW'),
         selectedFolderDriveId: folder('SELECTED'),
         editedFolderDriveId: folder('EDITED'),
@@ -853,8 +912,9 @@ async function portalRecord(publicId: string) {
 export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   const { admin, portal } = await portalRecord(publicId)
   const bookingId = String(portal.booking_id)
+  const workspaceId = String(portal.workspace_id)
   const pageSize = Math.min(MAX_PORTAL_PAGE_SIZE, Math.max(1, limit))
-  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult] =
+  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult] =
     await Promise.all([
       admin.from('bookings').select('*').eq('id', bookingId).single(),
       admin.from('photo_selections').select('*').eq('booking_id', bookingId).maybeSingle(),
@@ -873,17 +933,41 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .eq('booking_id', bookingId)
         .eq('is_visible', true)
         .order('created_at', { ascending: false }),
+      admin
+        .from('addon_catalog')
+        .select('id,name,description,price_amount,pricing_type,display_order,max_quantity')
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'active')
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true }),
     ])
   if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
   if (selectionResult.error) throw new Error(selectionResult.error.message)
-  const selectedIds = selectionResult.data
-    ? (
-        await admin
-          .from('photo_selection_items')
-          .select('gallery_file_id')
-          .eq('selection_id', selectionResult.data.id)
-      ).data?.map((row) => String(row.gallery_file_id)) || []
-    : []
+  if (catalogResult.error) throw new Error(catalogResult.error.message)
+  const selectionId = String(selectionResult.data?.id || '00000000-0000-0000-0000-000000000000')
+  const [itemsResult, allocationsResult, ordersResult] = await Promise.all([
+    admin
+      .from('photo_selection_items')
+      .select('gallery_file_id,enhancement_preference,is_extra_edit')
+      .eq('selection_id', selectionId),
+    admin
+      .from('print_allocations')
+      .select('category,gallery_file_id,quantity,label_snapshot')
+      .eq('selection_id', selectionId),
+    admin
+      .from('client_addon_orders')
+      .select('addon_catalog_id,name_snapshot,description_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,total_amount')
+      .eq('selection_id', selectionId)
+      .order('created_at', { ascending: true }),
+  ])
+  if (itemsResult.error || allocationsResult.error || ordersResult.error) {
+    throw new Error(itemsResult.error?.message || allocationsResult.error?.message || ordersResult.error?.message || 'Selection details unavailable.')
+  }
+  const selectedItems = (itemsResult.data || []).map((row) => ({
+    fileId: String(row.gallery_file_id),
+    preference: String(row.enhancement_preference || 'standard'),
+    extraEdit: Boolean(row.is_extra_edit),
+  }))
   await admin.from('client_portals').update({ last_accessed_at: nowIso() }).eq('id', portal.id)
   const booking = bookingResult.data
   return {
@@ -905,9 +989,30 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
           id: String(selectionResult.data.id),
           status: String(selectionResult.data.status),
           requiredCount: Number(selectionResult.data.required_count),
+          includedLimit: Number(selectionResult.data.included_limit ?? Math.min(5, Number(selectionResult.data.required_count || 5))),
+          clientStatus: String(selectionResult.data.client_status || 'Not Started'),
+          noRevisionAcknowledged: Boolean(selectionResult.data.no_revision_acknowledged),
           submittedAt: selectionResult.data.submitted_at || null,
           reopenedAt: selectionResult.data.reopened_at || null,
-          selectedIds,
+          selectedIds: selectedItems.map((item) => item.fileId),
+          selectedItems,
+          printAllocations: (allocationsResult.data || []).map((row) => ({
+            category: String(row.category),
+            fileId: String(row.gallery_file_id),
+            quantity: Number(row.quantity || 1),
+            label: String(row.label_snapshot || PRINT_CATEGORY_LABELS[String(row.category) as keyof typeof PRINT_CATEGORY_LABELS] || row.category),
+          })),
+          addonOrders: (ordersResult.data || []).map((row) => ({
+            addonId: row.addon_catalog_id ? String(row.addon_catalog_id) : null,
+            name: String(row.name_snapshot),
+            description: String(row.description_snapshot || ''),
+            pricingType: String(row.pricing_type_snapshot),
+            unitPrice: Number(row.unit_price_snapshot || 0),
+            quantity: Number(row.quantity || 0),
+            photoCount: Number(row.photo_count || 0),
+            total: Number(row.total_amount || 0),
+          })),
+          totalAddonAmount: Number(selectionResult.data.total_addon_amount || 0),
         }
       : null,
     gallery: (galleryResult.data || []).map((file) => ({
@@ -919,6 +1024,14 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     galleryOffset: Math.max(0, offset),
     galleryLimit: pageSize,
     editingStatus: String(jobResult.data?.status || 'WAITING_FOR_SELECTION'),
+    addonCatalog: (catalogResult.data || []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      description: String(row.description || ''),
+      price: Number(row.price_amount || 0),
+      pricingType: String(row.pricing_type),
+      maxQuantity: Number(row.max_quantity || 1),
+    })),
     deliverables: (deliverablesResult.data || []).map((file) => ({
       id: String(file.id),
       fileName: String(file.file_name),
@@ -975,23 +1088,53 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
   }
 }
 
-export async function submitPhotoSelection(publicId: string, fileIds: string[]) {
+export async function submitPhotoSelection(publicId: string, input: PortalSelectionInput) {
   const { admin, portal } = await portalRecord(publicId)
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
+  if (!input.acknowledgeNoRevision) throw new Error('Please acknowledge the no-revision policy before submitting.')
   const { data: selection, error } = await admin
     .from('photo_selections')
-    .update({ status: 'SUBMITTING', updated_at: nowIso() })
+    .update({ status: 'SUBMITTING', client_status: 'Selection In Progress', updated_at: nowIso() })
     .eq('booking_id', bookingId)
     .in('status', ['OPEN', 'COPY_FAILED'])
     .select('*')
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!selection) throw new Error('This selection is already submitted and locked.')
-  const unique = [...new Set(fileIds)]
-  if (unique.length !== Number(selection.required_count)) {
+  const includedLimit = Math.min(5, Math.max(0, Number(selection.included_limit ?? selection.required_count ?? 5)))
+  const included = [...new Set(input.includedFileIds?.length ? input.includedFileIds : input.fileIds.slice(0, includedLimit))]
+  const extras = [...new Set(input.extraEditFileIds?.length ? input.extraEditFileIds : input.fileIds.filter((id) => !included.includes(id)))]
+  if (included.length !== includedLimit || included.some((id) => extras.includes(id))) {
     await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error(`Select exactly ${selection.required_count} photos before submitting.`)
+    throw new Error(`Select exactly ${includedLimit} included photo${includedLimit === 1 ? '' : 's'} before submitting.`)
+  }
+  const unique = [...new Set([...included, ...extras])]
+  if (unique.length > 205) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('A selection can contain at most 205 photos.')
+  }
+  const preferenceMap = new Map((input.preferences || []).map((item) => [item.fileId, item.preference]))
+  const printAllocations = input.printAllocations || []
+  if (printAllocations.length !== Object.keys(PRINT_CATEGORY_LIMITS).length) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('Choose a photo for every free print category.')
+  }
+  const allocationByCategory = new Map<string, (typeof printAllocations)[number]>()
+  for (const allocation of printAllocations) {
+    if (allocationByCategory.has(allocation.category)) {
+      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+      throw new Error('Each free print category can be selected only once.')
+    }
+    if (!included.includes(allocation.fileId)) {
+      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+      throw new Error('Free print allocations must use an included enhanced photo.')
+    }
+    if (allocation.quantity !== PRINT_CATEGORY_LIMITS[allocation.category]) {
+      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+      throw new Error(`${PRINT_CATEGORY_LABELS[allocation.category]} allows at most ${PRINT_CATEGORY_LIMITS[allocation.category]}.`)
+    }
+    allocationByCategory.set(allocation.category, allocation)
   }
   const { data: gallery, error: galleryError } = await admin
     .from('gallery_files')
@@ -1002,35 +1145,140 @@ export async function submitPhotoSelection(publicId: string, fileIds: string[]) 
     await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
     throw new Error('One or more selected photos do not belong to this portal.')
   }
+  const addonRequests = input.addons || []
+  const addonIds = [...new Set(addonRequests.map((addon) => addon.addonId))]
+  if (addonRequests.length !== addonIds.length) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('Each add-on type may appear only once.')
+  }
+  const { data: addonRows, error: addonError } = addonIds.length
+    ? await admin
+        .from('addon_catalog')
+        .select('id,name,description,price_amount,pricing_type,max_quantity')
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'active')
+        .in('id', addonIds)
+    : { data: [], error: null }
+  if (addonError || (addonRows || []).length !== addonIds.length) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('One or more selected add-ons are no longer available.')
+  }
+  const addonMap = new Map((addonRows || []).map((row) => [String(row.id), row]))
+  const extraAddon = [...addonMap.values()].find((row) => String(row.name).toLowerCase() === 'extra edit')
+  const requestedExtraAddon = addonRequests.find((addon) => String(addon.addonId) === String(extraAddon?.id))
+  if (extras.length && (!extraAddon || !requestedExtraAddon || Number(requestedExtraAddon.photoCount || requestedExtraAddon.quantity) !== extras.length)) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('Add Extra Edit for every photo selected beyond the included allocation.')
+  }
+  if (!extras.length && requestedExtraAddon) {
+    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+    throw new Error('Extra Edit can only be added when photos exceed the included allocation.')
+  }
+  for (const request of addonRequests) {
+    const row = addonMap.get(request.addonId)
+    if (!row || request.quantity > Number(row.max_quantity || 1)) {
+      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
+      throw new Error(row ? `${row.name} exceeds its maximum quantity.` : 'Selected add-on not found.')
+    }
+  }
+  const addonOrders = addonRequests.map((request) => {
+    const row = addonMap.get(request.addonId)
+    if (!row) throw new Error('Selected add-on not found.')
+    const quantity = Number(request.quantity)
+    const photoCount = Number(request.photoCount || 0)
+    const pricingType = String(row.pricing_type) as 'fixed' | 'per_photo' | 'per_piece'
+    const billableUnits = pricingType === 'fixed' ? 1 : pricingType === 'per_photo' ? Math.max(photoCount, quantity) : quantity
+    return {
+      workspace_id: workspaceId,
+      booking_id: bookingId,
+      selection_id: selection.id,
+      addon_catalog_id: row.id,
+      name_snapshot: String(row.name),
+      description_snapshot: String(row.description || ''),
+      pricing_type_snapshot: pricingType,
+      unit_price_snapshot: Number(row.price_amount || 0),
+      quantity,
+      photo_count: photoCount,
+      total_amount: Number(row.price_amount || 0) * billableUnits,
+    }
+  })
+  const totalAddonAmount = addonOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
   try {
     const { hierarchy, batch } = await ensureBookingFolders(admin, workspaceId, bookingId)
+    const extraFolder = extras.length ? await findOrCreateFolder(hierarchy.selected.id, 'EXTRA EDITS') : null
     const items: Record<string, unknown>[] = []
     for (const file of gallery) {
+      const extraEdit = extras.includes(String(file.id))
       const copy = await copyDriveFile({
         fileId: String(file.drive_file_id),
-        destinationFolderId: hierarchy.selected.id,
+        destinationFolderId: extraEdit && extraFolder ? extraFolder.id : hierarchy.selected.id,
         bookingId,
         galleryFileId: String(file.id),
+        purpose: extraEdit ? 'extra-edit' : 'selected-enhanced',
       })
       items.push({
         selection_id: selection.id,
         gallery_file_id: file.id,
         selected_drive_file_id: copy.id,
         copied_at: nowIso(),
+        enhancement_preference: preferenceMap.get(String(file.id)) || 'standard',
+        is_extra_edit: extraEdit,
+      })
+    }
+    const allocationRows: Record<string, unknown>[] = []
+    for (const allocation of printAllocations) {
+      const folder = await findOrCreateFolder(hierarchy.selected.id, PRINT_CATEGORY_LABELS[allocation.category])
+      const file = gallery.find((item) => String(item.id) === allocation.fileId)
+      if (!file) throw new Error('A print allocation references an unknown photo.')
+      const copy = await copyDriveFile({
+        fileId: String(file.drive_file_id),
+        destinationFolderId: folder.id,
+        bookingId,
+        galleryFileId: String(file.id),
+        purpose: `print-${allocation.category.toLowerCase()}`,
+      })
+      allocationRows.push({
+        workspace_id: workspaceId,
+        booking_id: bookingId,
+        selection_id: selection.id,
+        gallery_file_id: file.id,
+        category: allocation.category,
+        quantity: allocation.quantity,
+        label_snapshot: PRINT_CATEGORY_LABELS[allocation.category],
+        drive_file_id: copy.id,
       })
     }
     await admin.from('photo_selection_items').delete().eq('selection_id', selection.id)
+    await admin.from('print_allocations').delete().eq('selection_id', selection.id)
+    await admin.from('client_addon_orders').delete().eq('selection_id', selection.id)
     const { error: itemError } = await admin.from('photo_selection_items').insert(items)
     if (itemError) throw new Error(itemError.message)
+    if (allocationRows.length) {
+      const { error: allocationError } = await admin.from('print_allocations').insert(allocationRows)
+      if (allocationError) throw new Error(allocationError.message)
+    }
+    if (addonOrders.length) {
+      const { error: addonOrderError } = await admin.from('client_addon_orders').insert(addonOrders)
+      if (addonOrderError) throw new Error(addonOrderError.message)
+    }
     const submittedAt = nowIso()
     await Promise.all([
       admin
         .from('photo_selections')
-        .update({ status: 'SUBMITTED', submitted_at: submittedAt, updated_at: submittedAt })
+        .update({
+          status: 'SUBMITTED',
+          client_status: 'Submitted',
+          included_limit: includedLimit,
+          no_revision_acknowledged: true,
+          no_revision_acknowledged_at: submittedAt,
+          total_addon_amount: totalAddonAmount,
+          submitted_at: submittedAt,
+          updated_at: submittedAt,
+        })
         .eq('id', selection.id),
       admin
         .from('editing_jobs')
-        .update({ status: 'READY_FOR_EDITING', selected_count: unique.length, last_error: null, updated_at: submittedAt })
+        .update({ status: 'READY_FOR_EDITING', selected_count: unique.length, expected_output_count: unique.length, last_error: null, updated_at: submittedAt })
         .eq('booking_id', bookingId),
       admin
         .from('bookings')
@@ -1045,12 +1293,12 @@ export async function submitPhotoSelection(publicId: string, fileIds: string[]) 
     await audit(admin, workspaceId, { type: 'client', id: publicId }, 'SELECTION_SUBMITTED', {
       bookingId,
       batchId: batch.id,
-      metadata: { galleryFileIds: unique, requiredCount: unique.length },
+      metadata: { galleryFileIds: unique, includedFileIds: included, extraEditFileIds: extras, printAllocations, totalAddonAmount },
     })
     await audit(admin, workspaceId, { type: 'system' }, 'SELECTED_FILES_COPIED', {
       bookingId,
       batchId: batch.id,
-      metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, destructive: false },
+        metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, printFolders: allocationRows.length, destructive: false },
     })
     return getPortalData(publicId)
   } catch (copyError) {
@@ -1084,7 +1332,15 @@ export async function reopenPhotoSelection(workspaceId: string, bookingId: strin
   const reopenedAt = nowIso()
   const { error } = await admin
     .from('photo_selections')
-    .update({ status: 'OPEN', reopened_at: reopenedAt, version: Number(selection.version || 1) + 1, updated_at: reopenedAt })
+    .update({
+      status: 'OPEN',
+      client_status: 'Selection In Progress',
+      no_revision_acknowledged: false,
+      no_revision_acknowledged_at: null,
+      reopened_at: reopenedAt,
+      version: Number(selection.version || 1) + 1,
+      updated_at: reopenedAt,
+    })
     .eq('id', selection.id)
   if (error) throw new Error(error.message)
   if (job.status !== 'DELIVERED') {
@@ -1136,12 +1392,53 @@ export async function setEditingJobStatus(
   if (next === 'READY_TO_UPLOAD') patch.ready_to_upload_at = timestamp
   const { error: updateError } = await admin.from('editing_jobs').update(patch).eq('id', job.id)
   if (updateError) throw new Error(updateError.message)
+  const clientStatus = next === 'READY_FOR_EDITING'
+    ? 'Submitted'
+    : next === 'DOWNLOADED' || next === 'EDITING'
+      ? 'Editing'
+      : next === 'READY_TO_UPLOAD'
+        ? 'Ready for Printing'
+        : next === 'UPLOADING' || next === 'DELIVERED'
+          ? 'Ready for Release'
+          : null
+  if (clientStatus) {
+    const { error: selectionError } = await admin
+      .from('photo_selections')
+      .update({ client_status: clientStatus, updated_at: timestamp })
+      .eq('workspace_id', workspaceId)
+      .eq('booking_id', bookingId)
+    if (selectionError) throw new Error(selectionError.message)
+  }
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, next === 'EDITING' ? 'EDITING_STARTED' : `JOB_STATUS_${next}`, {
     bookingId,
     batchId: job.batch_id,
     metadata: { from: current, to: next },
   })
   return { success: true }
+}
+
+export async function setClientSelectionStatus(
+  workspaceId: string,
+  bookingId: string,
+  status: 'Not Started' | 'Selection In Progress' | 'Submitted' | 'Editing' | 'Ready for Printing' | 'Ready for Release' | 'Released',
+  actorId: string,
+) {
+  const admin = adminClient()
+  const timestamp = nowIso()
+  const { data, error } = await admin
+    .from('photo_selections')
+    .update({ client_status: status, updated_at: timestamp })
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .select('id,client_status')
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Photo selection not found.')
+  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'CLIENT_SELECTION_STATUS_UPDATED', {
+    bookingId,
+    metadata: { status },
+  })
+  return { success: true, status: String(data.client_status) }
 }
 
 export async function getWorkflowMembers(workspaceId: string) {
@@ -1261,7 +1558,7 @@ export async function prepareBatchDownload(
     .from('editing_jobs')
     .select('*')
     .eq('batch_id', batch.id)
-    .eq('status', 'READY_FOR_EDITING')
+    .in('status', ['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'])
   if (error) throw new Error(error.message)
   const now = Date.now()
   const jobs = (readyJobs || []).filter((job) => {
@@ -1272,7 +1569,7 @@ export async function prepareBatchDownload(
       new Date(job.download_lock_expires_at).getTime() > now
     return !lockedElsewhere
   })
-  if (!jobs.length) throw new Error('No READY FOR EDITING jobs are available in this batch.')
+  if (!jobs.length) throw new Error('No downloadable selected clients are available in this batch.')
   const lockExpiresAt = new Date(now + 2 * 60 * 60 * 1000).toISOString()
   const { error: lockError } = await admin
     .from('editing_jobs')
@@ -1400,11 +1697,12 @@ export async function prepareBatchCollectionDownload(
   )
   const prepared: Awaited<ReturnType<typeof prepareBatchDownload>>[] = []
   for (const batch of batches) {
-    if (batch.counts.readyForEditing === 0) continue
+    const downloadable = batch.counts.readyForEditing + batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.failed
+    if (downloadable === 0) continue
     try {
       prepared.push(await prepareBatchDownload(workspaceId, batch.id, actorId, allowOverride))
     } catch (error) {
-      if (!/No READY FOR EDITING/.test(error instanceof Error ? error.message : '')) throw error
+      if (!/No downloadable selected clients/.test(error instanceof Error ? error.message : '')) throw error
     }
   }
   if (!prepared.length) throw new Error(`No downloadable jobs are available for this ${scope}.`)
@@ -1429,14 +1727,16 @@ export async function prepareBatchCollectionDownload(
 export async function createBatchUploadRun(
   workspaceId: string,
   displayId: string,
-  bookingIds: string[],
+  clients: Array<{ bookingId: string; expectedFiles: number }>,
   actorId: string,
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
-  const uniqueIds = [...new Set(bookingIds)]
+  const uniqueIds = [...new Set(clients.map((client) => client.bookingId))]
   if (!uniqueIds.length) throw new Error('Choose at least one client folder to upload.')
+  if (uniqueIds.length !== clients.length) throw new Error('Each client folder may appear only once per upload run.')
   if (uniqueIds.length > 500) throw new Error('One upload run is limited to 500 client folders.')
+  const expectedByBooking = new Map(clients.map((client) => [client.bookingId, client.expectedFiles]))
   const { data: jobs, error } = await admin
     .from('editing_jobs')
     .select('*')
@@ -1458,13 +1758,13 @@ export async function createBatchUploadRun(
       editing_job_id: job.id,
       booking_id: job.booking_id,
       status: 'PENDING',
-      expected_files: job.expected_output_count,
+      expected_files: expectedByBooking.get(String(job.booking_id)),
     })),
   )
   if (itemError) throw new Error(itemError.message)
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'BATCH_UPLOAD_STARTED', {
     batchId: batch.id,
-    metadata: { uploadJobId: run.id, bookingIds: uniqueIds },
+    metadata: { uploadJobId: run.id, clients },
   })
   return { uploadJobId: String(run.id) }
 }
@@ -1696,16 +1996,17 @@ export async function finalizeClientUpload(
     .maybeSingle()
   if (error || !item) throw new Error(error?.message || 'Upload client state not found.')
   const { count: uploadedCount, error: countError } = await admin
-    .from('deliverable_files')
+    .from('batch_upload_files')
     .select('id', { count: 'exact', head: true })
-    .eq('booking_id', bookingId)
+    .eq('upload_item_id', item.id)
+    .in('status', ['UPLOADED', 'SKIPPED_DUPLICATE'])
   if (countError) throw new Error(countError.message)
   const expected = Number(item.expected_files || item.editing_jobs.expected_output_count || 0)
   const uploaded = uploadedCount || 0
   const complete = uploaded >= expected && expected > 0
   const timestamp = nowIso()
   if (!complete) {
-    const message = `Expected ${expected} files, uploaded ${uploaded}.`
+    const message = `The selected folder contained ${expected} edited files, but only ${uploaded} were registered. Retry the failed files.`
     await admin
       .from('batch_upload_items')
       .update({ status: 'FAILED', uploaded_files: uploaded, last_error: message, updated_at: timestamp })
@@ -1732,6 +2033,11 @@ export async function finalizeClientUpload(
       .from('editing_jobs')
       .update({ status: 'DELIVERED', delivered_at: timestamp, last_error: null, updated_at: timestamp })
       .eq('id', item.editing_job_id),
+    admin
+      .from('photo_selections')
+      .update({ client_status: 'Ready for Release', updated_at: timestamp })
+      .eq('workspace_id', workspaceId)
+      .eq('booking_id', bookingId),
     admin
       .from('bookings')
       .update({ edited_photo_link: url, edited_photo_delivered_at: timestamp })
