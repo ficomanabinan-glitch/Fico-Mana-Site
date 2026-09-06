@@ -30,11 +30,13 @@ jobs:
       NEXT_PUBLIC_STAGING_ADMIN_PASSWORD: ''
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm security:secrets
       - run: pnpm security:check
