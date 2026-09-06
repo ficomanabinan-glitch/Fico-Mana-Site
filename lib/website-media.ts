@@ -1,11 +1,20 @@
 export const WEBSITE_MEDIA_BUCKET = 'website-media'
 
-export const WEBSITE_MEDIA_SLOT_KEYS = [
+export const WEBSITE_MEDIA_GALLERY_SLOT_KEYS = [
   'gallery_1',
   'gallery_2',
   'gallery_3',
   'gallery_4',
   'gallery_5',
+  'gallery_6',
+  'gallery_7',
+  'gallery_8',
+  'gallery_9',
+  'gallery_10',
+] as const
+
+export const WEBSITE_MEDIA_SLOT_KEYS = [
+  ...WEBSITE_MEDIA_GALLERY_SLOT_KEYS,
   'featured_video',
 ] as const
 
@@ -23,6 +32,8 @@ export type WebsiteMediaSlot = {
   fileSize: number | null
   updatedAt: string | null
   isCustom: boolean
+  /** Admin-only state for an extra gallery card that has not been published yet. */
+  isPlaceholder?: boolean
 }
 
 export const DEFAULT_WEBSITE_MEDIA: readonly WebsiteMediaSlot[] = [
@@ -101,13 +112,44 @@ export const DEFAULT_WEBSITE_MEDIA: readonly WebsiteMediaSlot[] = [
 ] as const
 
 const VALID_SLOT_KEYS = new Set<string>(WEBSITE_MEDIA_SLOT_KEYS)
+const VALID_GALLERY_SLOT_KEYS = new Set<string>(WEBSITE_MEDIA_GALLERY_SLOT_KEYS)
 
 export function isWebsiteMediaSlotKey(value: string): value is WebsiteMediaSlotKey {
   return VALID_SLOT_KEYS.has(value)
 }
 
+export function isWebsiteMediaGallerySlotKey(
+  value: string,
+): value is (typeof WEBSITE_MEDIA_GALLERY_SLOT_KEYS)[number] {
+  return VALID_GALLERY_SLOT_KEYS.has(value)
+}
+
 export function expectedWebsiteMediaKind(slotKey: WebsiteMediaSlotKey): WebsiteMediaKind {
   return slotKey === 'featured_video' ? 'video' : 'image'
+}
+
+export function websiteMediaSlotIndex(slotKey: WebsiteMediaSlotKey) {
+  if (slotKey === 'featured_video') return Number.POSITIVE_INFINITY
+  return Number(slotKey.slice('gallery_'.length))
+}
+
+export function createWebsiteMediaGalleryPlaceholder(
+  slotKey: (typeof WEBSITE_MEDIA_GALLERY_SLOT_KEYS)[number],
+): WebsiteMediaSlot {
+  const index = websiteMediaSlotIndex(slotKey)
+  return {
+    slotKey,
+    kind: 'image',
+    label: `Gallery Photo ${index}`,
+    url: '',
+    altText: `Graduation gallery photo ${index}`,
+    fileName: 'No photo selected',
+    mimeType: 'image/webp',
+    fileSize: null,
+    updatedAt: null,
+    isCustom: false,
+    isPlaceholder: true,
+  }
 }
 
 export function mergeWebsiteMedia(value: unknown): WebsiteMediaSlot[] {
@@ -123,7 +165,7 @@ export function mergeWebsiteMedia(value: unknown): WebsiteMediaSlot[] {
     }
   }
 
-  return defaults.map((fallback) => {
+  const mergedDefaults = defaults.map((fallback) => {
     const row = received.get(fallback.slotKey)
     if (!row) return fallback
     const url = typeof row.url === 'string' && (/^https:\/\//.test(row.url) || row.url.startsWith('/'))
@@ -140,4 +182,35 @@ export function mergeWebsiteMedia(value: unknown): WebsiteMediaSlot[] {
       isCustom: row.isCustom === true,
     }
   })
+
+  const extraGallery = WEBSITE_MEDIA_GALLERY_SLOT_KEYS.slice(5).flatMap((slotKey) => {
+    const row = received.get(slotKey)
+    if (!row) return []
+    const url = typeof row.url === 'string' && (/^https:\/\//.test(row.url) || row.url.startsWith('/'))
+      ? row.url
+      : ''
+    if (!url) return []
+    const index = websiteMediaSlotIndex(slotKey)
+    return [{
+      slotKey,
+      kind: 'image' as const,
+      label: `Gallery Photo ${index}`,
+      url,
+      altText: typeof row.altText === 'string' && row.altText.trim()
+        ? row.altText.trim()
+        : `Graduation gallery photo ${index}`,
+      fileName: typeof row.fileName === 'string' && row.fileName.trim() ? row.fileName : `gallery-${index}.webp`,
+      mimeType: typeof row.mimeType === 'string' && row.mimeType.trim() ? row.mimeType : 'image/webp',
+      fileSize: typeof row.fileSize === 'number' && Number.isFinite(row.fileSize) ? row.fileSize : null,
+      updatedAt: typeof row.updatedAt === 'string' && row.updatedAt ? row.updatedAt : null,
+      isCustom: true,
+    }]
+  })
+
+  const video = mergedDefaults.filter((slot) => slot.kind === 'video')
+  return [
+    ...mergedDefaults.filter((slot) => slot.kind === 'image'),
+    ...extraGallery,
+    ...video,
+  ]
 }

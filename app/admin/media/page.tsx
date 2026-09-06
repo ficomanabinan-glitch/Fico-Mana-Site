@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ExternalLink, FileVideo, Image as ImageIcon, RefreshCw, Save, Upload, X } from 'lucide-react'
+import { ExternalLink, FileVideo, Image as ImageIcon, Plus, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react'
 import * as tus from 'tus-js-client'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
@@ -12,10 +12,15 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { getSupabaseKey } from '@/lib/supabase/env'
 import {
   DEFAULT_WEBSITE_MEDIA,
+  WEBSITE_MEDIA_GALLERY_SLOT_KEYS,
+  createWebsiteMediaGalleryPlaceholder,
+  isWebsiteMediaGallerySlotKey,
   mergeWebsiteMedia,
+  websiteMediaSlotIndex,
   type WebsiteMediaSlot,
   type WebsiteMediaSlotKey,
 } from '@/lib/website-media'
+import { optimizeWebsiteGalleryImage } from '@/lib/website-media-image'
 
 type UploadState = {
   status: 'preparing' | 'uploading' | 'publishing' | 'failed'
@@ -33,6 +38,7 @@ type UploadSession = {
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/avif'
 const VIDEO_ACCEPT = 'video/mp4,video/webm'
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024
+const IMAGE_SOURCE_MAX_BYTES = 40 * 1024 * 1024
 const VIDEO_MAX_BYTES = 250 * 1024 * 1024
 
 function formatBytes(value: number | null) {
@@ -42,7 +48,11 @@ function formatBytes(value: number | null) {
 }
 
 function updateSlot(slots: WebsiteMediaSlot[], slot: WebsiteMediaSlot) {
-  return slots.map((current) => current.slotKey === slot.slotKey ? slot : current)
+  const found = slots.some((current) => current.slotKey === slot.slotKey)
+  const next = found
+    ? slots.map((current) => current.slotKey === slot.slotKey ? slot : current)
+    : [...slots, slot]
+  return next.sort((left, right) => websiteMediaSlotIndex(left.slotKey) - websiteMediaSlotIndex(right.slotKey))
 }
 
 export default function WebsiteMediaPage() {
@@ -57,7 +67,9 @@ export default function WebsiteMediaPage() {
   const [uploadState, setUploadState] = useState<Partial<Record<WebsiteMediaSlotKey, UploadState>>>({})
   const [altDrafts, setAltDrafts] = useState<Partial<Record<WebsiteMediaSlotKey, string>>>({})
   const [savingDescription, setSavingDescription] = useState<WebsiteMediaSlotKey | null>(null)
+  const [removingSlot, setRemovingSlot] = useState<WebsiteMediaSlotKey | null>(null)
   const activeUploads = useRef(new Map<WebsiteMediaSlotKey, tus.Upload>())
+  const addGalleryInputRef = useRef<HTMLInputElement | null>(null)
 
   const load = useCallback(async ({ refresh = false }: { refresh?: boolean } = {}) => {
     if (refresh) setRefreshing(true)
@@ -86,9 +98,9 @@ export default function WebsiteMediaPage() {
     for (const upload of activeUploads.current.values()) void upload.abort()
   }, [])
 
-  const selectFile = (slot: WebsiteMediaSlot, file: File | undefined) => {
-    if (!file) return
-    const maxBytes = slot.kind === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES
+  const selectFile = async (slot: WebsiteMediaSlot, file: File | undefined) => {
+    if (!file) return false
+    const maxBytes = slot.kind === 'image' ? IMAGE_SOURCE_MAX_BYTES : VIDEO_MAX_BYTES
     const allowed = slot.kind === 'image'
       ? IMAGE_ACCEPT.split(',').includes(file.type)
       : VIDEO_ACCEPT.split(',').includes(file.type)
@@ -96,17 +108,121 @@ export default function WebsiteMediaPage() {
       toast.error(
         'File not accepted',
         slot.kind === 'image'
-          ? 'Try: choose a JPG, PNG, WebP, or AVIF photo up to 15 MB.'
+          ? 'Try: choose a JPG, PNG, WebP, or AVIF photo up to 40 MB. It will be optimized before upload.'
           : 'Try: choose an MP4 or WebM video up to 250 MB.',
       )
-      return
+      return false
     }
-    setSelectedFiles((current) => ({ ...current, [slot.slotKey]: file }))
+
+    let preparedFile = file
+    if (slot.kind === 'image') {
+      setUploadState((current) => ({
+        ...current,
+        [slot.slotKey]: { status: 'preparing', percent: 0, message: 'Optimizing photo as WebP…' },
+      }))
+      try {
+        preparedFile = await optimizeWebsiteGalleryImage(file)
+        if (preparedFile.size > IMAGE_MAX_BYTES) {
+          throw new Error('The optimized photo is still larger than 15 MB.')
+        }
+        toast.success(
+          'Photo optimized',
+          `${formatBytes(file.size)} → ${formatBytes(preparedFile.size)} WebP`,
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'The photo could not be optimized.'
+        setUploadState((current) => ({
+          ...current,
+          [slot.slotKey]: { status: 'failed', percent: 0, message },
+        }))
+        toast.error('Photo not ready', `${message} Try: choose another photo or export it as JPG/WebP first.`)
+        return false
+      }
+    }
+
+    setSelectedFiles((current) => ({ ...current, [slot.slotKey]: preparedFile }))
     setUploadState((current) => {
       const next = { ...current }
       delete next[slot.slotKey]
       return next
     })
+    return true
+  }
+
+  const addGalleryPhoto = async (file: File | undefined) => {
+    if (!file) return
+    const used = new Set(media.filter((slot) => slot.kind === 'image').map((slot) => slot.slotKey))
+    const slotKey = WEBSITE_MEDIA_GALLERY_SLOT_KEYS.find((key) => !used.has(key))
+    if (!slotKey) {
+      toast.info('Gallery is full', 'The public gallery supports a maximum of 10 photos.')
+      return
+    }
+    const placeholder = createWebsiteMediaGalleryPlaceholder(slotKey)
+    setMedia((current) => updateSlot(current, placeholder))
+    setAltDrafts((current) => ({ ...current, [slotKey]: placeholder.altText }))
+    const accepted = await selectFile(placeholder, file)
+    if (!accepted) {
+      setMedia((current) => current.filter((slot) => slot.slotKey !== slotKey))
+      setAltDrafts((current) => {
+        const next = { ...current }
+        delete next[slotKey]
+        return next
+      })
+    }
+  }
+
+  const removeGalleryPhoto = async (slot: WebsiteMediaSlot) => {
+    if (slot.isPlaceholder) {
+      setMedia((current) => current.filter((item) => item.slotKey !== slot.slotKey))
+      setSelectedFiles((current) => {
+        const next = { ...current }
+        delete next[slot.slotKey]
+        return next
+      })
+      setAltDrafts((current) => {
+        const next = { ...current }
+        delete next[slot.slotKey]
+        return next
+      })
+      setUploadState((current) => {
+        const next = { ...current }
+        delete next[slot.slotKey]
+        return next
+      })
+      return
+    }
+    if (!slot.isCustom || !isWebsiteMediaGallerySlotKey(slot.slotKey)) return
+    const restoresFallback = websiteMediaSlotIndex(slot.slotKey) <= DEFAULT_WEBSITE_MEDIA.filter((item) => item.kind === 'image').length
+    const prompt = restoresFallback
+      ? `Restore the bundled fallback for ${slot.label}? The custom photo will be permanently removed.`
+      : `Remove ${slot.label} from the public gallery? The uploaded photo will be permanently removed.`
+    if (!window.confirm(prompt)) return
+
+    setRemovingSlot(slot.slotKey)
+    try {
+      const response = await fetch('/api/admin/website-media', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotKey: slot.slotKey }),
+      })
+      const body = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(body?.error || 'The gallery photo could not be removed.')
+      const nextMedia = mergeWebsiteMedia(body)
+      setMedia(nextMedia)
+      setAltDrafts(Object.fromEntries(nextMedia.map((item) => [item.slotKey, item.altText])))
+      setSelectedFiles((current) => {
+        const next = { ...current }
+        delete next[slot.slotKey]
+        return next
+      })
+      toast.success(restoresFallback ? 'Bundled photo restored' : 'Gallery photo removed', 'The public gallery has been updated.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The gallery photo could not be removed.'
+      toast.error('Photo not removed', `${message} Try: refresh the page and try again.`)
+    } finally {
+      setRemovingSlot(null)
+    }
   }
 
   const runResumableUpload = (
@@ -276,7 +392,7 @@ export default function WebsiteMediaPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Website Media"
-        subtitle="Replace the five graduation gallery photos and featured reel shown on the public FICO MANA website."
+        subtitle="Manage up to 10 optimized graduation gallery photos and one featured reel on the public FICO MANA website."
         onRefresh={() => void load({ refresh: true })}
         refreshing={refreshing}
       >
@@ -291,7 +407,7 @@ export default function WebsiteMediaPage() {
           <div>
             <p className="text-xs font-semibold text-white">Changes publish after each upload finishes</p>
             <p className="mt-1 text-[11px] leading-relaxed text-white/50">
-              Photos: JPG, PNG, WebP, or AVIF up to 15 MB. Video: MP4 or WebM up to 250 MB. Large videos upload in resumable chunks.
+              Photos: JPG, PNG, WebP, or AVIF up to 40 MB. Photos are resized and converted to WebP before upload. Video: MP4 or WebM up to 250 MB.
             </p>
           </div>
         </div>
@@ -310,9 +426,29 @@ export default function WebsiteMediaPage() {
       {loading ? <MediaSkeleton /> : (
         <>
           <section>
-            <div className="mb-3 flex items-center gap-2">
-              <ImageIcon className="size-4 text-[#C4CEFF]" />
-              <h2 className="text-sm font-semibold text-white">Graduation Gallery · 5 photos</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="size-4 text-[#C4CEFF]" />
+                <h2 className="text-sm font-semibold text-white">Graduation Gallery · {gallery.length} / 10 photos</h2>
+              </div>
+              <input
+                ref={addGalleryInputRef}
+                type="file"
+                accept={IMAGE_ACCEPT}
+                className="sr-only"
+                onChange={(event) => {
+                  void addGalleryPhoto(event.target.files?.[0])
+                  event.currentTarget.value = ''
+                }}
+              />
+              <button
+                type="button"
+                disabled={gallery.length >= WEBSITE_MEDIA_GALLERY_SLOT_KEYS.length}
+                onClick={() => addGalleryInputRef.current?.click()}
+                className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                <Plus className="size-3.5" /> {gallery.length >= WEBSITE_MEDIA_GALLERY_SLOT_KEYS.length ? 'Maximum 10 Photos' : 'Add Gallery Photo'}
+              </button>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {gallery.map((slot) => (
@@ -324,10 +460,12 @@ export default function WebsiteMediaPage() {
                   altText={altDrafts[slot.slotKey] ?? slot.altText}
                   savingDescription={savingDescription === slot.slotKey}
                   onAltText={(value) => setAltDrafts((current) => ({ ...current, [slot.slotKey]: value }))}
-                  onFile={(file) => selectFile(slot, file)}
+                  onFile={(file) => void selectFile(slot, file)}
                   onPublish={() => void publish(slot)}
                   onCancel={() => void cancelUpload(slot.slotKey)}
                   onSaveDescription={() => void saveDescription(slot)}
+                  onRemove={() => void removeGalleryPhoto(slot)}
+                  removing={removingSlot === slot.slotKey}
                 />
               ))}
             </div>
@@ -347,7 +485,7 @@ export default function WebsiteMediaPage() {
                   altText={altDrafts[video.slotKey] ?? video.altText}
                   savingDescription={savingDescription === video.slotKey}
                   onAltText={(value) => setAltDrafts((current) => ({ ...current, [video.slotKey]: value }))}
-                  onFile={(file) => selectFile(video, file)}
+                  onFile={(file) => void selectFile(video, file)}
                   onPublish={() => void publish(video)}
                   onCancel={() => void cancelUpload(video.slotKey)}
                   onSaveDescription={() => void saveDescription(video)}
@@ -372,6 +510,8 @@ function MediaCard({
   onPublish,
   onCancel,
   onSaveDescription,
+  onRemove,
+  removing = false,
 }: {
   slot: WebsiteMediaSlot
   selectedFile?: File
@@ -383,27 +523,59 @@ function MediaCard({
   onPublish: () => void
   onCancel: () => void
   onSaveDescription: () => void
+  onRemove?: () => void
+  removing?: boolean
 }) {
   const inputId = `website-media-${slot.slotKey}`
   const busy = upload && upload.status !== 'failed'
+  const [selectedPreview, setSelectedPreview] = useState('')
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setSelectedPreview('')
+      return
+    }
+    const objectUrl = URL.createObjectURL(selectedFile)
+    setSelectedPreview(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [selectedFile])
+
+  const displayUrl = selectedPreview || slot.url
+  const removeLabel = slot.isPlaceholder
+    ? 'Remove draft'
+    : websiteMediaSlotIndex(slot.slotKey) <= 5
+      ? 'Restore fallback'
+      : 'Remove photo'
 
   return (
     <article className={`${adminPanel} overflow-hidden`}>
       <div className={`relative overflow-hidden bg-black ${slot.kind === 'image' ? 'aspect-[4/5]' : 'aspect-video'}`}>
-        {slot.kind === 'image' ? (
-          <Image src={slot.url} alt={slot.altText} fill sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw" className="object-cover" />
+        {slot.kind === 'image' && displayUrl ? (
+          <Image src={displayUrl} alt={slot.altText} fill unoptimized={Boolean(selectedPreview)} sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw" className="object-cover" />
+        ) : slot.kind === 'image' ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 bg-white/[0.025] text-white/30">
+            <ImageIcon className="size-10" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Choose a photo to publish</span>
+          </div>
         ) : (
-          <video key={slot.url} src={slot.url} controls playsInline preload="metadata" className="h-full w-full object-cover" aria-label={slot.altText} />
+          <video key={displayUrl} src={displayUrl} controls playsInline preload="metadata" className="h-full w-full object-cover" aria-label={slot.altText} />
         )}
         <span className={`absolute left-3 top-3 rounded-md border px-2 py-1 text-[8px] font-bold uppercase tracking-wider backdrop-blur ${slot.isCustom ? 'border-emerald-500/30 bg-emerald-950/75 text-emerald-200' : 'border-white/15 bg-black/65 text-white/60'}`}>
-          {slot.isCustom ? 'Custom · Live' : 'Bundled fallback · Live'}
+          {selectedFile ? 'Optimized preview · Not live' : slot.isPlaceholder ? 'New slot · Not live' : slot.isCustom ? 'Custom · Live' : 'Bundled fallback · Live'}
         </span>
       </div>
 
       <div className="space-y-4 p-4">
-        <div>
-          <p className="text-sm font-semibold text-white">{slot.label}</p>
-          <p className="mt-1 truncate text-[10px] text-white/35">{slot.fileName} · {formatBytes(slot.fileSize)}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">{slot.label}</p>
+            <p className="mt-1 truncate text-[10px] text-white/35">{selectedFile?.name || slot.fileName} · {formatBytes(selectedFile?.size ?? slot.fileSize)}</p>
+          </div>
+          {onRemove && (slot.isPlaceholder || slot.isCustom) ? (
+            <button type="button" onClick={onRemove} disabled={Boolean(busy) || removing} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-400/20 px-2.5 py-2 text-[9px] font-bold uppercase text-red-200/75 transition hover:border-red-300/40 hover:bg-red-400/[0.07] hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-40">
+              <Trash2 className="size-3" /> {removing ? 'Removing…' : removeLabel}
+            </button>
+          ) : null}
         </div>
 
         <label className="block space-y-2" htmlFor={`${inputId}-description`}>

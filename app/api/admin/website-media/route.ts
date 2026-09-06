@@ -9,6 +9,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getSupabaseUrl } from '@/lib/supabase/env'
 import {
   WEBSITE_MEDIA_BUCKET,
+  WEBSITE_MEDIA_GALLERY_SLOT_KEYS,
+  WEBSITE_MEDIA_SLOT_KEYS,
   expectedWebsiteMediaKind,
   type WebsiteMediaKind,
 } from '@/lib/website-media'
@@ -21,14 +23,8 @@ const IMAGE_MAX_BYTES = 15 * 1024 * 1024
 const VIDEO_MAX_BYTES = 250 * 1024 * 1024
 const UPLOAD_GRANT_LIFETIME_MS = 2 * 60 * 60 * 1000
 
-const slotKeySchema = z.enum([
-  'gallery_1',
-  'gallery_2',
-  'gallery_3',
-  'gallery_4',
-  'gallery_5',
-  'featured_video',
-])
+const slotKeySchema = z.enum(WEBSITE_MEDIA_SLOT_KEYS)
+const gallerySlotKeySchema = z.enum(WEBSITE_MEDIA_GALLERY_SLOT_KEYS)
 const mimeTypeSchema = z.enum([...IMAGE_MIME_TYPES, ...VIDEO_MIME_TYPES])
 const uploadSessionSchema = z.object({
   action: z.literal('create_upload'),
@@ -49,6 +45,9 @@ const finalizeSchema = z.object({
 const descriptionSchema = z.object({
   slotKey: slotKeySchema,
   altText: z.string().trim().min(3).max(180),
+}).strict()
+const deleteGallerySchema = z.object({
+  slotKey: gallerySlotKeySchema,
 }).strict()
 
 function maximumSize(kind: WebsiteMediaKind) {
@@ -305,6 +304,67 @@ export async function PATCH(request: Request) {
     return secureErrorResponse(error, 'Failed to update the media description.', {
       request,
       context: 'PATCH /api/admin/website-media',
+    })
+  }
+}
+
+export async function DELETE(request: Request) {
+  const auth = await authorize(request)
+  if (auth.error || !auth.access || !auth.user) return auth.error
+  const admin = getSupabaseAdmin()
+  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+
+  try {
+    const parsed = deleteGallerySchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Choose a valid gallery photo to remove.' }, { status: 400, headers: noStoreHeaders })
+    }
+    const rateLimit = await enforceApiRateLimit(request, API_RATE_LIMITS.websiteMediaUpload, [
+      auth.user.id,
+      parsed.data.slotKey,
+      'delete_gallery',
+    ])
+    if (rateLimit) return rateLimit
+
+    const { data: existing, error: findError } = await admin
+      .from('website_media_slots')
+      .select('storage_path,file_name')
+      .eq('workspace_id', auth.access.workspaceId)
+      .eq('slot_key', parsed.data.slotKey)
+      .maybeSingle()
+    if (findError) throw new Error(findError.message)
+    if (!existing) {
+      return NextResponse.json({ error: 'That custom gallery photo is no longer present.' }, { status: 404, headers: noStoreHeaders })
+    }
+
+    const { error: deleteError } = await admin
+      .from('website_media_slots')
+      .delete()
+      .eq('workspace_id', auth.access.workspaceId)
+      .eq('slot_key', parsed.data.slotKey)
+    if (deleteError) throw new Error(deleteError.message)
+
+    const { error: storageError } = await admin.storage
+      .from(WEBSITE_MEDIA_BUCKET)
+      .remove([existing.storage_path])
+    if (storageError) console.error('Website media object cleanup failed:', storageError)
+
+    const { error: auditError } = await admin.from('workflow_audit_logs').insert({
+      workspace_id: auth.access.workspaceId,
+      actor_type: 'staff',
+      actor_id: auth.user.id,
+      action: 'WEBSITE_MEDIA_REMOVED',
+      metadata: { slotKey: parsed.data.slotKey, fileName: existing.file_name },
+    })
+    if (auditError) console.error('Website media removal audit write failed:', auditError)
+
+    return NextResponse.json(await getWebsiteMediaForWorkspace(auth.access.workspaceId), {
+      headers: noStoreHeaders,
+    })
+  } catch (error) {
+    return secureErrorResponse(error, 'Failed to remove the gallery photo.', {
+      request,
+      context: 'DELETE /api/admin/website-media',
     })
   }
 }
