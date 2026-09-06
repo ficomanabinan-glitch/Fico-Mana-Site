@@ -5,9 +5,9 @@ const PORTAL_COOKIE = 'ficomana_portal_session'
 
 function signingSecret() {
   const dedicated = process.env.PORTAL_SIGNING_SECRET?.trim()
-  const secret = process.env.NODE_ENV === 'production'
-    ? dedicated
-    : dedicated || process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  // Preserve signatures created before the dedicated secret was introduced.
+  // Operators can rotate to PORTAL_SIGNING_SECRET later with a planned link migration.
+  const secret = dedicated || process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   if (!secret) throw new Error('Portal signing secret is not configured.')
   if (process.env.NODE_ENV === 'production' && secret.length < 32) {
     throw new Error('Portal signing secret is too short.')

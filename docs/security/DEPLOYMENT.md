@@ -54,3 +54,9 @@ Changing `PORTAL_SIGNING_SECRET` invalidates old invitation links and remembered
 portal cookies. Changing `GOOGLE_TOKEN_ENCRYPTION_KEY` makes stored Drive refresh
 tokens unreadable until Google Drive is reconnected. Plan those rotations rather
 than changing them accidentally during rollback.
+
+During the initial migration, omitting those two dedicated variables preserves
+the previous service-key-derived signatures and Drive encryption. Add the
+dedicated values only during a planned portal-link rotation and Drive
+reconnection; the remaining security variables should still be configured
+before deployment.

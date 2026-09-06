@@ -18,16 +18,21 @@ export function validateProductionSecurityEnvironment() {
   if (process.env.NODE_ENV !== 'production') return
 
   const issues: EnvironmentIssue[] = []
+  const serviceSecret = value('SUPABASE_SECRET_KEY') || value('SUPABASE_SERVICE_ROLE_KEY')
+  const portalSecret = value('PORTAL_SIGNING_SECRET') || serviceSecret
   requireValue(issues, 'NEXT_PUBLIC_SUPABASE_URL')
   requireValue(issues, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
-  if (!value('SUPABASE_SECRET_KEY') && !value('SUPABASE_SERVICE_ROLE_KEY')) {
+  if (!serviceSecret) {
     issues.push({ name: 'SUPABASE_SECRET_KEY', reason: 'is missing' })
   }
-  requireValue(issues, 'PORTAL_SIGNING_SECRET', 32)
+  if (!portalSecret) issues.push({ name: 'PORTAL_SIGNING_SECRET', reason: 'or a Supabase server key is required' })
+  else if (portalSecret.length < 32) issues.push({ name: 'PORTAL_SIGNING_SECRET', reason: 'effective value must be at least 32 characters' })
   requireValue(issues, 'SECURITY_HASH_SECRET', 32)
   requireValue(issues, 'GOOGLE_CLIENT_ID')
   requireValue(issues, 'GOOGLE_CLIENT_SECRET')
-  requireValue(issues, 'GOOGLE_TOKEN_ENCRYPTION_KEY', 32)
+  const googleTokenKey = value('GOOGLE_TOKEN_ENCRYPTION_KEY') || portalSecret
+  if (!googleTokenKey) issues.push({ name: 'GOOGLE_TOKEN_ENCRYPTION_KEY', reason: 'or the effective portal signing key is required' })
+  else if (googleTokenKey.length < 32) issues.push({ name: 'GOOGLE_TOKEN_ENCRYPTION_KEY', reason: 'effective value must be at least 32 characters' })
   requireValue(issues, 'GOOGLE_OAUTH_STATE_SECRET', 32)
   requireValue(issues, 'GOOGLE_DRIVE_ALLOWED_EMAIL')
   requireValue(issues, 'RESEND_API_KEY')

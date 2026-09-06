@@ -13,9 +13,9 @@ function env(name: string) {
 
 function encryptionKey() {
   const dedicated = env('GOOGLE_TOKEN_ENCRYPTION_KEY')
-  const material = process.env.NODE_ENV === 'production'
-    ? dedicated
-    : dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
+  // Keep existing refresh tokens decryptable until they can be deliberately
+  // re-encrypted with a dedicated key during a planned Drive reconnection.
+  const material = dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
   if (!material) throw new Error('Server encryption key is unavailable.')
   if (process.env.NODE_ENV === 'production' && material.length < 32) {
     throw new Error('Google token encryption key is too short.')
