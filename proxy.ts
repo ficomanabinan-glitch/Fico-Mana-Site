@@ -4,6 +4,7 @@ import { updateSession } from '@/lib/supabase/middleware'
 function shouldDisableCaching(request: NextRequest) {
   const { pathname } = request.nextUrl
   if (request.method !== 'GET' && request.method !== 'HEAD') return true
+  if (pathname.startsWith('/api/')) return true
   return (
     pathname.startsWith('/admin') ||
     pathname.startsWith('/editor') ||
@@ -15,11 +16,14 @@ function shouldDisableCaching(request: NextRequest) {
 }
 
 function applyResponseHardening(request: NextRequest, response: NextResponse) {
-  response.headers.set('Access-Control-Allow-Origin', `${request.nextUrl.protocol}//${request.nextUrl.host}`)
+  response.headers.set('X-Request-ID', request.headers.get('x-request-id') || crypto.randomUUID())
   if (shouldDisableCaching(request)) {
     response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate')
     response.headers.set('Pragma', 'no-cache')
     response.headers.set('Expires', '0')
+  }
+  if (request.nextUrl.pathname.startsWith('/portal/')) {
+    response.headers.set('Referrer-Policy', 'no-referrer')
   }
   return response
 }

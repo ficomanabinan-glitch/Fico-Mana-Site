@@ -30,7 +30,7 @@ type Body = {
 
 export async function POST(request: Request) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const body = (await request.json()) as Body

@@ -6,11 +6,9 @@ import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { saveBookingToDb, addNotificationToDb } from '@/lib/supabase-store'
 import { sendRawPhotoSubmittedEmails } from '@/lib/email'
-
-type Body = {
-  email?: string
-  rawPhotoLink?: string
-}
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { rejectUntrustedMutation } from '@/lib/security/request-security'
+import { publicRawLinkSubmitSchema } from '@/lib/security/schemas'
 
 export async function POST(
   request: Request,
@@ -18,18 +16,15 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const body = (await request.json()) as Body
-    const email = body.email?.trim()
-    const rawPhotoLink = body.rawPhotoLink?.trim()
-
-    if (!email || !rawPhotoLink) {
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
+    const parsed = publicRawLinkSubmitSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Email and your Google Drive folder link are required.' }, { status: 400 })
     }
-
-    // Basic GDrive link validation
-    if (!rawPhotoLink.startsWith('https://drive.google.com/')) {
-      return NextResponse.json({ error: 'Please enter a valid Google Drive link (starting with https://drive.google.com/).' }, { status: 400 })
-    }
+    const { email, rawPhotoLink } = parsed.data
+    const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.rawSubmit, [id, email])
+    if (limited) return limited
 
     const booking = await loadBookingById(id)
     if (!booking) {

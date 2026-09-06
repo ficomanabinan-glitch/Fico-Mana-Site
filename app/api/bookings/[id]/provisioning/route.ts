@@ -6,6 +6,7 @@ import {
   getProvisioningSnapshot,
   provisionBookingResources,
 } from '@/lib/booking-provisioning'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 type Body = { action?: 'provision' | 'retry' | 'disable_portal' | 'enable_portal' }
 
@@ -25,7 +26,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
 
   try {
@@ -40,10 +41,9 @@ export async function POST(
 
     return NextResponse.json(await getProvisioningSnapshot(id))
   } catch (error) {
-    console.error('POST /api/bookings/[id]/provisioning', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Provisioning action failed.' },
-      { status: 500 },
-    )
+    return secureErrorResponse(error, 'Provisioning action failed.', {
+      request,
+      context: 'POST /api/bookings/[id]/provisioning',
+    })
   }
 }

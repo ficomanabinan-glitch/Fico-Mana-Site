@@ -4,11 +4,14 @@ import { getSiteUrl } from '@/lib/site-url'
 const PORTAL_COOKIE = 'ficomana_portal_session'
 
 function signingSecret() {
-  const secret =
-    process.env.PORTAL_SIGNING_SECRET?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    process.env.SUPABASE_SECRET_KEY?.trim()
+  const dedicated = process.env.PORTAL_SIGNING_SECRET?.trim()
+  const secret = process.env.NODE_ENV === 'production'
+    ? dedicated
+    : dedicated || process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   if (!secret) throw new Error('Portal signing secret is not configured.')
+  if (process.env.NODE_ENV === 'production' && secret.length < 32) {
+    throw new Error('Portal signing secret is too short.')
+  }
   return secret
 }
 

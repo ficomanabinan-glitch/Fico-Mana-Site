@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Booking, Notification } from '@/lib/data-store'
 import { mapDbBookingToModel, mapModelBookingToDb, mapModelBookingToDbCore, mapDbPackageRow, type DbPackageRow } from '@/lib/booking-db'
 import { PACKAGE_SEED_ROWS } from '@/lib/packages-seed'
+import { filterMissingPackageRows } from '@/lib/package-seed-sync'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 
 function mergeBookingsById(...lists: Booking[][]): Booking[] {
@@ -95,7 +96,18 @@ export async function syncPackagesToDb(client: SupabaseClient): Promise<boolean>
     secondary_price_label: p.secondary_price_label ?? null, book_variants: p.book_variants ?? null, note: p.note ?? null,
     is_active: true, selection_limit: p.selection_limit, sort_order: p.sort_order,
   }))
-  const { error } = await client.from('packages').upsert(rows, { onConflict: 'id' })
-  if (error) { console.error('syncPackagesToDb:', error.message); return false }
+  const { data: existing, error: readError } = await client
+    .from('packages')
+    .select('id')
+    .in('id', rows.map((row) => row.id))
+  if (readError) { console.error('syncPackagesToDb:', readError.message); return false }
+
+  // The Admin Package Manager is the source of truth. Seed data may fill missing
+  // defaults, but must never overwrite a package an administrator has edited.
+  const missingRows = filterMissingPackageRows(rows, (existing ?? []).map((row) => String(row.id)))
+  if (missingRows.length === 0) return false
+
+  const { error: insertError } = await client.from('packages').insert(missingRows)
+  if (insertError) { console.error('syncPackagesToDb:', insertError.message); return false }
   return true
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 type ResourceType = 'photos' | 'video' | 'invoice' | 'agreement' | 'meeting_document' | 'project_update' | 'other'
 const TYPES = new Set<ResourceType>(['photos','video','invoice','agreement','meeting_document','project_update','other'])
@@ -27,7 +28,7 @@ export async function GET(
     .select('*')
     .eq('booking_id', id)
     .order('created_at', { ascending: false })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return secureErrorResponse(error, 'Could not load portal resources.', { context: 'GET /api/bookings/[id]/portal-resources' })
   return NextResponse.json(data || [])
 }
 
@@ -35,7 +36,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   try {
     const { id } = await params
@@ -78,7 +79,7 @@ export async function POST(
     })
     return NextResponse.json(data, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not save resource.' }, { status: 500 })
+    return secureErrorResponse(error, 'Could not save resource.', { request, context: 'POST /api/bookings/[id]/portal-resources' })
   }
 }
 
@@ -86,7 +87,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   try {
     const { id } = await params
@@ -113,6 +114,6 @@ export async function DELETE(
     })
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not remove resource.' }, { status: 500 })
+    return secureErrorResponse(error, 'Could not remove resource.', { request, context: 'DELETE /api/bookings/[id]/portal-resources' })
   }
 }

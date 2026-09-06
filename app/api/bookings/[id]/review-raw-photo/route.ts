@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { saveBookingToDb, addNotificationToDb } from '@/lib/supabase-store'
 import { sendRawPhotoApprovedEmail, sendRawPhotoRejectedEmail } from '@/lib/email'
+import { secureErrorMessage, secureErrorResponse } from '@/lib/security/error-response'
 
 type Body = {
   action?: 'Approve' | 'Reject'
@@ -19,7 +20,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { id } = await params
@@ -85,22 +86,17 @@ export async function POST(
         try {
           const viaUpsert = await saveBookingToDb(admin, updatedBooking)
           if (!viaUpsert) {
-            return NextResponse.json(
-              {
-                error: `Database save failed: ${error.message}. Run migrations 011 and 015 in Supabase.`,
-              },
-              { status: 500 },
-            )
+            return secureErrorResponse(error, 'Failed to save the RAW-photo review.', {
+              request,
+              context: 'POST /api/bookings/[id]/review-raw-photo',
+            })
           }
           saved = viaUpsert
         } catch (saveErr) {
-          const msg = saveErr instanceof Error ? saveErr.message : error.message
-          return NextResponse.json(
-            {
-              error: `${msg}. Run migrations 011_raw_photo_filtering.sql and 015_raw_photo_approved_at.sql if columns are missing.`,
-            },
-            { status: 500 },
-          )
+          return secureErrorResponse(saveErr, 'Failed to save the RAW-photo review.', {
+            request,
+            context: 'POST /api/bookings/[id]/review-raw-photo fallback',
+          })
         }
       } else {
         saved = {
@@ -135,7 +131,7 @@ export async function POST(
       }
     } catch (err) {
       console.error('Failed to send raw photo status email:', err)
-      emailErrors.push(err instanceof Error ? err.message : 'Failed to send notification email.')
+      emailErrors.push(secureErrorMessage(err, 'Failed to send notification email.'))
     }
 
     return NextResponse.json({
@@ -144,8 +140,9 @@ export async function POST(
       message: `Raw photo selection successfully ${action === 'Approve' ? 'approved' : 'rejected'}.`,
     })
   } catch (error) {
-    console.error('POST /api/bookings/[id]/review-raw-photo', error)
-    const message = error instanceof Error ? error.message : 'Failed to process raw photo review.'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to process raw photo review.', {
+      request,
+      context: 'POST /api/bookings/[id]/review-raw-photo',
+    })
   }
 }

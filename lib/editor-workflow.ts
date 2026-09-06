@@ -7,6 +7,7 @@ import {
   downloadDriveThumbnail,
   ensureShootHierarchy,
   getDriveFile,
+  hashDriveFileSha256,
   listDriveFiles,
   upsertDriveFile,
 } from '@/lib/google-drive'
@@ -15,6 +16,7 @@ import { portalUrl } from '@/lib/client-portal'
 import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 import { sendEditedPhotosEmail } from '@/lib/email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -65,10 +67,22 @@ function safeSegment(value: string) {
 }
 
 function safeRelativePath(value: string) {
-  const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '')
-  const parts = normalized.split('/').filter((part) => part && part !== '.' && part !== '..')
-  if (!parts.length) throw new Error('A valid relative file path is required.')
-  return parts.map(safeSegment).filter(Boolean).join('/').slice(0, 500)
+  const raw = value.normalize('NFKC')
+  if (!raw || /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(raw)) {
+    throw new Error('The relative file path contains unsafe characters.')
+  }
+  if (/^(?:[a-z]:[\\/]|[\\/]{1,2})/i.test(raw) || /%(?:00|2e|2f|5c)/i.test(raw)) {
+    throw new Error('Absolute or encoded traversal paths are not allowed.')
+  }
+  const parts = raw.replace(/\\/g, '/').split('/')
+  if (!parts.length || parts.some((part) => !part || part === '.' || part === '..')) {
+    throw new Error('A valid relative file path is required.')
+  }
+  const sanitized = parts.map(safeSegment)
+  if (sanitized.some((part) => !part)) throw new Error('The relative file path contains an invalid segment.')
+  const result = sanitized.join('/')
+  if (result.length > 500) throw new Error('The relative file path is too long.')
+  return result
 }
 
 function driveFolderUrl(id: string | null | undefined) {
@@ -213,12 +227,22 @@ export async function syncEditorWorkflow(workspaceId: string) {
   return bookings
 }
 
-export async function getBatchList(workspaceId: string) {
+export async function getBatchList(
+  workspaceId: string,
+  { synchronize = true }: { synchronize?: boolean } = {},
+) {
   const admin = adminClient()
-  const bookings = await syncEditorWorkflow(workspaceId)
-  const [{ data: batches, error: batchError }, { data: jobs, error: jobsError }] = await Promise.all([
-    admin.from('editing_batches').select('*').eq('workspace_id', workspaceId).order('shoot_date', { ascending: false }),
-    admin.from('editing_jobs').select('*').eq('workspace_id', workspaceId),
+  const [bookings, { data: batches, error: batchError }, { data: jobs, error: jobsError }] = await Promise.all([
+    synchronize ? syncEditorWorkflow(workspaceId) : loadActiveBookings(admin, workspaceId),
+    admin
+      .from('editing_batches')
+      .select('id,display_id,shoot_date,location_key,drive_day_folder_id,drive_day_folder_url')
+      .eq('workspace_id', workspaceId)
+      .order('shoot_date', { ascending: false }),
+    admin
+      .from('editing_jobs')
+      .select('batch_id,booking_id,client_id,status,selected_count,assigned_editor_id,assigned_editor_name,photographer_name')
+      .eq('workspace_id', workspaceId),
   ])
   if (batchError) throw new Error(batchError.message)
   if (jobsError) throw new Error(jobsError.message)
@@ -268,9 +292,21 @@ async function findBatch(admin: SupabaseClient, workspaceId: string, displayId: 
   return data
 }
 
-export async function getBatchDetail(workspaceId: string, displayId: string) {
+export async function getBatchDetail(
+  workspaceId: string,
+  displayId: string,
+  {
+    batchListEntry,
+    synchronize = true,
+  }: {
+    batchListEntry?: Awaited<ReturnType<typeof getBatchList>>[number]
+    synchronize?: boolean
+  } = {},
+) {
   const admin = adminClient()
-  const listEntry = (await getBatchList(workspaceId)).find((batch) => batch.id === displayId)
+  const listEntry =
+    batchListEntry ??
+    (await getBatchList(workspaceId, { synchronize })).find((batch) => batch.id === displayId)
   if (!listEntry) return null
   const batch = await findBatch(admin, workspaceId, displayId)
   const { data: jobs, error: jobsError } = await admin
@@ -878,7 +914,6 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       id: String(file.id),
       fileName: String(file.file_name),
       mimeType: String(file.mime_type),
-      driveFileId: String(file.drive_file_id),
     })),
     galleryTotal: galleryResult.count || 0,
     galleryOffset: Math.max(0, offset),
@@ -1400,6 +1435,8 @@ export async function createBatchUploadRun(
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
   const uniqueIds = [...new Set(bookingIds)]
+  if (!uniqueIds.length) throw new Error('Choose at least one client folder to upload.')
+  if (uniqueIds.length > 500) throw new Error('One upload run is limited to 500 client folders.')
   const { data: jobs, error } = await admin
     .from('editing_jobs')
     .select('*')
@@ -1454,9 +1491,31 @@ export async function createDeliverableUploadSession(
   if (!/^[a-f0-9]{64}$/.test(checksum)) throw new Error('A SHA-256 file checksum is required.')
   if (input.fileSize <= 0) throw new Error('Empty files cannot be uploaded.')
   if (input.fileSize > 500 * 1024 * 1024) throw new Error('Edited photo files are limited to 500 MB each.')
-  const photoExtension = /\.(jpe?g|png|webp|tiff?|heic|heif)$/i.test(input.fileName)
-  if (!input.mimeType.startsWith('image/') && !(input.mimeType === 'application/octet-stream' && photoExtension)) {
-    throw new Error('Only supported edited photo files can be uploaded.')
+  validateEditedPhotoMetadata(input.fileName, input.mimeType)
+  const expectedFileName = relativePath.split('/').at(-1)
+  if (safeSegment(input.fileName) !== expectedFileName) {
+    throw new Error('The edited photo filename must match its relative upload path.')
+  }
+  const { data: runFiles, error: quotaError } = await admin
+    .from('batch_upload_files')
+    .select('relative_path,file_size,batch_upload_items!inner(upload_job_id,booking_id)')
+    .eq('batch_upload_items.upload_job_id', uploadJobId)
+  if (quotaError) throw new Error('Could not verify the upload quota.')
+  const currentFiles = runFiles || []
+  const priorPath = currentFiles.find((file) => String(file.relative_path) === relativePath)
+  const projectedCount = currentFiles.length + (priorPath ? 0 : 1)
+  const projectedBytes = currentFiles.reduce((sum, file) => sum + Number(file.file_size || 0), 0)
+    - Number(priorPath?.file_size || 0)
+    + input.fileSize
+  const bookingFiles = currentFiles.filter((file) => {
+    const relation = Array.isArray(file.batch_upload_items) ? file.batch_upload_items[0] : file.batch_upload_items
+    return String(relation?.booking_id || '') === input.bookingId
+  })
+  if (projectedCount > 10_000 || projectedBytes > 250 * 1024 * 1024 * 1024) {
+    throw new Error('This batch upload exceeds the safe file-count or total-size quota.')
+  }
+  if (bookingFiles.length + (priorPath ? 0 : 1) > 1_000) {
+    throw new Error('This client folder exceeds the safe per-booking file quota.')
   }
   const { data: prior } = await admin
     .from('deliverable_files')
@@ -1471,6 +1530,7 @@ export async function createDeliverableUploadSession(
         upload_item_id: item.id,
         relative_path: relativePath,
         file_name: safeSegment(input.fileName),
+        file_size: input.fileSize,
         checksum,
         drive_file_id: prior?.drive_file_id || null,
         status: prior?.checksum === checksum ? 'SKIPPED_DUPLICATE' : 'UPLOADING',
@@ -1546,6 +1606,31 @@ export async function completeDeliverableUpload(
     .eq('workspace_id', workspaceId)
     .single()
   if (!job) throw new Error('Upload job is outside this workspace.')
+  const { hierarchy } = await ensureBookingFolders(admin, workspaceId, bookingId)
+  if (!driveFile.parents?.includes(hierarchy.edited.id)) {
+    throw new Error('Google Drive uploaded the file outside the authorized client destination.')
+  }
+  if (safeSegment(driveFile.name) !== uploadFile.file_name) {
+    throw new Error('Google Drive uploaded a file with an unexpected name.')
+  }
+  validateEditedPhotoMetadata(driveFile.name, driveFile.mimeType || mimeType)
+  const expectedBytes = Number(uploadFile.file_size || 0)
+  const driveBytes = Number(driveFile.size || 0)
+  if (!expectedBytes || !Number.isSafeInteger(driveBytes) || driveBytes !== expectedBytes) {
+    await audit(admin, workspaceId, { type: 'system' }, 'UPLOAD_CHECKSUM_FAILED', {
+      bookingId,
+      metadata: { uploadFileId: uploadFile.id, reason: 'size_mismatch' },
+    })
+    throw new Error('The uploaded Drive file size does not match the batch manifest.')
+  }
+  const verified = await hashDriveFileSha256(driveFile.id, 500 * 1024 * 1024)
+  if (verified.bytes !== expectedBytes || verified.checksum !== uploadFile.checksum) {
+    await audit(admin, workspaceId, { type: 'system' }, 'UPLOAD_CHECKSUM_FAILED', {
+      bookingId,
+      metadata: { uploadFileId: uploadFile.id, reason: 'sha256_mismatch' },
+    })
+    throw new Error('The uploaded Drive file checksum does not match the batch manifest.')
+  }
   const { error: deliveryError } = await admin.from('deliverable_files').upsert(
     {
       workspace_id: workspaceId,

@@ -92,20 +92,24 @@ function editorSubdomainAlias(request: NextRequest) {
 }
 
 async function enforceInquiryRateLimit(request: NextRequest) {
-  const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!secret) {
+  const serviceSecret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const rateHashSecret =
+    process.env.SECURITY_HASH_SECRET ||
+    process.env.LOGIN_RATE_LIMIT_SECRET ||
+    (process.env.NODE_ENV === 'production' ? '' : serviceSecret)
+  if (!serviceSecret || !rateHashSecret) {
     return NextResponse.json(
       { error: 'Booking service is temporarily unavailable.' },
       { status: 503 },
     )
   }
 
-  const ipHash = await hashIp(requestIp(request), secret)
+  const ipHash = await hashIp(requestIp(request), rateHashSecret)
   const response = await fetch(`${getSupabaseUrl()}/rest/v1/rpc/consume_inquiry_rate_limit`, {
     method: 'POST',
     headers: {
-      apikey: secret,
-      Authorization: `Bearer ${secret}`,
+      apikey: serviceSecret,
+      Authorization: `Bearer ${serviceSecret}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -213,6 +217,11 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
   const admin = isAdminUser(user)
+  const assurance = admin
+    ? (await supabase.auth.mfa.getAuthenticatorAssuranceLevel()).data
+    : null
+  const hasAdminMfa = assurance?.currentLevel === 'aal2'
+  const isAdminMfa = pathname === '/admin/mfa'
   const isPublicBookingSubmission = pathname === '/api/bookings' && request.method === 'POST' && !user
 
   if (isPublicBookingSubmission) {
@@ -229,6 +238,20 @@ export async function updateSession(request: NextRequest) {
     return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }
 
+  if (isAdminRoute && !isAdminLogin && !isAdminMfa && admin && !hasAdminMfa) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin/mfa'
+    url.search = ''
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
+  }
+
+  if (isAdminMfa && admin && hasAdminMfa) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin/dashboard'
+    url.search = ''
+    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
+  }
+
   if (isFilteringRoute && !admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin'
@@ -238,7 +261,7 @@ export async function updateSession(request: NextRequest) {
 
   if (isAdminLogin && admin) {
     const url = request.nextUrl.clone()
-    url.pathname = '/admin/dashboard'
+    url.pathname = hasAdminMfa ? '/admin/dashboard' : '/admin/mfa'
     url.search = ''
     return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }

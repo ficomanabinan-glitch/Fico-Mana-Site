@@ -4,6 +4,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getDriveFolder, initializeDriveRootFolder } from '@/lib/google-drive'
 import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 type Body = {
   rootFolderId?: string
@@ -11,8 +13,8 @@ type Body = {
   initializeRoot?: boolean
 }
 
-export async function GET() {
-  const { error: authError } = await requireStaffAuth()
+export async function GET(request: Request) {
+  const { error: authError } = await requireStaffAuth(request)
   if (authError) return authError
 
   const admin = getSupabaseAdmin()
@@ -42,8 +44,13 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
+  const rateLimit = await enforceApiRateLimit(request, API_RATE_LIMITS.driveOperation, [
+    user?.id,
+    'settings',
+  ])
+  if (rateLimit) return rateLimit
 
   try {
     const body = (await request.json()) as Body
@@ -91,10 +98,9 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error('PUT /api/integrations/google-drive', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Could not update Google Drive settings.' },
-      { status: 500 },
-    )
+    return secureErrorResponse(error, 'Could not update Google Drive settings.', {
+      request,
+      context: 'PUT /api/integrations/google-drive',
+    })
   }
 }

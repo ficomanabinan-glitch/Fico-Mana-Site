@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import ClientPortalTrustedDevice from '@/components/client-portal-trusted-device'
 
-type GalleryFile={id:string;fileName:string;mimeType:string;driveFileId:string;previewUrl:string}
+type GalleryFile={id:string;fileName:string;mimeType:string;previewUrl:string}
 type PortalResource={id:string;resource_type:string;title:string;url?:string|null;content?:string|null;created_at:string}
 type PortalData={
   booking:{id:string;customerName:string;packageName:string;bookingDate:string;bookingTime:string;bookingStatus:string;paymentStatus:string;price:number;depositAmount:number;amountPaid:number}
@@ -34,16 +34,16 @@ const portalSecondaryAction='transition-all duration-300 ease-out hover:-transla
 export default function ClientPortalPage(){
   const params=useParams<{id:string}>();const searchParams=useSearchParams();const publicId=decodeURIComponent(params.id||'');const signature=searchParams.get('sig')||''
   const [data,setData]=useState<PortalData|null>(null);const [loading,setLoading]=useState(true);const [loadingMore,setLoadingMore]=useState(false);const [error,setError]=useState('');const [selected,setSelected]=useState<string[]>([]);const [submitting,setSubmitting]=useState(false)
-  const signatureQuery=signature?`&sig=${encodeURIComponent(signature)}`:''
-
   const load=async(offset=0)=>{
     if(offset===0){setLoading(true);setError('')}else setLoadingMore(true)
     try{
-      const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}?offset=${offset}&limit=48${signatureQuery}`,{cache:'no-store',credentials:'include'})
+      const credentialQuery=signature&&!data?`&sig=${encodeURIComponent(signature)}`:''
+      const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}?offset=${offset}&limit=48${credentialQuery}`,{cache:'no-store',credentials:'include'})
       const body=(await response.json().catch(()=>({}))) as PortalData&{error?:string}
       if(!response.ok)throw new Error(body.error||'This client portal is unavailable.')
       setData((previous)=>offset===0?body:{...body,gallery:[...(previous?.gallery||[]),...body.gallery]})
       setSelected(Array.isArray(body.selection?.selectedIds)?body.selection.selectedIds:[])
+      if(signature&&!data)window.history.replaceState(null,'',`/portal/${encodeURIComponent(publicId)}`)
     }catch(loadError){setError(loadError instanceof Error?loadError.message:'This client portal is unavailable.')}
     finally{setLoading(false);setLoadingMore(false)}
   }
@@ -59,7 +59,7 @@ export default function ClientPortalPage(){
   const submit=async()=>{
     if(!canSubmit||!data)return;setSubmitting(true);setError('')
     try{
-      const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/selection?sig=${encodeURIComponent(signature)}`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileIds:selected})})
+      const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/selection`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileIds:selected})})
       const body=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(body.error||'Could not submit your selection.');await load()
     }catch(submitError){setError(submitError instanceof Error?submitError.message:'Selection submission failed.')}
     finally{setSubmitting(false)}

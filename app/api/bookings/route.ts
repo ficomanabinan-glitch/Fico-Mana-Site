@@ -39,6 +39,12 @@ import {
   provisionBookingResources,
   recordConfirmedPayment,
 } from '@/lib/booking-provisioning'
+import { getAdminAuthContext } from '@/lib/supabase/server'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { rejectUntrustedMutation } from '@/lib/security/request-security'
+import { bookingMutationSchema } from '@/lib/security/schemas'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
+import { secureErrorMessage } from '@/lib/security/error-response'
 
 /** Keep slotId in sync with bookingTime so reschedules pass capacity checks. */
 function normalizeBookingSchedule(booking: Booking, isMakeupPackage: boolean): Booking {
@@ -174,14 +180,26 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const incoming = (await request.json()) as Booking
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
+    const parsed = bookingMutationSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid booking information.' }, { status: 400 })
+    }
+    const incoming = parsed.data as Booking
+
+    const caller = await getAdminAuthContext()
+    if (!caller.user) {
+      const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.bookingCreate, [incoming.id, incoming.packageId])
+      if (limited) return limited
+    }
 
     let isExisting = false
     let priorBooking: Booking | null = null
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
       if (!admin) {
-        return NextResponse.json({ error: 'Database admin client unavailable. Set SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 })
+        return NextResponse.json({ error: 'Booking service is temporarily unavailable.' }, { status: 503 })
       }
       priorBooking = await getBookingFromDb(admin, incoming.id)
       isExisting = !!priorBooking
@@ -191,7 +209,7 @@ export async function POST(request: Request) {
     }
     const priorBookingStatus = priorBooking?.bookingStatus
 
-    const { user: staffUser, error: staffAuthError } = await requireStaffAuth()
+    const { user: staffUser, error: staffAuthError } = await requireStaffAuth(request)
     if (isExisting && staffAuthError) return staffAuthError
 
     const isStaffCreate = !isExisting && !!staffUser && !staffAuthError
@@ -247,11 +265,11 @@ export async function POST(request: Request) {
                 rawPhotoApprovedAt: undefined,
                 editedPhotoLink: undefined,
                 editedPhotoDeliveredAt: undefined,
-                depositAmount: Number(incoming.depositAmount) || 500,
+                depositAmount: 500,
                 paymentHistory: [
                   {
                     id: 'PAY-' + Math.floor(1000 + Math.random() * 9000),
-                    amount: Number(incoming.depositAmount) || 500,
+                    amount: 500,
                     method: trustedIncoming.paymentHistory?.[0]?.method || 'BPI',
                     type: 'Deposit',
                     transactionRef: trustedIncoming.transactionRef || trustedIncoming.paymentHistory?.[0]?.transactionRef,
@@ -303,7 +321,7 @@ export async function POST(request: Request) {
 
     const db = getSupabaseAdmin()
     if (isSupabaseConfigured() && !db) {
-      return NextResponse.json({ error: 'Database admin client unavailable. Set SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 })
+      return NextResponse.json({ error: 'Booking service is temporarily unavailable.' }, { status: 503 })
     }
     const supabaseResult = db ? await saveBookingToDb(db, booking) : null
 
@@ -333,6 +351,13 @@ export async function POST(request: Request) {
       !!booking.rejectionReason?.trim()
 
     if (rejectionChanged) {
+      await recordSecurityAuditEvent({
+        eventType: 'payment_rejected',
+        outcome: 'success',
+        actorId: staffUser?.id,
+        bookingId: booking.id,
+        route: '/api/bookings',
+      })
       const customerEmail = booking.customerEmail?.trim()
       if (!customerEmail) {
         emailErrors.push('No customer email on booking — rejection notice not sent.')
@@ -342,20 +367,33 @@ export async function POST(request: Request) {
           booking.rejectionReason!,
           booking.rejectionReasonId,
         )
-        if (!emailResult.success) emailErrors.push(emailResult.error || 'Failed to email customer about rejection.')
+        if (!emailResult.success) {
+          emailErrors.push(
+            process.env.NODE_ENV === 'production'
+              ? 'Failed to email customer about rejection.'
+              : emailResult.error || 'Failed to email customer about rejection.',
+          )
+        }
       }
     }
 
     const approvedNow = isExisting && booking.bookingStatus === 'Confirmed' && priorBookingStatus !== 'Confirmed'
 
     if (approvedNow && db) {
+      await recordSecurityAuditEvent({
+        eventType: 'payment_verified',
+        outcome: 'success',
+        actorId: staffUser?.id,
+        bookingId: booking.id,
+        route: '/api/bookings',
+      })
       const deposit = depositPaymentFromBooking(booking)
       if (deposit) {
         try {
           await recordConfirmedPayment(db, result, deposit, { type: 'staff', id: staffUser?.id || null })
         } catch (error) {
           console.error('Confirmed payment record failed:', error)
-          emailErrors.push(error instanceof Error ? error.message : 'Confirmed payment record failed.')
+          emailErrors.push(secureErrorMessage(error, 'Confirmed payment record failed.'))
         }
       }
     }
@@ -406,7 +444,7 @@ export async function POST(request: Request) {
 
     if (!supabaseResult && isSupabaseConfigured()) {
       return NextResponse.json(
-        { error: 'Could not save booking to database. Ensure current migrations are applied and SUPABASE_SERVICE_ROLE_KEY is set on Vercel.' },
+        { error: 'Booking service is temporarily unavailable.' },
         { status: 503 },
       )
     }
@@ -419,7 +457,6 @@ export async function POST(request: Request) {
     return NextResponse.json(responseBody, { status: isExisting ? 200 : 201 })
   } catch (error) {
     console.error('POST /api/bookings', error)
-    const message = error instanceof Error ? error.message : 'Failed to save booking'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to save booking.' }, { status: 500 })
   }
 }

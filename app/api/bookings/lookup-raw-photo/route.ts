@@ -1,20 +1,20 @@
 import { NextResponse } from 'next/server'
 import { emailsMatch, loadBookingById } from '@/lib/booking-load'
-
-type Body = {
-  id?: string
-  email?: string
-}
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { rejectUntrustedMutation } from '@/lib/security/request-security'
+import { publicBookingLookupSchema } from '@/lib/security/schemas'
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Body
-    const id = body.id?.trim()
-    const email = body.email?.trim()
-
-    if (!id || !email) {
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
+    const parsed = publicBookingLookupSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Booking reference and email are required.' }, { status: 400 })
     }
+    const { id, email } = parsed.data
+    const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.rawLookup, [id, email])
+    if (limited) return limited
 
     const booking = await loadBookingById(id)
     if (!booking) {

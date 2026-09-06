@@ -9,6 +9,7 @@ import {
   totalConfirmedPayments,
 } from '@/lib/booking-provisioning'
 import type { PaymentRecord } from '@/lib/data-store'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 const ALLOWED_METHODS = new Set(['GCash', 'Cash', 'Card', 'Maya', 'Bank Transfer', 'BPI'])
 const ALLOWED_TYPES = new Set(['Deposit', 'Balance Payment'])
@@ -26,7 +27,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
 
   try {
@@ -73,10 +74,16 @@ export async function POST(
     } catch (paymentError) {
       const message = paymentError instanceof Error ? paymentError.message : 'Could not record payment.'
       const duplicate = /duplicate key|unique constraint|already/i.test(message)
-      return NextResponse.json(
-        { error: duplicate ? 'This payment reference or provider event has already been recorded.' : message },
-        { status: duplicate ? 409 : 500 },
-      )
+      if (duplicate) {
+        return NextResponse.json(
+          { error: 'This payment reference or provider event has already been recorded.' },
+          { status: 409 },
+        )
+      }
+      return secureErrorResponse(paymentError, 'Could not record payment.', {
+        request,
+        context: 'POST /api/bookings/[id]/payments',
+      })
     }
 
     const history = [...(booking.paymentHistory || []), payment]
@@ -103,10 +110,9 @@ export async function POST(
       provisioning,
     })
   } catch (error) {
-    console.error('POST /api/bookings/[id]/payments', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to record payment.' },
-      { status: 500 },
-    )
+    return secureErrorResponse(error, 'Failed to record payment.', {
+      request,
+      context: 'POST /api/bookings/[id]/payments',
+    })
   }
 }

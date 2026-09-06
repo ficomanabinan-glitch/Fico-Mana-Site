@@ -3,6 +3,7 @@ import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 // Internal project folders are intentionally separate from client-facing gallery links.
 export async function GET() {
@@ -83,10 +84,8 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('GET /api/provisioning', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Could not load provisioning overview.' },
-      { status: 500 },
-    )
+    return secureErrorResponse(error, 'Could not load provisioning overview.', {
+      context: 'GET /api/provisioning',
+    })
   }
 }

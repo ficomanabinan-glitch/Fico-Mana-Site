@@ -34,10 +34,26 @@ import {
 } from '@/lib/editor-workflow'
 import { openDriveFile } from '@/lib/google-drive'
 import {
+  createPortalCookieValue,
   PORTAL_SESSION_COOKIE,
   verifyPortalCookie,
   verifyPortalSignature,
 } from '@/lib/client-portal'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/lib/security/file-validation'
+import {
+  editorBatchUploadFinalizeSchema,
+  editorBatchUploadStartSchema,
+  editorClientUploadFinalizeSchema,
+  editorJobStatusSchema,
+  editorUploadCompleteSchema,
+  editorUploadFailureSchema,
+  editorUploadSessionSchema,
+  portalSelectionSchema,
+} from '@/lib/security/schemas'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
+import { scanUpload } from '@/lib/security/upload-scanner'
+import { rejectUntrustedMutation } from '@/lib/security/request-security'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -56,17 +72,20 @@ function safeDownloadName(value: string) {
   return value.replace(/["\r\n]/g, '').slice(0, 180) || 'download.zip'
 }
 
-function errorResponse(error: unknown, fallback: string, status = 400) {
+function errorResponse(error: unknown, fallback: string, requestId: string, status = 400) {
   const message = error instanceof Error ? error.message : fallback
   const serverError = /unavailable|not configured/i.test(message)
-  return json({ error: message }, serverError ? 503 : status)
+  const exposeDetails = process.env.NODE_ENV !== 'production'
+  return json(
+    { error: exposeDetails ? message : fallback, requestId },
+    serverError ? 503 : exposeDetails ? status : 500,
+  )
 }
 
-function portalAuthorized(request: NextRequest, publicId: string) {
-  return (
-    verifyPortalSignature(publicId, request.nextUrl.searchParams.get('sig')) ||
-    verifyPortalCookie(request.cookies.get(PORTAL_SESSION_COOKIE)?.value, publicId)
-  )
+function portalAccess(request: NextRequest, publicId: string) {
+  const signature = verifyPortalSignature(publicId, request.nextUrl.searchParams.get('sig'))
+  const cookie = verifyPortalCookie(request.cookies.get(PORTAL_SESSION_COOKIE)?.value, publicId)
+  return { authorized: signature || cookie, signature }
 }
 
 function lazyDriveStream(fileId: string) {
@@ -108,33 +127,55 @@ function zipResponse(
 
 async function handlePortal(request: NextRequest, path: string[]) {
   const publicId = decodeURIComponent(path[1] || '')
-  if (!publicId || !portalAuthorized(request, publicId)) {
+  const method = request.method.toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD') {
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
+  }
+  const policy = path[2] === 'selection'
+    ? API_RATE_LIMITS.portalSelection
+    : path[2] === 'deliverables.zip'
+      ? API_RATE_LIMITS.portalDownload
+      : API_RATE_LIMITS.portalRead
+  const limited = await enforceApiRateLimit(request, policy, [publicId, path[2]])
+  if (limited) return limited
+  const access = portalAccess(request, publicId)
+  if (!publicId || !access.authorized) {
+    await recordSecurityAuditEvent({ eventType: 'portal_verification_failed', outcome: 'blocked', route: '/api/editor-workflow/portal' })
     return json({ error: 'Private client portal link required.' }, 403)
   }
-  const method = request.method.toUpperCase()
-  const sig = request.nextUrl.searchParams.get('sig')
-  const suffix = sig ? `?sig=${encodeURIComponent(sig)}` : ''
   if (path.length === 2 && method === 'GET') {
     const offset = Number(request.nextUrl.searchParams.get('offset') || 0)
     const limit = Number(request.nextUrl.searchParams.get('limit') || 48)
     const data = await getPortalData(publicId, offset, limit)
-    return json({
+    const response = json({
       ...data,
       gallery: data.gallery.map((file) => ({
         ...file,
-        previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(file.id)}${suffix}${suffix ? '&' : '?'}kind=gallery`,
+        previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(file.id)}?kind=gallery`,
       })),
       deliverables: data.deliverables.map((file) => ({
         ...file,
-        previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(file.id)}${suffix}${suffix ? '&' : '?'}kind=deliverable`,
+        previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(file.id)}?kind=deliverable`,
       })),
-      downloadAllUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/deliverables.zip${suffix}`,
+      downloadAllUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/deliverables.zip`,
     })
+    if (access.signature) {
+      response.cookies.set(PORTAL_SESSION_COOKIE, createPortalCookieValue(publicId), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30,
+      })
+    }
+    response.headers.set('Referrer-Policy', 'no-referrer')
+    return response
   }
   if (path[2] === 'selection' && method === 'POST') {
-    const body = (await request.json().catch(() => ({}))) as { fileIds?: unknown }
-    const fileIds = Array.isArray(body.fileIds) ? body.fileIds.map(String) : []
-    return json(await submitPhotoSelection(publicId, fileIds))
+    const parsed = portalSelectionSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return json({ error: 'A valid photo selection is required.' }, 400)
+    return json(await submitPhotoSelection(publicId, parsed.data.fileIds))
   }
   if (path[2] === 'file' && path[3] && method === 'GET') {
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'gallery'
@@ -142,8 +183,9 @@ async function handlePortal(request: NextRequest, path: string[]) {
     return new Response(file.data, {
       headers: {
         'content-type': file.mimeType,
-        'cache-control': 'private, max-age=300',
+        'cache-control': 'private, no-store, max-age=0, must-revalidate',
         'x-content-type-options': 'nosniff',
+        'referrer-policy': 'no-referrer',
         ...(kind === 'deliverable' && file.fileName
           ? { 'content-disposition': `inline; filename="${safeDownloadName(file.fileName)}"` }
           : {}),
@@ -159,10 +201,11 @@ async function handlePortal(request: NextRequest, path: string[]) {
 }
 
 async function handle(request: NextRequest, path: string[]) {
+  const requestId = request.headers.get('x-request-id') || crypto.randomUUID()
   try {
     if (path[0] === 'portal') return await handlePortal(request, path)
 
-    const { user, access, error } = await requireWorkflowAuth()
+    const { user, access, error } = await requireWorkflowAuth('view', request)
     if (error || !user || !access) return error || json({ error: 'Unauthorized' }, 401)
     const workspaceId = access.workspaceId
     const actorId = user.id
@@ -171,6 +214,19 @@ async function handle(request: NextRequest, path: string[]) {
       canUseWorkflow(access, capability)
         ? null
         : json({ error: 'This staff role cannot perform that action.' }, 403)
+
+    const expensiveEditorOperation =
+      (path[0] === 'collections' && path[1] === 'download') ||
+      (path[0] === 'batches' && ['download', 'start-upload', 'upload-session', 'complete-file', 'finalize-client', 'finalize-upload'].includes(path[2] || '')) ||
+      (path[0] === 'folders' && method === 'POST') ||
+      (path[0] === 'raw' && method === 'POST')
+    if (expensiveEditorOperation) {
+      const policy = path[0] === 'batches' && ['start-upload', 'upload-session', 'complete-file', 'finalize-client', 'finalize-upload'].includes(path[2] || '')
+        ? API_RATE_LIMITS.editorUpload
+        : API_RATE_LIMITS.driveOperation
+      const limited = await enforceApiRateLimit(request, policy, [user.id, workspaceId, path.join('/')])
+      if (limited) return limited
+    }
 
     if (path[0] === 'session' && method === 'GET') {
       return json({
@@ -194,8 +250,11 @@ async function handle(request: NextRequest, path: string[]) {
     if (path[0] === 'onsite' && method === 'GET') {
       const shootDate = request.nextUrl.searchParams.get('date') || ''
       if (!/^\d{4}-\d{2}-\d{2}$/.test(shootDate)) return json({ error: 'A valid shoot date is required.' }, 400)
-      const batch = (await getBatchList(workspaceId)).find((item) => item.shootDate === shootDate)
-      const detail = batch ? await getBatchDetail(workspaceId, batch.id) : null
+      const synchronize = request.nextUrl.searchParams.get('fast') !== '1'
+      const batch = (await getBatchList(workspaceId, { synchronize })).find((item) => item.shootDate === shootDate)
+      const detail = batch
+        ? await getBatchDetail(workspaceId, batch.id, { batchListEntry: batch, synchronize: false })
+        : null
       return json({ shootDate, batch: detail })
     }
 
@@ -240,7 +299,10 @@ async function handle(request: NextRequest, path: string[]) {
     }
 
     if (path[0] === 'batches') {
-      if (path.length === 1 && method === 'GET') return json(await getBatchList(workspaceId))
+      if (path.length === 1 && method === 'GET') {
+        const synchronize = request.nextUrl.searchParams.get('sync') === '1'
+        return json(await getBatchList(workspaceId, { synchronize }))
+      }
       const batchId = decodeURIComponent(path[1] || '')
       if (!batchId) return json({ error: 'Batch ID required.' }, 400)
       if (path.length === 2 && method === 'GET') {
@@ -279,69 +341,64 @@ async function handle(request: NextRequest, path: string[]) {
       if (path[2] === 'start-upload' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const body = (await request.json().catch(() => ({}))) as { bookingIds?: unknown }
-        const bookingIds = Array.isArray(body.bookingIds) ? body.bookingIds.map(String) : []
-        return json(await createBatchUploadRun(workspaceId, batchId, bookingIds, actorId))
+        const parsed = editorBatchUploadStartSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'A valid batch upload manifest is required.' }, 400)
+        return json(await createBatchUploadRun(workspaceId, batchId, parsed.data.bookingIds, actorId))
       }
       if (path[2] === 'upload-session' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const body = (await request.json()) as {
-          uploadJobId: string
-          bookingId: string
-          relativePath: string
-          fileName: string
-          mimeType: string
-          fileSize: number
-          checksum: string
-        }
+        const parsed = editorUploadSessionSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'Valid edited-photo upload metadata is required.' }, 400)
+        const body = parsed.data
         return json(
-          await createDeliverableUploadSession(workspaceId, batchId, String(body.uploadJobId), {
-            bookingId: String(body.bookingId),
-            relativePath: String(body.relativePath),
-            fileName: String(body.fileName),
-            mimeType: String(body.mimeType || 'application/octet-stream'),
-            fileSize: Number(body.fileSize),
-            checksum: String(body.checksum),
+          await createDeliverableUploadSession(workspaceId, batchId, body.uploadJobId, {
+            bookingId: body.bookingId,
+            relativePath: body.relativePath,
+            fileName: body.fileName,
+            mimeType: body.mimeType,
+            fileSize: body.fileSize,
+            checksum: body.checksum,
           }),
         )
       }
       if (path[2] === 'complete-file' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const body = (await request.json()) as {
-          uploadJobId: string
-          uploadFileId: string
-          driveFileId: string
-          mimeType: string
-        }
+        const parsed = editorUploadCompleteSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'Valid upload completion metadata is required.' }, 400)
+        const body = parsed.data
         return json(
           await completeDeliverableUpload(
             workspaceId,
-            String(body.uploadJobId),
-            String(body.uploadFileId),
-            String(body.driveFileId),
-            String(body.mimeType || 'application/octet-stream'),
+            body.uploadJobId,
+            body.uploadFileId,
+            body.driveFileId,
+            body.mimeType,
           ),
         )
       }
       if (path[2] === 'fail-file' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const body = (await request.json()) as { uploadJobId: string; uploadFileId: string; error: string }
-        await failDeliverableUpload(workspaceId, String(body.uploadJobId), String(body.uploadFileId), String(body.error))
+        const parsed = editorUploadFailureSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'Valid upload failure metadata is required.' }, 400)
+        const body = parsed.data
+        await failDeliverableUpload(workspaceId, body.uploadJobId, body.uploadFileId, body.error)
         return json({ success: true })
       }
       if (path[2] === 'finalize-client' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const body = (await request.json()) as { uploadJobId: string; bookingId: string }
+        const parsed = editorClientUploadFinalizeSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'Valid client upload metadata is required.' }, 400)
+        const body = parsed.data
         return json(
           await finalizeClientUpload(
             workspaceId,
             batchId,
-            String(body.uploadJobId),
-            String(body.bookingId),
+            body.uploadJobId,
+            body.bookingId,
             actorId,
           ),
         )
@@ -349,8 +406,9 @@ async function handle(request: NextRequest, path: string[]) {
       if (path[2] === 'finalize-upload' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const body = (await request.json()) as { uploadJobId: string }
-        return json(await finalizeBatchUpload(workspaceId, batchId, String(body.uploadJobId)))
+        const parsed = editorBatchUploadFinalizeSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'Valid batch upload metadata is required.' }, 400)
+        return json(await finalizeBatchUpload(workspaceId, batchId, parsed.data.uploadJobId))
       }
     }
 
@@ -363,19 +421,45 @@ async function handle(request: NextRequest, path: string[]) {
       const file = form.get('file')
       const thumbnail = form.get('thumbnail')
       if (!(file instanceof File)) return json({ error: 'RAW image file required.' }, 400)
+      if (thumbnail !== null && !(thumbnail instanceof File)) return json({ error: 'Invalid RAW thumbnail.' }, 400)
       const rawExtension = /\.(jpe?g|png|webp|tiff?|heic|heif|dng|cr2|cr3|nef|arw|orf|rw2|raf)$/i.test(file.name)
       if (!file.type.startsWith('image/') && !rawExtension) {
         return json({ error: 'Only supported photo and camera RAW files can be added to the gallery.' }, 415)
       }
       if (file.size > 100 * 1024 * 1024) return json({ error: 'RAW upload is limited to 100 MB per file.' }, 413)
+      const data = Buffer.from(await file.arrayBuffer())
+      let thumbnailData: Buffer | null = null
+      try {
+        validatePhotographyFileContent(data, file.name)
+        if (thumbnail instanceof File) {
+          if (thumbnail.size <= 0 || thumbnail.size > 2 * 1024 * 1024 || thumbnail.type !== 'image/jpeg') {
+            throw new Error('The RAW thumbnail must be a JPEG no larger than 2 MB.')
+          }
+          thumbnailData = Buffer.from(await thumbnail.arrayBuffer())
+          await validateJpegThumbnailContent(thumbnailData)
+        }
+      } catch (validationError) {
+        await recordSecurityAuditEvent({
+          eventType: 'suspicious_file_rejected',
+          outcome: 'blocked',
+          actorId,
+          workspaceId,
+          bookingId,
+          route: '/api/editor-workflow/raw',
+          metadata: { reason: validationError instanceof Error ? validationError.message : 'invalid_content' },
+        })
+        return json({ error: validationError instanceof Error ? validationError.message : 'Invalid photo file.' }, 415)
+      }
+      const scan = await scanUpload({ buffer: data, fileName: file.name, mimeType: file.type, purpose: 'raw-photo' })
+      if (scan.status === 'rejected') return json({ error: scan.reason }, 415)
       const gallery = await saveRawFile({
         workspaceId,
         bookingId,
         actorId,
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
-        data: Buffer.from(await file.arrayBuffer()),
-        thumbnail: thumbnail instanceof File ? Buffer.from(await thumbnail.arrayBuffer()) : null,
+        data,
+        thumbnail: thumbnailData,
       })
       return json({ success: true, file: gallery })
     }
@@ -406,7 +490,8 @@ async function handle(request: NextRequest, path: string[]) {
     if (path[0] === 'jobs' && path[1] && method === 'PATCH') {
       const denied = requireCapability('edit')
       if (denied) return denied
-      const body = (await request.json()) as { status?: string }
+      const parsed = editorJobStatusSchema.safeParse(await request.json().catch(() => null))
+      if (!parsed.success) return json({ error: 'A valid editing status is required.' }, 400)
       const bookingId = decodeURIComponent(path[1])
       if (!canUseWorkflow(access, 'admin')) {
         await assignEditingJob(workspaceId, bookingId, actorId, actorId, false)
@@ -415,7 +500,7 @@ async function handle(request: NextRequest, path: string[]) {
         await setEditingJobStatus(
           workspaceId,
           bookingId,
-          String(body.status || '') as EditingJobStatus,
+          parsed.data.status as EditingJobStatus,
           actorId,
         ),
       )
@@ -429,8 +514,8 @@ async function handle(request: NextRequest, path: string[]) {
     }
     return json({ error: 'Unknown editor workflow endpoint.' }, 404)
   } catch (error) {
-    console.error(`Editor workflow ${request.method} /${path.join('/')}:`, error)
-    return errorResponse(error, 'Editor workflow request failed.')
+    console.error(`Editor workflow ${request.method} /${path.join('/')} [${requestId}]:`, error)
+    return errorResponse(error, 'Editor workflow request failed.', requestId)
   }
 }
 

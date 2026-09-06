@@ -1,10 +1,15 @@
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { emailsMatch, loadBookingById } from '@/lib/booking-load'
 import { isValidBookingId, resolveBookingReference } from '@/lib/booking-id'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { validateReceiptImageContent } from '@/lib/security/file-validation'
+import { privateNoStoreHeaders, rejectUntrustedMutation } from '@/lib/security/request-security'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
+import { scanUpload } from '@/lib/security/upload-scanner'
 
 const MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED_TYPES = new Set([
@@ -31,7 +36,7 @@ async function uploadToStorage(
     console.error('Admin receipt upload error:', error)
     return null
   }
-  return admin.storage.from('receipts').getPublicUrl(fileName).data.publicUrl
+  return fileName
 }
 
 async function duplicateImageResponse(
@@ -48,19 +53,19 @@ async function duplicateImageResponse(
   if (error) throw error
   if (!data || String(data.booking_id) === bookingId) return null
 
-  const duplicateBookingId = String(data.booking_id)
   return NextResponse.json(
     {
-      error: `This exact receipt image has already been submitted for booking ${duplicateBookingId}. Please upload the correct payment receipt.`,
+      error: 'This exact receipt image has already been submitted for another booking. Please upload the correct payment receipt.',
       code: 'DUPLICATE_RECEIPT_IMAGE',
-      duplicateBookingId,
     },
-    { status: 409 },
+    { status: 409, headers: privateNoStoreHeaders() },
   )
 }
 
 export async function POST(request: Request) {
   try {
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
     const form = await request.formData()
     const rawBookingId = String(form.get('bookingId') ?? '').trim()
     const bookingId = resolveBookingReference(rawBookingId)
@@ -72,6 +77,9 @@ export async function POST(request: Request) {
     if (!rawBookingId || !(file instanceof File)) {
       return NextResponse.json({ error: 'Booking reference and receipt image are required.' }, { status: 400 })
     }
+
+    const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.receiptUpload, [bookingId])
+    if (limited) return limited
 
     if (!isValidBookingId(bookingId) && !bookingId.startsWith('FM-W')) {
       return NextResponse.json({ error: 'Invalid booking reference.' }, { status: 400 })
@@ -115,6 +123,33 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
+    try {
+      await validateReceiptImageContent(buffer, file.type, file.name)
+    } catch (error) {
+      await recordSecurityAuditEvent({
+        eventType: 'suspicious_file_rejected',
+        outcome: 'blocked',
+        bookingId,
+        route: '/api/receipts/upload',
+        metadata: { purpose: 'payment-receipt', reason: error instanceof Error ? error.message : 'invalid_content' },
+      })
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Invalid receipt image.' },
+        { status: 415, headers: privateNoStoreHeaders() },
+      )
+    }
+
+    const scan = await scanUpload({ buffer, fileName: file.name, mimeType: file.type, purpose: 'payment-receipt' })
+    if (scan.status === 'rejected') {
+      await recordSecurityAuditEvent({
+        eventType: 'malware_scan_rejection',
+        outcome: 'blocked',
+        bookingId,
+        route: '/api/receipts/upload',
+        metadata: { purpose: 'payment-receipt' },
+      })
+      return NextResponse.json({ error: scan.reason }, { status: 415, headers: privateNoStoreHeaders() })
+    }
     const receiptHash = createHash('sha256').update(buffer).digest('hex')
 
     const duplicate = await duplicateImageResponse(admin, receiptHash, bookingId)
@@ -122,16 +157,29 @@ export async function POST(request: Request) {
 
     const { data: existingFingerprint } = await admin
       .from('receipt_fingerprints')
-      .select('booking_id')
+      .select('id,booking_id,file_url,storage_path')
       .eq('sha256', receiptHash)
       .maybeSingle()
 
+    if (existingFingerprint && String(existingFingerprint.booking_id) === bookingId) {
+      return NextResponse.json(
+        { receiptUrl: `/api/receipts/${String(existingFingerprint.id)}`, receiptHash },
+        { headers: privateNoStoreHeaders() },
+      )
+    }
+
     let reservedFingerprint = false
+    const fingerprintId = randomUUID()
+    const receiptReference = `/api/receipts/${fingerprintId}`
+    const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
+    const fileName = `${fingerprintId}/${bookingId}-${Date.now()}-${safeName || 'receipt'}`
     if (!existingFingerprint) {
       const { error: reserveError } = await admin.from('receipt_fingerprints').insert({
+        id: fingerprintId,
         booking_id: bookingId,
         sha256: receiptHash,
-        file_url: 'pending',
+        file_url: receiptReference,
+        storage_path: fileName,
         file_name: file.name,
         file_size: file.size,
       })
@@ -140,6 +188,24 @@ export async function POST(request: Request) {
         if (reserveError.code === '23505') {
           const racedDuplicate = await duplicateImageResponse(admin, receiptHash, bookingId)
           if (racedDuplicate) return racedDuplicate
+          const { data: racedFingerprint } = await admin
+            .from('receipt_fingerprints')
+            .select('id,booking_id')
+            .eq('sha256', receiptHash)
+            .maybeSingle()
+          if (racedFingerprint && String(racedFingerprint.booking_id) === bookingId) {
+            return NextResponse.json(
+              {
+                receiptUrl: `/api/receipts/${String(racedFingerprint.id)}`,
+                receiptHash,
+              },
+              { headers: privateNoStoreHeaders() },
+            )
+          }
+          return NextResponse.json(
+            { error: 'Could not verify receipt uniqueness. Please try again.' },
+            { status: 409, headers: privateNoStoreHeaders() },
+          )
         } else {
           console.error('Receipt fingerprint reservation failed:', reserveError)
           return NextResponse.json(
@@ -152,11 +218,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const safeName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '')
-    const fileName = `${bookingId}-${Date.now()}-${safeName || 'receipt'}`
-    const receiptUrl = await uploadToStorage(admin, file, buffer, fileName)
+    const storagePath = await uploadToStorage(admin, file, buffer, fileName)
 
-    if (!receiptUrl) {
+    if (!storagePath) {
       if (reservedFingerprint) {
         await admin
           .from('receipt_fingerprints')
@@ -176,7 +240,8 @@ export async function POST(request: Request) {
     const { error: fingerprintUpdateError } = await admin
       .from('receipt_fingerprints')
       .update({
-        file_url: receiptUrl,
+        file_url: receiptReference,
+        storage_path: storagePath,
         file_name: file.name,
         file_size: file.size,
       })
@@ -185,9 +250,28 @@ export async function POST(request: Request) {
 
     if (fingerprintUpdateError) {
       console.error('Receipt fingerprint update failed:', fingerprintUpdateError)
+      await admin.storage.from('receipts').remove([storagePath])
+      if (reservedFingerprint) {
+        await admin.from('receipt_fingerprints').delete().eq('id', fingerprintId)
+      }
+      return NextResponse.json(
+        { error: 'Receipt verification could not be completed. Please try again.' },
+        { status: 500, headers: privateNoStoreHeaders() },
+      )
     }
 
-    return NextResponse.json({ receiptUrl, receiptHash })
+    await recordSecurityAuditEvent({
+      eventType: 'receipt_uploaded',
+      outcome: 'success',
+      bookingId,
+      actorId: isStaffUpload ? staffAuth?.user?.id : null,
+      route: '/api/receipts/upload',
+      metadata: { scanner: scan.status },
+    })
+    return NextResponse.json(
+      { receiptUrl: receiptReference, receiptHash },
+      { headers: privateNoStoreHeaders() },
+    )
   } catch (error) {
     console.error('POST /api/receipts/upload', error)
     return NextResponse.json({ error: 'Failed to upload receipt.' }, { status: 500 })

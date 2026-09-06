@@ -66,7 +66,12 @@ export async function GET() {
   try {
     if (!isSupabaseConfigured()) {
       const fileBookings = await listBookings()
-      return NextResponse.json(fileBookings.map(bookingToAvailability))
+      return NextResponse.json(
+        fileBookings.map((booking, index) => ({
+          ...bookingToAvailability(booking),
+          id: `availability-${index + 1}`,
+        })),
+      )
     }
 
     const admin = getSupabaseAdmin()
@@ -93,7 +98,12 @@ export async function GET() {
       ]),
     )
 
-    return NextResponse.json(bookingsResult.data.map((booking) => mapDbBookingToAvailability(booking, packageSlotTypes)))
+    return NextResponse.json(
+      bookingsResult.data.map((booking, index) => ({
+        ...mapDbBookingToAvailability(booking, packageSlotTypes),
+        id: `availability-${index + 1}`,
+      })),
+    )
   } catch (error) {
     console.error('GET /api/bookings/availability', error)
     return NextResponse.json({ error: 'Failed to load availability' }, { status: 500 })

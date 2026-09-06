@@ -6,12 +6,15 @@ import {
   removeFicoSpotBlock,
   upsertFicoSpotBlock,
 } from '@/lib/server-fico-spot-blocks'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 /** Public: FICO spots held per day. Staff: POST/DELETE to manage. */
 export async function GET() {
   try {
     const blocks = await listFicoSpotBlocks()
-    return NextResponse.json(blocks)
+    return NextResponse.json(
+      blocks.map(({ date, spotsBlocked, reason }) => ({ date, spotsBlocked, reason })),
+    )
   } catch (error) {
     console.error('GET /api/fico-spot-blocks', error)
     return NextResponse.json({ error: 'Failed to load FICO spot blocks' }, { status: 500 })
@@ -19,7 +22,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireStaffAuth()
+  const auth = await requireStaffAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -53,14 +56,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json(saved)
   } catch (error) {
-    console.error('POST /api/fico-spot-blocks', error)
-    const msg = error instanceof Error ? error.message : 'Failed to update FICO spots'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to update FICO spots.', {
+      request,
+      context: 'POST /api/fico-spot-blocks',
+    })
   }
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireStaffAuth()
+  const auth = await requireStaffAuth(request)
   if (auth.error) return auth.error
 
   const date = new URL(request.url).searchParams.get('date')?.trim()

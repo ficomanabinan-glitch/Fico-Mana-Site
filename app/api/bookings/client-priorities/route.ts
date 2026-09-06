@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 export async function GET() {
   try {
@@ -34,7 +35,7 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const body = (await request.json()) as {
@@ -81,8 +82,9 @@ export async function PATCH(request: Request) {
       })),
     })
   } catch (error) {
-    console.error('PATCH /api/bookings/client-priorities', error)
-    const message = error instanceof Error ? error.message : 'Failed to update client order.'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to update client order.', {
+      request,
+      context: 'PATCH /api/bookings/client-priorities',
+    })
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BarChart3,
@@ -13,7 +13,6 @@ import {
   Image,
   LayoutDashboard,
   List,
-  LogOut,
   Menu,
   PackageOpen,
   PenTool,
@@ -28,7 +27,14 @@ import { AdminToastProvider } from '@/components/admin-toast-provider'
 import { AdminAutoSyncProvider } from '@/components/admin-auto-sync'
 import AdminSyncStatus from '@/components/admin-sync-status'
 import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
-import { adminNavActive, adminNavIdle, notificationTypeBadge } from '@/lib/admin-ui'
+import { notificationTypeBadge } from '@/lib/admin-ui'
+import { clearSalesReadCache } from '@/lib/sales-read-cache'
+import { clearManagedPackageCache } from '@/lib/package-manager-cache'
+import {
+  DashboardSidebarNavigation,
+  DashboardSidebarProfile,
+  type DashboardNavigationSection,
+} from '@/components/dashboard-sidebar'
 
 type StaffUser = { email?: string | null }
 
@@ -78,8 +84,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [pendingVerifications, setPendingVerifications] = useState(0)
   const [pendingRawPhotoReviews, setPendingRawPhotoReviews] = useState(0)
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const mainRef = useRef<HTMLElement>(null)
+  const previousPathRef = useRef(pathname)
+  const scrollPositionsRef = useRef(new Map<string, number>())
 
   const isLoginPage = pathname === '/admin'
+  const isMfaPage = pathname === '/admin/mfa'
+  const isAuthPage = isLoginPage || isMfaPage
 
   useEffect(() => {
     const client = createSupabaseBrowserClient()
@@ -94,13 +106,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     } = client.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(Boolean(session))
       setStaffUser((session?.user as StaffUser | undefined) ?? null)
+      if (!session) {
+        clearSalesReadCache()
+        clearManagedPackageCache()
+      }
     })
 
     return () => subscription.unsubscribe()
-  }, [pathname])
+  }, [])
 
-  const refreshConsoleData = async () => {
-    if (!isLoggedIn) return
+  const refreshConsoleData = useCallback(async () => {
+    if (!isLoggedIn || isMfaPage) return
     try {
       const [notifs, bookings] = await Promise.all([getNotifications(), getBookings()])
       setNotifications(notifs)
@@ -117,7 +133,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     } catch (error) {
       console.error('Navigation refresh failed:', error)
     }
-  }
+  }, [isLoggedIn, isMfaPage])
 
   useEffect(() => {
     if (!isLoggedIn) return
@@ -126,33 +142,71 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const onSync = () => void refreshConsoleData()
     window.addEventListener('admin:db-synced', onSync)
     return () => window.removeEventListener('admin:db-synced', onSync)
-  }, [isLoggedIn, pathname])
+  }, [isLoggedIn, refreshConsoleData])
 
   useEffect(() => {
-    if (!loading && !isLoggedIn && !isLoginPage) router.replace('/admin')
-  }, [isLoginPage, isLoggedIn, loading, router])
+    setPendingHref(null)
+  }, [pathname])
+
+  useLayoutEffect(() => {
+    const main = mainRef.current
+    if (!main) return
+    const previousPath = previousPathRef.current
+    if (previousPath !== pathname) {
+      scrollPositionsRef.current.set(previousPath, main.scrollTop)
+    }
+    previousPathRef.current = pathname
+    const frame = window.requestAnimationFrame(() => {
+      main.scrollTo({ top: scrollPositionsRef.current.get(pathname) ?? 0 })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!loading && !isLoggedIn && !isAuthPage) router.replace('/admin')
+  }, [isAuthPage, isLoggedIn, loading, router])
 
   const unreadCount = notifications.filter((notification) => !notification.isRead).length
   const staffLabel = staffUser?.email?.split('@')[0] || 'Staff'
-  const staffInitial = staffLabel.charAt(0).toUpperCase()
+
+  const navigation = useMemo<DashboardNavigationSection[]>(
+    () =>
+      navigationSections.map((section) => ({
+        label: section.label,
+        items: section.items.map((item) => ({
+          label: item.label,
+          href: item.href,
+          icon: item.icon,
+          badge:
+            'badgeKey' in item
+              ? item.badgeKey === 'verification'
+                ? pendingVerifications
+                : pendingRawPhotoReviews
+              : undefined,
+        })),
+      })),
+    [pendingRawPhotoReviews, pendingVerifications],
+  )
+
+  const handleNavigate = useCallback((href: string, mobile: boolean) => {
+    setPendingHref(href)
+    if (mobile) setMobileMenuOpen(false)
+  }, [])
 
   const pageTitle = useMemo(() => {
+    const activePath = pendingHref ?? pathname
     for (const section of navigationSections) {
-      const item = section.items.find((entry) => entry.href === pathname)
+      const item = section.items.find((entry) => entry.href === activePath)
       if (item) return item.label
     }
     return 'Console'
-  }, [pathname])
-
-  const badgeFor = (badgeKey?: string) => {
-    if (badgeKey === 'verification') return pendingVerifications
-    if (badgeKey === 'filtering') return pendingRawPhotoReviews
-    return 0
-  }
+  }, [pathname, pendingHref])
 
   const handleLogout = async () => {
     const client = createSupabaseBrowserClient()
     await client.auth.signOut()
+    clearSalesReadCache()
+    clearManagedPackageCache()
     setIsLoggedIn(false)
     setStaffUser(null)
     router.push('/admin')
@@ -168,52 +222,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     )
   }
 
-  const Navigation = ({ mobile = false }: { mobile?: boolean }) => (
-    <nav className={mobile ? 'space-y-0' : 'flex-1 overflow-y-auto px-3 pb-4'}>
-      {navigationSections.map((section, sectionIndex) => (
-        <div
-          key={section.label}
-          className={`${sectionIndex > 0 ? 'border-t border-white/[0.08] mt-4 pt-4' : 'pt-2'} ${
-            mobile ? 'px-1' : ''
-          }`}
-        >
-          <p className="px-3.5 pb-2 text-[8px] font-bold uppercase tracking-[0.22em] text-white/25">
-            {section.label}
-          </p>
-          <div className="space-y-1">
-            {section.items.map((item) => {
-              const Icon = item.icon
-              const active = pathname === item.href
-              const badge = badgeFor('badgeKey' in item ? item.badgeKey : undefined)
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => mobile && setMobileMenuOpen(false)}
-                  className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[11px] font-semibold tracking-wide transition-all ${
-                    active ? adminNavActive : adminNavIdle
-                  }`}
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon className={`size-4 ${active ? 'text-[#C4CEFF]' : 'text-white/40'}`} />
-                    {item.label}
-                  </span>
-                  {badge > 0 ? (
-                    <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[9px] font-bold text-white">
-                      {badge}
-                    </span>
-                  ) : null}
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-    </nav>
-  )
-
-  if (isLoginPage) return <>{children}</>
+  if (isAuthPage) return <>{children}</>
 
   if (loading) {
     return (
@@ -234,10 +243,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <AdminToastProvider>
       <AdminAutoSyncProvider enabled={isLoggedIn}>
-        <div className="admin-console min-h-screen bg-[#222222] text-white flex">
-          <aside className="hidden md:flex md:w-[260px] border-r border-white/[0.08] flex-col shrink-0">
-            <div className="p-6 border-b border-white/[0.08]">
-              <Link href="/admin/dashboard">
+        <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">
+          <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">
+            <div className="shrink-0 border-b border-white/[0.08] p-6">
+              <Link href="/admin/dashboard" prefetch onClick={() => setPendingHref('/admin/dashboard')}>
                 <h1 className="font-serif text-xl font-bold">FICO MANA</h1>
                 <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-[#C4CEFF]">
                   Studio Console
@@ -245,30 +254,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </Link>
             </div>
 
-            <Navigation />
+            <DashboardSidebarNavigation
+              sections={navigation}
+              activePath={pendingHref ?? pathname}
+              onNavigate={handleNavigate}
+            />
 
-            <div className="m-3 mt-auto flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/20">
-                  <span className="text-xs font-bold text-[#C4CEFF]">{staffInitial}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold">{staffLabel}</p>
-                  <p className="truncate text-[10px] text-white/35">{staffUser?.email}</p>
-                </div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white"
-                title="Logout"
-              >
-                <LogOut className="size-4" />
-              </button>
-            </div>
+            <DashboardSidebarProfile
+              label={staffLabel}
+              detail={staffUser?.email || 'Staff account'}
+              onLogout={handleLogout}
+            />
           </aside>
 
-          <div className="relative flex min-w-0 flex-1 flex-col">
-            <header className="relative z-20 flex h-14 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setMobileMenuOpen((previous) => !previous)}
@@ -352,11 +352,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
             {mobileMenuOpen ? (
               <div className="relative z-10 border-b border-white/[0.08] bg-[#222222] p-3 md:hidden">
-                <Navigation mobile />
+                <DashboardSidebarNavigation
+                  sections={navigation}
+                  activePath={pendingHref ?? pathname}
+                  mobile
+                  onNavigate={handleNavigate}
+                />
               </div>
             ) : null}
 
-            <main className="relative flex-1 overflow-y-auto p-5 md:p-8">{children}</main>
+            <main ref={mainRef} className="relative min-h-0 flex-1 overflow-y-auto p-5 md:p-8">{children}</main>
           </div>
         </div>
       </AdminAutoSyncProvider>

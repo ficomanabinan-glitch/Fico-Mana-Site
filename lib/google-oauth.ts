@@ -12,22 +12,26 @@ function env(name: string) {
 }
 
 function encryptionKey() {
-  const material =
-    env('GOOGLE_TOKEN_ENCRYPTION_KEY') ||
-    env('PORTAL_SIGNING_SECRET') ||
-    env('SUPABASE_SERVICE_ROLE_KEY') ||
-    env('SUPABASE_SECRET_KEY')
+  const dedicated = env('GOOGLE_TOKEN_ENCRYPTION_KEY')
+  const material = process.env.NODE_ENV === 'production'
+    ? dedicated
+    : dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
   if (!material) throw new Error('Server encryption key is unavailable.')
+  if (process.env.NODE_ENV === 'production' && material.length < 32) {
+    throw new Error('Google token encryption key is too short.')
+  }
   return createHash('sha256').update(`ficomana-google-drive:${material}`).digest()
 }
 
 function stateKey() {
-  const material =
-    env('GOOGLE_OAUTH_STATE_SECRET') ||
-    env('PORTAL_SIGNING_SECRET') ||
-    env('SUPABASE_SERVICE_ROLE_KEY') ||
-    env('SUPABASE_SECRET_KEY')
+  const dedicated = env('GOOGLE_OAUTH_STATE_SECRET')
+  const material = process.env.NODE_ENV === 'production'
+    ? dedicated
+    : dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
   if (!material) throw new Error('OAuth state signing secret is unavailable.')
+  if (process.env.NODE_ENV === 'production' && material.length < 32) {
+    throw new Error('OAuth state signing secret is too short.')
+  }
   return createHash('sha256').update(`ficomana-google-oauth-state:${material}`).digest()
 }
 

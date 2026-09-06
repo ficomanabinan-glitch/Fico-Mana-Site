@@ -11,8 +11,10 @@ export type AdminLoginAuditEvent = {
 async function hashIp(ip: string) {
   const secret =
     process.env.LOGIN_AUDIT_HASH_SECRET ||
-    process.env.SUPABASE_SECRET_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SECURITY_HASH_SECRET ||
+    (process.env.NODE_ENV === 'production'
+      ? undefined
+      : process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
 
   if (!secret) return null
 

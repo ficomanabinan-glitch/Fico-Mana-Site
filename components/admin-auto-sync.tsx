@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { syncAdminDatabase } from '@/lib/data-store'
+import { signalSalesDataChanged } from '@/lib/sales-read-cache'
 
 /** Default poll — 3 min keeps Free Fluid CPU low when Filtering/admin stays open. */
 export const DEFAULT_SYNC_INTERVAL_MS = 3 * 60_000
@@ -41,8 +42,13 @@ export function AdminAutoSyncProvider({
       setLastSyncedAt(new Date())
       setLastOk(result.ok)
       setLastMessage(result.message ?? (result.ok ? 'Synced' : 'Sync unavailable'))
-      if (result.ok) {
+      const bookingDataChanged = (result.bookingsPushed ?? 0) > 0 || (result.bookingsUpdated ?? 0) > 0
+      const dataChanged = bookingDataChanged
+        || (result.notificationsPushed ?? 0) > 0
+        || result.packagesSynced === true
+      if (result.ok && dataChanged) {
         window.dispatchEvent(new CustomEvent('admin:db-synced', { detail: result }))
+        if (bookingDataChanged) signalSalesDataChanged()
       }
     } catch {
       setLastOk(false)
@@ -89,8 +95,13 @@ export function AdminAutoSyncProvider({
     }
   }, [enabled, syncNow, intervalMs])
 
+  const value = useMemo<AdminAutoSyncContextValue>(
+    () => ({ syncing, lastSyncedAt, lastMessage, lastOk, syncNow }),
+    [lastMessage, lastOk, lastSyncedAt, syncNow, syncing],
+  )
+
   return (
-    <AdminAutoSyncContext.Provider value={{ syncing, lastSyncedAt, lastMessage, lastOk, syncNow }}>
+    <AdminAutoSyncContext.Provider value={value}>
       {children}
     </AdminAutoSyncContext.Provider>
   )

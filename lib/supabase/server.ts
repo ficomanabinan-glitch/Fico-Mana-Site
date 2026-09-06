@@ -35,8 +35,29 @@ export async function getStaffUser() {
   return user
 }
 
+export async function getStaffAuthContext() {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+  if (error || !user) return { supabase, user: null, assurance: null }
+
+  const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  return { supabase, user, assurance }
+}
+
 /** Returns a server-validated administrator, never trusting user_metadata. */
 export async function getAdminUser() {
   const user = await getStaffUser()
   return isAdminUser(user) ? user : null
+}
+
+/** Server-validated admin plus the current Supabase MFA assurance level. */
+export async function getAdminAuthContext() {
+  const context = await getStaffAuthContext()
+  return {
+    ...context,
+    user: isAdminUser(context.user) ? context.user : null,
+  }
 }

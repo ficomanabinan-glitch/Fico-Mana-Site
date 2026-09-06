@@ -1,0 +1,62 @@
+name: Security and build verification
+
+on:
+  pull_request:
+  push:
+    branches: [main, codex/editor-production]
+  schedule:
+    - cron: '15 0 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_only
+      SUPABASE_SECRET_KEY: ci-only-supabase-server-key
+      PORTAL_SIGNING_SECRET: ci-only-portal-signing-secret-32-bytes-minimum
+      SECURITY_HASH_SECRET: ci-only-rate-hash-secret-32-bytes-minimum
+      GOOGLE_CLIENT_ID: ci-only.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: ci-only-not-a-real-secret
+      GOOGLE_TOKEN_ENCRYPTION_KEY: ci-only-drive-encryption-key-32-bytes-minimum
+      GOOGLE_OAUTH_STATE_SECRET: ci-only-oauth-state-secret-32-bytes-minimum
+      GOOGLE_DRIVE_ALLOWED_EMAIL: ci@example.com
+      RESEND_API_KEY: re_ci_only_not_a_real_credential
+      NEXT_PUBLIC_STAGING_ADMIN_EMAIL: ''
+      NEXT_PUBLIC_STAGING_ADMIN_PASSWORD: ''
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm security:secrets
+      - run: pnpm security:check
+      - run: pnpm security:audit
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm security:http
+
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      packages: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4

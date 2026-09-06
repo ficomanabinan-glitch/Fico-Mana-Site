@@ -2,6 +2,7 @@ import type { BookingPackage } from './booking-packages'
 import { bookingPackages } from './booking-packages'
 import type { BlockedSlot } from './blocked-slots'
 import type { FicoSpotBlock } from './fico-spot-blocks'
+import { signalSalesDataChanged } from './sales-read-cache'
 
 export interface PaymentRecord {
   id: string
@@ -476,6 +477,7 @@ export async function syncAdminDatabase(): Promise<{
   bookingsPushed?: number
   bookingsUpdated?: number
   notificationsPushed?: number
+  packagesSynced?: boolean
   message?: string
 }> {
   try {
@@ -490,9 +492,14 @@ export async function syncAdminDatabase(): Promise<{
       bookingsPushed?: number
       bookingsUpdated?: number
       notificationsPushed?: number
+      packagesSynced?: boolean
       message?: string
     }
-    if (result.ok) invalidateAdminReadCaches()
+    const dataChanged = (result.bookingsPushed ?? 0) > 0
+      || (result.bookingsUpdated ?? 0) > 0
+      || (result.notificationsPushed ?? 0) > 0
+      || result.packagesSynced === true
+    if (result.ok && dataChanged) invalidateAdminReadCaches()
     return result
   } catch (error) {
     console.error('syncAdminDatabase failed:', error)
@@ -520,6 +527,7 @@ export async function saveBooking(booking: Booking): Promise<{ booking: Booking;
   if (idx >= 0) cached[idx] = saved
   else cached.unshift(saved)
   cacheBookings(cached)
+  signalSalesDataChanged()
   return { booking: saved, emailErrors }
 }
 

@@ -23,7 +23,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { user, error: authError } = await requireStaffAuth()
+    const { user, error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     if (!isResendConfigured()) {

@@ -1,4 +1,5 @@
 import type { Booking, PaymentRecord } from './data-store.ts'
+import type { SalesBooking } from './sales-store.ts'
 
 export type SalesPeriod = 'month' | 'quarter' | 'year'
 export type SalesExpense = {
@@ -60,13 +61,13 @@ function dateInRange(value: string | undefined | null, start: Date, end: Date) {
   return Number.isFinite(date.getTime()) && date >= start && date < end
 }
 
-function isVerifiedPayment(booking: Booking, payment: PaymentRecord) {
+function isVerifiedPayment(booking: SalesBooking, payment: PaymentRecord) {
   if (booking.paymentStatus === 'Refunded') return false
   if (payment.type === 'Deposit') return VALID_SALES_STATUSES.has(booking.bookingStatus)
   return true
 }
 
-function verifiedPaidMinor(booking: Booking) {
+function verifiedPaidMinor(booking: SalesBooking) {
   return (booking.paymentHistory || []).reduce(
     (sum, payment) => sum + (isVerifiedPayment(booking, payment) ? toMinor(payment.amount) : 0),
     0,
@@ -94,7 +95,7 @@ function monthsOverlapping(start: Date, end: Date, expense: SalesExpense) {
   return count
 }
 
-function bucketRevenue(bookings: Booking[], start: Date, end: Date) {
+function bucketRevenue(bookings: SalesBooking[], start: Date, end: Date) {
   return bookings
     .filter((b) => VALID_SALES_STATUSES.has(b.bookingStatus) && dateInRange(b.bookingDate, start, end))
     .reduce((sum, b) => sum + toMinor(b.price), 0)
@@ -128,7 +129,7 @@ type SalesTrendPoint = {
 }
 
 function createTrendPoint(
-  bookings: Booking[],
+  bookings: SalesBooking[],
   expenses: SalesExpense[],
   start: Date,
   end: Date,
@@ -141,7 +142,7 @@ function createTrendPoint(
   return { key, label, revenue, expenses: expenseTotal, netProfit: revenue - expenseTotal }
 }
 
-function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period: SalesPeriod, start: Date, end: Date) {
+function buildTrendBuckets(bookings: SalesBooking[], expenses: SalesExpense[], period: SalesPeriod, start: Date, end: Date) {
   const buckets: SalesTrendPoint[] = []
 
   if (period === 'month') {
@@ -179,7 +180,7 @@ function buildTrendBuckets(bookings: Booking[], expenses: SalesExpense[], period
   return buckets
 }
 
-function buildSevenDayTrend(bookings: Booking[], expenses: SalesExpense[], anchor: Date) {
+function buildSevenDayTrend(bookings: SalesBooking[], expenses: SalesExpense[], anchor: Date) {
   const cursor = new Date(anchor)
   cursor.setHours(0, 0, 0, 0)
   cursor.setDate(cursor.getDate() - 6)
@@ -204,7 +205,7 @@ function buildSevenDayTrend(bookings: Booking[], expenses: SalesExpense[], ancho
 }
 
 export function calculateSalesSummary(
-  bookings: Booking[],
+  bookings: SalesBooking[],
   expenses: SalesExpense[],
   settings: SalesSettings,
   period: SalesPeriod,

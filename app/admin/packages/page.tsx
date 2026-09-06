@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ExternalLink,
@@ -15,7 +15,6 @@ import {
   X,
 } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
-import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import {
   BOOKING_PACKAGE_CATEGORY_LABELS,
@@ -30,23 +29,16 @@ import {
   adminPanel,
   adminSelect,
 } from '@/lib/admin-ui'
-
-type ManagedPackage = {
-  id: string
-  category: BookingPackageCategory
-  title: string
-  price: string
-  priceAmount: number
-  duration?: string
-  description?: string
-  features: string[]
-  slotType: 'makeup' | 'standard'
-  selectionLimit: number
-  note?: string
-  isActive: boolean
-  sortOrder: number
-  updatedAt?: string
-}
+import {
+  fetchManagedPackages,
+  getCachedManagedPackages,
+  getRememberedPackageManagerUi,
+  isManagedPackageCacheFresh,
+  rememberManagedPackage,
+  rememberPackageManagerUi,
+  type ManagedPackage,
+  type PackageCategoryFilter,
+} from '@/lib/package-manager-cache'
 
 type PackageDraft = {
   id: string
@@ -114,25 +106,29 @@ function packagePayload(draft: PackageDraft) {
 
 export default function PackageManagerPage() {
   const toast = useAdminToast()
-  const [packages, setPackages] = useState<ManagedPackage[]>([])
-  const [loading, setLoading] = useState(true)
+  const initialUiRef = useRef(getRememberedPackageManagerUi())
+  const initialPackages = getCachedManagedPackages()
+  const [packages, setPackages] = useState<ManagedPackage[]>(() => initialPackages ?? [])
+  const [loading, setLoading] = useState(() => initialPackages === null)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<'all' | BookingPackageCategory>('all')
+  const [search, setSearch] = useState(initialUiRef.current.search)
+  const [category, setCategory] = useState<PackageCategoryFilter>(initialUiRef.current.category)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<PackageDraft | null>(null)
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setRefreshing(true)
+  const load = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
+    const cached = getCachedManagedPackages()
+    if (cached) setPackages(cached)
+    if (!force && cached && isManagedPackageCacheFresh()) {
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
+
+    setRefreshing(Boolean(cached))
     try {
-      const response = await fetch('/api/admin/packages', {
-        cache: 'no-store',
-        credentials: 'include',
-      })
-      const body = (await response.json().catch(() => ({}))) as ManagedPackage[] & { error?: string }
-      if (!response.ok) throw new Error(body.error || 'Could not load the package catalog.')
-      setPackages(body)
+      setPackages(await fetchManagedPackages({ force }))
     } catch (error) {
       toast.error('Packages unavailable', error instanceof Error ? error.message : 'Try again.')
     } finally {
@@ -142,8 +138,12 @@ export default function PackageManagerPage() {
   }, [toast])
 
   useEffect(() => {
-    void load(true)
+    void load()
   }, [load])
+
+  useEffect(() => {
+    rememberPackageManagerUi({ search, category })
+  }, [category, search])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -186,7 +186,7 @@ export default function PackageManagerPage() {
         editingId ? 'Package updated' : 'Package created',
         `${body.title} is ${body.isActive ? 'live on the website' : 'saved but hidden'}.`,
       )
-      await load(true)
+      setPackages(rememberManagedPackage(body))
       setEditingId(body.id)
       setDraft(toDraft(body))
     } catch (error) {
@@ -196,28 +196,57 @@ export default function PackageManagerPage() {
     }
   }
 
-  if (loading) return <AdminPageSkeleton variant="bookings" />
+  const pageHeader = (
+    <AdminPageHeader
+      title="Package Manager"
+      subtitle="Manage live website packages, prices, inclusions, scheduling, and the exact number of photos each client must select."
+      onRefresh={() => void load({ force: true })}
+      refreshing={refreshing}
+    >
+      <div className="flex flex-wrap gap-2">
+        <Link href="https://www.ficomana.com/#pricing" target="_blank" className={`${adminBtnGhost} inline-flex items-center gap-2 px-4 py-3`}>
+          View Website <ExternalLink className="size-3.5" />
+        </Link>
+        <button type="button" onClick={startCreate} className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-3`}>
+          <PackagePlus className="size-3.5" /> Add Package
+        </button>
+      </div>
+    </AdminPageHeader>
+  )
+
+  const packageFilters = (
+    <section className={`${adminPanel} p-4`}>
+      <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+        <label className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/30" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search package name or ID…" className={`${adminInput} pl-10`} />
+        </label>
+        <select value={category} onChange={(event) => setCategory(event.target.value as PackageCategoryFilter)} className={adminSelect}>
+          <option value="all">All categories</option>
+          {Object.entries(BOOKING_PACKAGE_CATEGORY_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+      </div>
+    </section>
+  )
+
+  if (loading && packages.length === 0) {
+    return (
+      <div className={adminPage}>
+        {pageHeader}
+        {packageFilters}
+        <PackageBodySkeleton />
+      </div>
+    )
+  }
 
   const activeCount = packages.filter((pkg) => pkg.isActive).length
   const selectionCounts = new Set(packages.map((pkg) => pkg.selectionLimit)).size
 
   return (
     <div className={adminPage}>
-      <AdminPageHeader
-        title="Package Manager"
-        subtitle="Manage live website packages, prices, inclusions, scheduling, and the exact number of photos each client must select."
-        onRefresh={() => void load()}
-        refreshing={refreshing}
-      >
-        <div className="flex flex-wrap gap-2">
-          <Link href="https://www.ficomana.com/#pricing" target="_blank" className={`${adminBtnGhost} inline-flex items-center gap-2 px-4 py-3`}>
-            View Website <ExternalLink className="size-3.5" />
-          </Link>
-          <button type="button" onClick={startCreate} className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-3`}>
-            <PackagePlus className="size-3.5" /> Add Package
-          </button>
-        </div>
-      </AdminPageHeader>
+      {pageHeader}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard label="Total Packages" value={packages.length} detail="Preserved for existing bookings" />
@@ -237,20 +266,7 @@ export default function PackageManagerPage() {
         </div>
       </section>
 
-      <section className={`${adminPanel} p-4`}>
-        <div className="grid gap-3 md:grid-cols-[1fr_220px]">
-          <label className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/30" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search package name or ID…" className={`${adminInput} pl-10`} />
-          </label>
-          <select value={category} onChange={(event) => setCategory(event.target.value as typeof category)} className={adminSelect}>
-            <option value="all">All categories</option>
-            {Object.entries(BOOKING_PACKAGE_CATEGORY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </div>
-      </section>
+      {packageFilters}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {filtered.map((pkg) => (
@@ -382,6 +398,35 @@ function SummaryCard({ label, value, detail }: { label: string; value: number; d
       <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums text-white">{value}</p>
       <p className="mt-1 text-[11px] text-white/40">{detail}</p>
+    </div>
+  )
+}
+
+function PackageBodySkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse" aria-label="Loading package catalog">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {['total', 'visible', 'selection'].map((key) => (
+          <div key={key} className={`${adminPanel} h-[108px] p-5`}>
+            <div className="h-3 w-24 rounded bg-white/[0.08]" />
+            <div className="mt-4 h-7 w-16 rounded bg-white/[0.08]" />
+            <div className="mt-3 h-3 w-36 rounded bg-white/[0.06]" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {['package-a', 'package-b', 'package-c', 'package-d'].map((key) => (
+          <div key={key} className={`${adminPanel} h-[190px] p-5`}>
+            <div className="h-4 w-40 rounded bg-white/[0.08]" />
+            <div className="mt-3 h-3 w-24 rounded bg-white/[0.06]" />
+            <div className="mt-8 grid grid-cols-3 gap-3 border-t border-white/10 pt-4">
+              <div className="h-9 rounded bg-white/[0.06]" />
+              <div className="h-9 rounded bg-white/[0.06]" />
+              <div className="h-9 rounded bg-white/[0.06]" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

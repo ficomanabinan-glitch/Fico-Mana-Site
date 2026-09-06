@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { bookingMatchesSearch, enrichBookingDisplay, isLikelyInvalidReceipt } from '@/lib/booking-display'
 import ReceiptPreview from '@/components/receipt-preview'
+import { receiptAccessUrl, receiptDownloadUrl } from '@/lib/security/receipt-reference'
 import { adminPage, adminCardHover, adminSelect, adminInput } from '@/lib/admin-ui'
 import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import {
@@ -375,7 +376,7 @@ export default function PaymentVerificationQueue() {
                   <FileText className="w-20 h-20 text-primary/50 mx-auto" />
                   <p className="text-sm font-semibold uppercase tracking-wider">PDF Receipt Attachment</p>
                   <a
-                    href={receiptModalBooking.receiptUrl}
+                    href={receiptAccessUrl(receiptModalBooking.receiptUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline"
@@ -513,7 +514,7 @@ export default function PaymentVerificationQueue() {
                 <div className="flex justify-between items-center text-xs">
                   {receiptModalBooking.receiptUrl && (
                     <a
-                      href={receiptModalBooking.receiptUrl}
+                      href={receiptDownloadUrl(receiptModalBooking.receiptUrl)}
                       download={`receipt-${selectedBooking.id}`}
                       target="_blank"
                       rel="noopener noreferrer"

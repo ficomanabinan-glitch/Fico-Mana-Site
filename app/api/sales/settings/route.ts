@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getSalesSettings } from '@/lib/sales-store'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 function validMoney(value: unknown) {
   const number = Number(value)
@@ -16,12 +17,12 @@ export async function GET() {
   try {
     return NextResponse.json(await getSalesSettings(admin))
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to load settings.' }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to load settings.', { context: 'GET /api/sales/settings' })
   }
 }
 
 export async function PATCH(request: Request) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
@@ -48,6 +49,6 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(await getSalesSettings(admin))
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to save settings.' }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to save settings.', { request, context: 'PATCH /api/sales/settings' })
   }
 }

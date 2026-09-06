@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ALL_MANA_SLOTS } from '@/lib/booking-slots'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { listBlockedSlots, removeBlockedSlot, upsertBlockedSlot } from '@/lib/server-blocked-slots'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 const VALID_SLOT_IDS = new Set(ALL_MANA_SLOTS.map((s) => s.id))
 
@@ -9,7 +10,9 @@ const VALID_SLOT_IDS = new Set(ALL_MANA_SLOTS.map((s) => s.id))
 export async function GET() {
   try {
     const slots = await listBlockedSlots()
-    return NextResponse.json(slots)
+    return NextResponse.json(
+      slots.map(({ date, slotId, reason }) => ({ date, slotId, reason })),
+    )
   } catch (error) {
     console.error('GET /api/blocked-slots', error)
     return NextResponse.json({ error: 'Failed to load blocked slots' }, { status: 500 })
@@ -17,7 +20,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireStaffAuth()
+  const auth = await requireStaffAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -43,14 +46,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json(saved)
   } catch (error) {
-    console.error('POST /api/blocked-slots', error)
-    const msg = error instanceof Error ? error.message : 'Failed to block slot'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to block slot.', { request, context: 'POST /api/blocked-slots' })
   }
 }
 
 export async function DELETE(request: Request) {
-  const auth = await requireStaffAuth()
+  const auth = await requireStaffAuth(request)
   if (auth.error) return auth.error
 
   const params = new URL(request.url).searchParams

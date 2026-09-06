@@ -18,7 +18,7 @@ type Detail = { id:string; shootDate:string; totalClients:number; totalSelectedP
 type ManifestClient = { booking_id:string; client_id:string; folder_name:string; customer_name:string; expected_output_count:number }
 type BatchManifest = { schema_version:number; batch_id:string; shoot_date:string; clients:ManifestClient[] }
 type UploadResult = { bookingId:string; customerName:string; status:string; expected:number; uploaded:number; error?:string|null }
-type WorkflowSession = { user:{id:string;email:string;displayName:string};role:'owner'|'admin'|'editor'|'staff';capabilities:{onsite:boolean;edit:boolean;admin:boolean} }
+type WorkflowSession = { user:{id:string;email:string;displayName:string};role:'owner'|'admin'|'editor'|'onsite'|'staff';capabilities:{onsite:boolean;edit:boolean;admin:boolean} }
 
 async function createThumbnail(file: File) {
   if (!file.type.startsWith('image/')) return null

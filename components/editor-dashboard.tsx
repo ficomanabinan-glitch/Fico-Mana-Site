@@ -13,23 +13,15 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import { useEditorSession } from '@/components/editor-portal-shell'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
-
-type Batch = {
-  id: string
-  shootDate: string
-  totalClients: number
-  counts: {
-    readyForEditing: number
-    downloaded: number
-    editing: number
-    readyToUpload: number
-    uploading: number
-    delivered: number
-    failed: number
-  }
-}
+import {
+  fetchEditorBatches,
+  getCachedEditorBatches,
+  shouldSynchronizeEditorBatches,
+  type EditorBatchSummary as Batch,
+} from '@/lib/editor-read-cache'
 
 type TodayJob = {
   bookingId: string
@@ -38,11 +30,6 @@ type TodayJob = {
   bookingTime: string
   galleryCount: number
   rawFolderDriveId?: string | null
-}
-
-type Session = {
-  role: string
-  capabilities: { onsite: boolean; edit: boolean; admin: boolean }
 }
 
 function dateKey(date = new Date()) {
@@ -60,36 +47,59 @@ function dayLabel(value: string) {
 
 export default function EditorDashboard() {
   const toast = useAdminToast()
-  const [batches, setBatches] = useState<Batch[]>([])
+  const session = useEditorSession()
+  const [batches, setBatches] = useState<Batch[]>(() => getCachedEditorBatches() ?? [])
   const [todayJobs, setTodayJobs] = useState<TodayJob[]>([])
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [batchesLoading, setBatchesLoading] = useState(() => getCachedEditorBatches() === null)
+  const [onsiteLoading, setOnsiteLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [downloading, setDownloading] = useState('')
   const today = dateKey()
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true)
-    try {
-      const [batchResponse, sessionResponse, onsiteResponse] = await Promise.all([
-        fetch('/api/editor-workflow/batches', { cache: 'no-store', credentials: 'include' }),
-        fetch('/api/editor-workflow/session', { cache: 'no-store', credentials: 'include' }),
-        fetch(`/api/editor-workflow/onsite?date=${encodeURIComponent(today)}`, {
+  const load = useCallback(async (silent = false, forceSync = false) => {
+    if (silent) setRefreshing(true)
+    else {
+      setBatchesLoading(getCachedEditorBatches() === null)
+      setOnsiteLoading(true)
+    }
+
+    const batchTask = (async () => {
+      try {
+        const current = await fetchEditorBatches({ force: true })
+        setBatches(current)
+        setBatchesLoading(false)
+        if (forceSync || shouldSynchronizeEditorBatches()) {
+          const synchronized = await fetchEditorBatches({ force: true, synchronize: true })
+          setBatches(synchronized)
+        }
+      } finally {
+        setBatchesLoading(false)
+      }
+    })()
+
+    const onsiteTask = (async () => {
+      try {
+        const response = await fetch(`/api/editor-workflow/onsite?date=${encodeURIComponent(today)}&fast=1`, {
           cache: 'no-store',
           credentials: 'include',
-        }),
-      ])
-      if (!batchResponse.ok || !sessionResponse.ok || !onsiteResponse.ok) {
-        throw new Error('Editor dashboard could not be loaded.')
+        })
+        if (!response.ok) throw new Error('Today’s onsite work could not be loaded.')
+        const onsite = (await response.json()) as { batch?: { jobs?: TodayJob[] } | null }
+        setTodayJobs(onsite.batch?.jobs || [])
+      } finally {
+        setOnsiteLoading(false)
       }
-      const onsite = (await onsiteResponse.json()) as { batch?: { jobs?: TodayJob[] } | null }
-      setBatches((await batchResponse.json()) as Batch[])
-      setSession((await sessionResponse.json()) as Session)
-      setTodayJobs(onsite.batch?.jobs || [])
-    } catch (error) {
-      if (!silent) toast.error('Dashboard unavailable', error instanceof Error ? error.message : 'Try again.')
-    } finally {
-      setLoading(false)
+    })()
+
+    const results = await Promise.allSettled([batchTask, onsiteTask])
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failure && !silent) {
+      toast.error(
+        'Dashboard partially unavailable',
+        failure.reason instanceof Error ? failure.reason.message : 'Try again.',
+      )
     }
+    setRefreshing(false)
   }, [toast, today])
 
   useEffect(() => {
@@ -128,7 +138,7 @@ export default function EditorDashboard() {
     }, 3000)
   }
 
-  if (loading) return <EditorPageSkeleton variant="dashboard" />
+  if (batchesLoading && onsiteLoading) return <EditorPageSkeleton variant="dashboard" />
 
   return (
     <div className="space-y-6">
@@ -167,7 +177,11 @@ export default function EditorDashboard() {
             </Link>
           ) : null}
         </div>
-        {todayJobs.length === 0 ? (
+        {onsiteLoading ? (
+          <div className="space-y-3 p-5 animate-pulse" aria-label="Loading today’s onsite clients">
+            {Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-14 rounded bg-white/[0.06]" />)}
+          </div>
+        ) : todayJobs.length === 0 ? (
           <div className="p-10 text-center text-xs text-white/35">No client shoots are scheduled today.</div>
         ) : (
           <div className="divide-y divide-white/[0.06]">
@@ -204,8 +218,8 @@ export default function EditorDashboard() {
             <h2 className="mt-1 text-lg font-semibold">Download and upload per day batch</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void load()} className={`${adminBtnGhost} inline-flex items-center gap-2 px-3 py-2`}>
-              <RefreshCw className="size-3.5" />Refresh
+            <button type="button" onClick={() => void load(true, true)} disabled={refreshing} className={`${adminBtnGhost} inline-flex items-center gap-2 px-3 py-2 disabled:opacity-50`}>
+              <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />{refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
             <Link href="/editor/upload" className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5`}>
               <FolderUp className="size-4" />Upload Photos
@@ -213,7 +227,9 @@ export default function EditorDashboard() {
           </div>
         </div>
 
-        {batches.length === 0 ? (
+        {batchesLoading && batches.length === 0 ? (
+          <EditorPageSkeleton variant="queue" />
+        ) : batches.length === 0 ? (
           <div className={`${adminPanel} p-12 text-center text-xs text-white/35`}>No editing batches are available.</div>
         ) : (
           <div className="grid gap-4">

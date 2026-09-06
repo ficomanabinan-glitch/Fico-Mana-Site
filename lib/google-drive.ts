@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { decryptGoogleRefreshToken, googleOAuthClientCredentials } from '@/lib/google-oauth'
@@ -171,6 +172,28 @@ export async function openDriveFile(fileId: string): Promise<Response> {
   })
   if (!response.ok || !response.body) throw new Error(`Google Drive download failed (${response.status}).`)
   return response
+}
+
+export async function hashDriveFileSha256(fileId: string, maximumBytes: number) {
+  const response = await openDriveFile(fileId)
+  const reader = response.body!.getReader()
+  const hash = createHash('sha256')
+  let bytes = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytes += value.byteLength
+      if (bytes > maximumBytes) {
+        await reader.cancel('File exceeds the allowed verification size.')
+        throw new Error('The uploaded Drive file exceeds the allowed size.')
+      }
+      hash.update(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return { checksum: hash.digest('hex'), bytes }
 }
 
 export async function downloadDriveThumbnail(thumbnailLink: string): Promise<Buffer> {

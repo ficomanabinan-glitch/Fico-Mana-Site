@@ -7,8 +7,11 @@ import {
   validatePackageManagerInput,
 } from '@/lib/package-management'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 const noStoreHeaders = { 'Cache-Control': 'private, no-store, max-age=0' }
+const PACKAGE_MANAGER_COLUMNS =
+  'id,category,title,price_display,price_amount,duration,description,features,slot_type,note,is_active,sort_order,selection_limit,updated_at'
 
 async function recordPackageAudit(
   admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
@@ -35,7 +38,7 @@ async function recordPackageAudit(
 async function listAllPackages(admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
   const { data, error } = await admin
     .from('packages')
-    .select('*')
+    .select(PACKAGE_MANAGER_COLUMNS)
     .order('sort_order', { ascending: true })
     .order('title', { ascending: true })
   if (error) throw new Error(error.message)
@@ -51,15 +54,12 @@ export async function GET() {
   try {
     return NextResponse.json(await listAllPackages(admin), { headers: noStoreHeaders })
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to load packages.' },
-      { status: 500, headers: noStoreHeaders },
-    )
+    return secureErrorResponse(error, 'Failed to load packages.', { context: 'GET /api/admin/packages' })
   }
 }
 
 export async function POST(request: Request) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
@@ -70,14 +70,12 @@ export async function POST(request: Request) {
     const { data, error } = await admin
       .from('packages')
       .insert(packageManagerInputToRow(parsed.value))
-      .select('*')
+      .select(PACKAGE_MANAGER_COLUMNS)
       .single()
     if (error) {
       const status = error.code === '23505' ? 409 : 500
-      return NextResponse.json(
-        { error: status === 409 ? 'That package ID already exists.' : error.message },
-        { status },
-      )
+      if (status === 409) return NextResponse.json({ error: 'That package ID already exists.' }, { status })
+      return secureErrorResponse(error, 'Failed to create package.', { request, context: 'POST /api/admin/packages' })
     }
     await recordPackageAudit(admin, user?.id ?? null, 'PACKAGE_CREATED', parsed.value.id, {
       selectionLimit: parsed.value.selectionLimit,
@@ -87,15 +85,12 @@ export async function POST(request: Request) {
     revalidatePath('/packages')
     return NextResponse.json(mapDbPackageRow(data as DbPackageRow), { status: 201, headers: noStoreHeaders })
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create package.' },
-      { status: 500, headers: noStoreHeaders },
-    )
+    return secureErrorResponse(error, 'Failed to create package.', { request, context: 'POST /api/admin/packages' })
   }
 }
 
 export async function PATCH(request: Request) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
@@ -110,7 +105,7 @@ export async function PATCH(request: Request) {
       .from('packages')
       .update(updates)
       .eq('id', parsed.value.id)
-      .select('*')
+      .select(PACKAGE_MANAGER_COLUMNS)
       .maybeSingle()
     if (error) throw new Error(error.message)
     if (!data) return NextResponse.json({ error: 'Package not found.' }, { status: 404 })
@@ -123,9 +118,6 @@ export async function PATCH(request: Request) {
     revalidatePath('/packages')
     return NextResponse.json(mapDbPackageRow(data as DbPackageRow), { headers: noStoreHeaders })
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update package.' },
-      { status: 500, headers: noStoreHeaders },
-    )
+    return secureErrorResponse(error, 'Failed to update package.', { request, context: 'PUT /api/admin/packages' })
   }
 }

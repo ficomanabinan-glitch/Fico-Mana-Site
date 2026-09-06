@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
 import type { Booking } from '@/lib/data-store'
-import { loadBookingById } from '@/lib/booking-load'
+import { emailsMatch, loadBookingById } from '@/lib/booking-load'
 import { upsertBooking, addServerNotification, listBookings } from '@/lib/server-store'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { saveBookingToDb, addNotificationToDb, listBookingsFromDb } from '@/lib/supabase-store'
 import { sendRawPhotoSubmittedEmails } from '@/lib/email'
-
-type Body = {
-  name?: string
-  rawPhotoLink?: string
-  bookingId?: string
-}
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { rejectUntrustedMutation } from '@/lib/security/request-security'
+import { publicRawSubmissionSchema } from '@/lib/security/schemas'
 
 function normalizeName(value: string): string {
   return value
@@ -133,30 +130,21 @@ async function saveRawSubmission(booking: Booking, rawPhotoLink: string): Promis
   return saved
 }
 
-/** Public landing submit: name + Google Drive link → DB + filtering queue + emails. */
+/** Public landing submit: booking identity + Drive link → DB + filtering queue + emails. */
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Body
-    const name = body.name?.trim()
-    const rawPhotoLink = body.rawPhotoLink?.trim()
-    const bookingId = body.bookingId?.trim()
-
-    if (!name || !rawPhotoLink) {
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
+    const parsed = publicRawSubmissionSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Full name and Google Drive folder link are required.' },
+        { error: 'Full name, booking email, and Google Drive folder link are required.' },
         { status: 400 },
       )
     }
-
-    if (!rawPhotoLink.startsWith('https://drive.google.com/')) {
-      return NextResponse.json(
-        {
-          error:
-            'Please enter a valid Google Drive link (must start with https://drive.google.com/).',
-        },
-        { status: 400 },
-      )
-    }
+    const { name, email, rawPhotoLink, bookingId } = parsed.data
+    const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.rawSubmit, [bookingId, name, email])
+    if (limited) return limited
 
     if (bookingId) {
       const booking = await loadBookingById(bookingId)
@@ -166,11 +154,11 @@ export async function POST(request: Request) {
           { status: 404 },
         )
       }
-      if (!namesMatch(booking.customerName, name)) {
+      if (!namesMatch(booking.customerName, name) || !emailsMatch(booking.customerEmail, email)) {
         return NextResponse.json(
           {
             error:
-              'Name does not match this booking. Use the same full name from your booking, or leave the booking code blank and try again.',
+              'Booking details do not match. Use the same full name and email from your booking.',
           },
           { status: 404 },
         )
@@ -186,13 +174,15 @@ export async function POST(request: Request) {
     }
 
     const all = await loadAllBookings()
-    const matches = all.filter((b) => eligibleForRawSubmit(b) && namesMatch(b.customerName, name))
+    const matches = all.filter(
+      (b) => eligibleForRawSubmit(b) && namesMatch(b.customerName, name) && emailsMatch(b.customerEmail, email),
+    )
 
     if (matches.length === 0) {
       return NextResponse.json(
         {
           error:
-            'No matching confirmed booking found for that name. Check spelling, or add your booking reference (FM-…).',
+            'No matching confirmed booking was found. Check your name and booking email, or add your booking reference (FM-…).',
         },
         { status: 404 },
       )
@@ -223,7 +213,6 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error('POST /api/bookings/submit-raw-photo-public', error)
-    const message = error instanceof Error ? error.message : 'Failed to submit photo folder link.'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to submit photo folder link.' }, { status: 500 })
   }
 }

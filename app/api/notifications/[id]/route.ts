@@ -5,11 +5,11 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 
 export async function PATCH(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { id } = await params

@@ -13,6 +13,7 @@ import {
   adminPanel,
   adminSelect,
 } from '@/lib/admin-ui'
+import { signalSalesDataChanged } from '@/lib/sales-read-cache'
 
 type Expense = {
   id: string
@@ -27,10 +28,6 @@ type Expense = {
   bookingId?: string | null
   notes?: string | null
   isActive: boolean
-}
-
-type SummaryPayload = {
-  expenses: Expense[]
 }
 
 type Draft = {
@@ -88,14 +85,14 @@ export default function BusinessExpensesPage() {
   const [saving, setSaving] = useState(false)
 
   const fetchExpenses = useCallback(async () => {
-    const response = await fetch('/api/sales/summary?period=month&anchor=' + new Date().toISOString().slice(0, 10), {
+    const response = await fetch('/api/sales/expenses', {
       cache: 'no-store',
       credentials: 'include',
     })
-    const body = (await response.json().catch(() => ({}))) as SummaryPayload
+    const body = (await response.json().catch(() => [])) as Expense[] & { error?: string }
     if (!response.ok) throw new Error('Could not load business expenses.')
 
-    setExpenses(Array.isArray(body.expenses) ? body.expenses : [])
+    setExpenses(Array.isArray(body) ? body : [])
   }, [])
 
   useEffect(() => {
@@ -151,6 +148,7 @@ export default function BusinessExpensesPage() {
         }),
       })
       if (!response.ok) throw new Error('Could not save expense.')
+      signalSalesDataChanged()
       toast.success(draft.id ? 'Expense updated' : 'Expense added', 'Sales calculations will use the updated business costs.')
       setDraft(emptyDraft())
       await fetchExpenses()
@@ -171,6 +169,7 @@ export default function BusinessExpensesPage() {
       toast.error('Delete failed', 'Could not delete this expense.')
       return
     }
+    signalSalesDataChanged()
     await fetchExpenses()
     toast.success('Expense deleted', 'Financial calculations were updated.')
   }

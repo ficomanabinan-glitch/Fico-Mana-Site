@@ -7,7 +7,7 @@ import { markServerNotificationsReadForBooking } from '@/lib/server-store'
 
 export async function POST(request: Request) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { bookingId } = (await request.json()) as { bookingId?: string }

@@ -2,6 +2,7 @@
 
 import { isLikelyInvalidReceipt, receiptDisplayLabel } from '@/lib/booking-display'
 import { AlertCircle, FileText } from 'lucide-react'
+import { receiptAccessUrl } from '@/lib/security/receipt-reference'
 
 type Props = {
   receiptUrl?: string
@@ -34,7 +35,7 @@ export default function ReceiptPreview({ receiptUrl, alt = 'Payment receipt', cl
     <div className={`relative ${fill ? 'w-full h-full' : className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={receiptUrl}
+        src={receiptAccessUrl(receiptUrl)}
         alt={alt}
         className={fill ? 'absolute inset-0 w-full h-full object-contain bg-black/40' : `w-full h-full object-contain bg-black/40 ${className}`}
       />

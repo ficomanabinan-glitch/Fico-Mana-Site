@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { listSalesExpenses } from '@/lib/sales-store'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 const TYPES = new Set(['fixed', 'variable'])
 const RECURRENCES = new Set(['one_time', 'monthly'])
@@ -49,12 +50,12 @@ export async function GET() {
   try {
     return NextResponse.json(await listSalesExpenses(admin))
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to load expenses.' }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to load expenses.', { context: 'GET /api/sales/expenses' })
   }
 }
 
 export async function POST(request: Request) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
@@ -64,12 +65,12 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message)
     return NextResponse.json(data, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to create expense.' }, { status: 400 })
+    return secureErrorResponse(error, 'Failed to create expense.', { request, status: 400, context: 'POST /api/sales/expenses' })
   }
 }
 
 export async function PATCH(request: Request) {
-  const { error: authError } = await requireStaffAuth()
+  const { error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
@@ -82,18 +83,18 @@ export async function PATCH(request: Request) {
     if (error) throw new Error(error.message)
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to update expense.' }, { status: 400 })
+    return secureErrorResponse(error, 'Failed to update expense.', { request, status: 400, context: 'PATCH /api/sales/expenses' })
   }
 }
 
 export async function DELETE(request: Request) {
-  const { error: authError } = await requireStaffAuth()
+  const { error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
   const id = new URL(request.url).searchParams.get('id')?.trim()
   if (!id) return NextResponse.json({ error: 'Expense ID is required.' }, { status: 400 })
   const { error } = await admin.from('sales_expenses').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return secureErrorResponse(error, 'Failed to delete expense.', { request, context: 'DELETE /api/sales/expenses' })
   return NextResponse.json({ ok: true })
 }

@@ -8,3 +8,4 @@ allowBuilds:
 
 overrides:
   hono: 4.12.25
+  browserslist: 4.28.7

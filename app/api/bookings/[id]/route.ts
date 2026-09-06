@@ -3,6 +3,7 @@ import { getBookingById, upsertBooking, deleteBookingFromStore } from '@/lib/ser
 import type { Booking } from '@/lib/data-store'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { requireStaffAuth } from '@/lib/auth-api'
+import { secureErrorResponse } from '@/lib/security/error-response'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getBookingFromDb, saveBookingToDb, deleteBookingFromDb } from '@/lib/supabase-store'
 import { disableClientPortal, provisionBookingResources } from '@/lib/booking-provisioning'
@@ -15,41 +16,27 @@ const DELETE_REASONS = {
 type DeleteReason = keyof typeof DELETE_REASONS
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params
-    const { user, error: authError } = await requireStaffAuth()
-    const isStaff = !!user && !authError
+    const { error: authError } = await requireStaffAuth(request)
+    if (authError) return authError
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
       if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
       const booking = await getBookingFromDb(admin, id)
       if (booking) {
-        if (isStaff) return NextResponse.json(booking)
-        return NextResponse.json({
-          id: booking.id,
-          bookingStatus: booking.bookingStatus,
-          bookingDate: booking.bookingDate,
-          bookingTime: booking.bookingTime,
-          packageName: booking.packageName,
-        })
+        return NextResponse.json(booking)
       }
     }
 
     const booking = await getBookingById(id)
     if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (isStaff) return NextResponse.json(booking)
-    return NextResponse.json({
-      id: booking.id,
-      bookingStatus: booking.bookingStatus,
-      bookingDate: booking.bookingDate,
-      bookingTime: booking.bookingTime,
-      packageName: booking.packageName,
-    })
+    return NextResponse.json(booking)
   } catch (error) {
     console.error('GET /api/bookings/[id]', error)
     return NextResponse.json({ error: 'Failed to load booking' }, { status: 500 })
@@ -61,7 +48,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { user, error: authError } = await requireStaffAuth()
+    const { user, error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { id } = await params
@@ -104,11 +91,10 @@ export async function PUT(
 
     return NextResponse.json({ ...saved, ...(provisioning ? { provisioning } : {}) })
   } catch (error) {
-    console.error('PUT /api/bookings/[id]', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update booking' },
-      { status: 500 },
-    )
+    return secureErrorResponse(error, 'Failed to update booking.', {
+      request,
+      context: 'PUT /api/bookings/[id]',
+    })
   }
 }
 
@@ -118,7 +104,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { user, error: authError } = await requireStaffAuth()
+    const { user, error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { id } = await params

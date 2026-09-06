@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
-export async function POST() {
-  const { user, error: authError } = await requireStaffAuth()
+export async function POST(request: Request) {
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
+  const rateLimit = await enforceApiRateLimit(request, API_RATE_LIMITS.driveOperation, [
+    user?.id,
+    'disconnect',
+  ])
+  if (rateLimit) return rateLimit
 
   try {
     const admin = getSupabaseAdmin()
@@ -29,12 +37,18 @@ export async function POST() {
       actor_id: user?.id || null,
       metadata: {},
     })
+    await recordSecurityAuditEvent({
+      eventType: 'google_drive_disconnected',
+      outcome: 'success',
+      actorId: user?.id,
+      route: '/api/integrations/google-drive/disconnect',
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Could not disconnect Google Drive.' },
-      { status: 500 },
-    )
+    return secureErrorResponse(error, 'Could not disconnect Google Drive.', {
+      request,
+      context: 'POST /api/integrations/google-drive/disconnect',
+    })
   }
 }

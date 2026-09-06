@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 export async function GET(
   _request: Request,
@@ -21,6 +22,8 @@ export async function GET(
     if (error) throw new Error(error.message)
     return NextResponse.json(data || [])
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not load audit trail.' }, { status: 500 })
+    return secureErrorResponse(error, 'Could not load audit trail.', {
+      context: 'GET /api/bookings/[id]/provisioning/audit',
+    })
   }
 }

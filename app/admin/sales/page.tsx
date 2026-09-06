@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BarChart3,
@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
-import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import {
   adminBtnPrimary,
   adminCard,
@@ -26,46 +25,18 @@ import {
   adminPanel,
   adminSelect,
 } from '@/lib/admin-ui'
-
-type Period = 'month' | 'quarter' | 'year'
-type TrendPoint = { key: string; label: string; revenue: number; expenses: number; netProfit: number }
-
-type Summary = {
-  bookedSales: number
-  cashCollected: number
-  outstandingReceivables: number
-  fixedExpenses: number
-  variableExpenses: number
-  totalExpenses: number
-  netProfit: number
-  profitMargin: number
-  revenueGoal: number
-  revenueGoalProgress: number
-  remainingRevenueTarget: number
-  averageBookingValue: number
-  totalBookings: number
-  bookingsNeeded: number | null
-  averageVariableCost: number
-  contributionPerBooking: number
-  breakEvenBookings: number | null
-  desiredProfit: number
-  desiredProfitBookings: number | null
-  desiredProfitMargin: number
-  daily: TrendPoint[]
-  monthly: TrendPoint[]
-}
-
-type Settings = {
-  monthlyRevenueTarget: number
-  desiredMonthlyProfit: number
-  desiredProfitMargin: number
-}
-
-type Payload = {
-  summary: Summary
-  settings: Settings
-  expenses: Array<{ id: string }>
-}
+import {
+  fetchSales,
+  getCachedSales,
+  getRememberedSalesView,
+  isSalesCacheFresh,
+  rememberSalesView,
+  SALES_DATA_CHANGED_EVENT,
+  salesCacheKey,
+  type SalesPeriod as Period,
+  type SalesSummaryPayload as Payload,
+  type SalesTrendPoint as TrendPoint,
+} from '@/lib/sales-read-cache'
 
 function peso(value: number) {
   return new Intl.NumberFormat('en-PH', {
@@ -86,50 +57,98 @@ function studioDateKey(date = new Date()) {
   return `${value('year')}-${value('month')}-${value('day')}`
 }
 
+const DEFAULT_ANCHOR = studioDateKey()
+
+function SalesBodySkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse" aria-label="Loading sales data">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {['revenue', 'collected', 'outstanding', 'profit', 'average', 'shoots'].map((key) => (
+          <div key={key} className={`${adminCard} h-[118px] p-5`}>
+            <div className="h-3 w-24 rounded bg-white/[0.08]" />
+            <div className="mt-4 h-7 w-28 rounded bg-white/[0.08]" />
+            <div className="mt-3 h-3 w-36 rounded bg-white/[0.06]" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className={`${adminPanel} h-[300px] p-5 xl:col-span-7`} />
+        <div className={`${adminPanel} h-[300px] p-5 xl:col-span-5`} />
+      </div>
+      <div className={`${adminPanel} h-[380px] p-5`} />
+    </div>
+  )
+}
+
 export default function SalesManagementPage() {
   const toast = useAdminToast()
-  const [period, setPeriod] = useState<Period>('month')
-  const [anchor, setAnchor] = useState(studioDateKey())
-  const [data, setData] = useState<Payload | null>(null)
-  const [loading, setLoading] = useState(true)
+  const initialView = useRef(getRememberedSalesView() ?? { period: 'month' as Period, anchor: DEFAULT_ANCHOR }).current
+  const initialData = useRef(getCachedSales(initialView.period, initialView.anchor)).current
+  const [period, setPeriod] = useState<Period>(initialView.period)
+  const [anchor, setAnchor] = useState(initialView.anchor)
+  const [data, setData] = useState<Payload | null>(initialData)
+  const [loading, setLoading] = useState(initialData === null)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const hasDataRef = useRef(data !== null)
+  const activeRequestKeyRef = useRef('')
   const [targets, setTargets] = useState({
     monthlyRevenueTarget: '',
     desiredMonthlyProfit: '',
     desiredProfitMargin: '',
   })
 
+  const applyPayload = useCallback((body: Payload) => {
+    hasDataRef.current = true
+    setData(body)
+    setTargets({
+      monthlyRevenueTarget: String(body.settings.monthlyRevenueTarget || ''),
+      desiredMonthlyProfit: String(body.settings.desiredMonthlyProfit || ''),
+      desiredProfitMargin: String(body.settings.desiredProfitMargin || ''),
+    })
+  }, [])
+
   const load = useCallback(
-    async (silent = false) => {
-      if (!silent) setRefreshing(true)
-      try {
-        const params = new URLSearchParams({ period, anchor })
-        const response = await fetch(`/api/sales/summary?${params}`, {
-          cache: 'no-store',
-          credentials: 'include',
-        })
-        const body = (await response.json().catch(() => ({}))) as Payload & { error?: string }
-        if (!response.ok) throw new Error(body.error || 'Could not load sales data.')
-        setData(body)
-        setTargets({
-          monthlyRevenueTarget: String(body.settings.monthlyRevenueTarget || ''),
-          desiredMonthlyProfit: String(body.settings.desiredMonthlyProfit || ''),
-          desiredProfitMargin: String(body.settings.desiredProfitMargin || ''),
-        })
-      } catch (error) {
-        toast.error('Sales data unavailable', error instanceof Error ? error.message : 'Try again.')
-      } finally {
-        setLoading(false)
+    async ({ force = false }: { force?: boolean } = {}) => {
+      const requestKey = salesCacheKey(period, anchor)
+      activeRequestKeyRef.current = requestKey
+      const cached = getCachedSales(period, anchor)
+      if (cached) applyPayload(cached)
+      const keepExistingData = Boolean(cached || hasDataRef.current)
+      setLoading(!keepExistingData)
+      if (!force && cached && isSalesCacheFresh(period, anchor)) {
         setRefreshing(false)
+        return
+      }
+      setRefreshing(keepExistingData)
+      try {
+        const body = await fetchSales(period, anchor, { force })
+        if (activeRequestKeyRef.current === requestKey) applyPayload(body)
+      } catch (error) {
+        if (activeRequestKeyRef.current === requestKey) {
+          toast.error('Sales data unavailable', error instanceof Error ? error.message : 'Try again.')
+        }
+      } finally {
+        if (activeRequestKeyRef.current === requestKey) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     },
-    [period, anchor, toast],
+    [anchor, applyPayload, period, toast],
   )
 
   useEffect(() => {
-    setLoading(true)
-    void load(true)
+    rememberSalesView(period, anchor)
+    void load()
+  }, [anchor, load, period])
+
+  useEffect(() => {
+    const handleSalesDataChanged = () => {
+      void load({ force: true })
+    }
+    window.addEventListener(SALES_DATA_CHANGED_EVENT, handleSalesDataChanged)
+    return () => window.removeEventListener(SALES_DATA_CHANGED_EVENT, handleSalesDataChanged)
   }, [load])
 
   const saveTargets = async () => {
@@ -147,7 +166,7 @@ export default function SalesManagementPage() {
       })
       if (!response.ok) throw new Error('Could not save financial targets.')
       toast.success('Financial targets saved', 'Sales planning metrics were recalculated.')
-      await load(true)
+      await load({ force: true })
     } catch (error) {
       toast.error('Could not save targets', error instanceof Error ? error.message : 'Try again.')
     } finally {
@@ -155,7 +174,32 @@ export default function SalesManagementPage() {
     }
   }
 
-  if (loading || !data) return <AdminPageSkeleton variant="dashboard" />
+  const pageHeader = (
+    <AdminPageHeader
+      title="Sales Management"
+      subtitle="Revenue, profitability, break-even, and target planning. Expense editing lives only in Business Expenses."
+      onRefresh={() => void load({ force: true })}
+      refreshing={refreshing}
+    >
+      <div className="flex flex-wrap gap-2">
+        <select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className={`${adminSelect} !w-auto min-w-28`}>
+          <option value="month">Month</option>
+          <option value="quarter">Quarter</option>
+          <option value="year">Year</option>
+        </select>
+        <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className={`${adminInput} !w-auto`} />
+      </div>
+    </AdminPageHeader>
+  )
+
+  if (loading || !data) {
+    return (
+      <div className={adminPage}>
+        {pageHeader}
+        <SalesBodySkeleton />
+      </div>
+    )
+  }
 
   const s = data.summary
   const metrics = [
@@ -169,21 +213,7 @@ export default function SalesManagementPage() {
 
   return (
     <div className={adminPage}>
-      <AdminPageHeader
-        title="Sales Management"
-        subtitle="Revenue, profitability, break-even, and target planning. Expense editing lives only in Business Expenses."
-        onRefresh={() => void load()}
-        refreshing={refreshing}
-      >
-        <div className="flex flex-wrap gap-2">
-          <select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className={`${adminSelect} !w-auto min-w-28`}>
-            <option value="month">Month</option>
-            <option value="quarter">Quarter</option>
-            <option value="year">Year</option>
-          </select>
-          <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className={`${adminInput} !w-auto`} />
-        </div>
-      </AdminPageHeader>
+      {pageHeader}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((metric) => {

@@ -32,6 +32,7 @@ export async function loginAdmin(
   _previousState: LoginActionState,
   formData: FormData,
 ): Promise<LoginActionState> {
+  let destination = '/admin/dashboard'
   const requestHeaders = await headers()
   const ip = requestIp(requestHeaders)
   const userAgent = requestHeaders.get('user-agent') ?? 'Unknown device'
@@ -69,9 +70,12 @@ export async function loginAdmin(
     try { await clearLoginRateLimit(ip) } catch { console.error('Admin login rate-limit cleanup failed') }
     await recordAdminLoginEvent({ userId: data.user.id, ip, userAgent, success: true })
     if (data.user.email) await sendAdminLoginAlert({ adminEmail: data.user.email, ip, userAgent })
+
+    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (assurance?.currentLevel !== 'aal2') destination = '/admin/mfa'
   } catch {
     return { success: false, code: 'SERVER_ERROR', message: 'Unable to sign in securely right now. Please try again later.' }
   }
 
-  redirect('/admin/dashboard')
+  redirect(destination)
 }

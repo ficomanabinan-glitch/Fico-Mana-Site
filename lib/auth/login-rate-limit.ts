@@ -27,7 +27,11 @@ function serviceSecret() {
 }
 
 function hashSecret() {
-  return process.env.LOGIN_RATE_LIMIT_SECRET || serviceSecret()
+  return (
+    process.env.LOGIN_RATE_LIMIT_SECRET ||
+    process.env.SECURITY_HASH_SECRET ||
+    (process.env.NODE_ENV === 'production' ? undefined : serviceSecret())
+  )
 }
 
 function getUpstashConfig() {

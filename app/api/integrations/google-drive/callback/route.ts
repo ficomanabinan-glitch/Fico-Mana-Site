@@ -7,6 +7,8 @@ import {
   googleOAuthSiteUrl,
   verifyGoogleOAuthState,
 } from '@/lib/google-oauth'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 
 function redirectWith(params: Record<string, string>) {
   const url = new URL('/admin/provisioning', googleOAuthSiteUrl())
@@ -15,8 +17,13 @@ function redirectWith(params: Record<string, string>) {
 }
 
 export async function GET(request: Request) {
-  const { user, error: authError } = await requireStaffAuth()
+  const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return redirectWith({ drive_error: 'Your admin session expired. Sign in again, then reconnect Google Drive.' })
+  const rateLimit = await enforceApiRateLimit(request, API_RATE_LIMITS.driveOperation, [
+    user?.id,
+    'callback',
+  ])
+  if (rateLimit) return rateLimit
 
   try {
     const url = new URL(request.url)
@@ -57,10 +64,30 @@ export async function GET(request: Request) {
       actor_id: user?.id || null,
       metadata: { accountEmail: token.email, scopes: token.scopes },
     })
+    await recordSecurityAuditEvent({
+      eventType: 'google_drive_connected',
+      outcome: 'success',
+      actorId: user?.id,
+      route: '/api/integrations/google-drive/callback',
+      metadata: { accountEmail: token.email },
+    })
 
     return redirectWith({ drive_connected: token.email })
   } catch (error) {
-    console.error('Google Drive OAuth callback failed:', error)
-    return redirectWith({ drive_error: error instanceof Error ? error.message : 'Google Drive connection failed.' })
+    const requestId = crypto.randomUUID()
+    console.error(`Google Drive OAuth callback failed [${requestId}]:`, error)
+    await recordSecurityAuditEvent({
+      eventType: 'google_drive_connection_failed',
+      outcome: 'failure',
+      actorId: user?.id,
+      route: '/api/integrations/google-drive/callback',
+    })
+    return redirectWith({
+      drive_error: process.env.NODE_ENV === 'production'
+        ? `Google Drive connection failed. Reference: ${requestId}`
+        : error instanceof Error
+          ? error.message
+          : 'Google Drive connection failed.',
+    })
   }
 }

@@ -16,9 +16,12 @@ function getClientIp(request: Request): string {
 async function hashClientIp(request: Request): Promise<string> {
   const ip = getClientIp(request)
   const salt =
-    process.env.SUPABASE_SECRET_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    'fico-mana-inquiry-rate-limit'
+    process.env.SECURITY_HASH_SECRET ||
+    process.env.LOGIN_RATE_LIMIT_SECRET ||
+    (process.env.NODE_ENV === 'production'
+      ? ''
+      : process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'fico-mana-inquiry-rate-limit')
+  if (!salt) throw new Error('INQUIRY_RATE_LIMIT_NOT_CONFIGURED')
   const bytes = new TextEncoder().encode(`${salt}:${ip}`)
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')

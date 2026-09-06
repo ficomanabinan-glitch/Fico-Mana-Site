@@ -32,6 +32,7 @@ import { enrichBookingDisplay, filterBookings } from '@/lib/booking-display'
 import { buildDayPriorityMap, getDayPriorityCount } from '@/lib/booking-priority'
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import AdminReceiptActions from '@/components/admin-receipt-actions'
+import { signalSalesDataChanged } from '@/lib/sales-read-cache'
 import BookingPrioritySelect from '@/components/booking-priority-select'
 import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
 import { 
@@ -54,6 +55,7 @@ import {
   Bell,
 } from 'lucide-react'
 import Image from 'next/image'
+import { receiptAccessUrl } from '@/lib/security/receipt-reference'
 import {
   adminPage,
   adminInput,
@@ -497,6 +499,7 @@ function BookingsManagement() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error((data as { error?: string }).error || 'Failed to delete booking.')
+      signalSalesDataChanged()
 
       if (selectedBooking?.id === deleteTarget.id) setSelectedBooking(null)
       setShowDeleteModal(false)
@@ -1477,7 +1480,7 @@ function BookingsManagement() {
                         </div>
                       ) : (
                         <Image
-                          src={selectedBooking.receiptUrl}
+                          src={receiptAccessUrl(selectedBooking.receiptUrl)}
                           alt="Receipt thumbnail"
                           fill
                           sizes="96px"
@@ -1490,7 +1493,7 @@ function BookingsManagement() {
                       <p className="font-semibold text-white/90">GCash Deposit Verification</p>
                       <p className="font-mono text-[10px] text-white/45">Ref: {selectedBooking.transactionRef || 'N/A'}</p>
                       <a
-                        href={selectedBooking.receiptUrl}
+                        href={receiptAccessUrl(selectedBooking.receiptUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[10px] text-primary font-bold hover:underline"

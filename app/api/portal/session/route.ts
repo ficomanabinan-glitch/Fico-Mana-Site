@@ -5,15 +5,22 @@ import {
   PORTAL_SESSION_COOKIE,
   verifyPortalSignature,
 } from '@/lib/client-portal'
-
-type Body = { publicId?: string; signature?: string }
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { privateNoStoreHeaders, rejectUntrustedMutation } from '@/lib/security/request-security'
+import { portalSessionSchema } from '@/lib/security/schemas'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Body
-    const publicId = body.publicId?.trim() || ''
-    const signature = body.signature?.trim() || ''
+    const originError = rejectUntrustedMutation(request)
+    if (originError) return originError
+    const parsed = portalSessionSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Invalid portal access link.' }, { status: 401, headers: privateNoStoreHeaders() })
+    const { publicId, signature } = parsed.data
+    const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.portalSession, [publicId])
+    if (limited) return limited
     if (!publicId || !verifyPortalSignature(publicId, signature)) {
+      await recordSecurityAuditEvent({ eventType: 'portal_verification_failed', outcome: 'blocked', route: '/api/portal/session' })
       return NextResponse.json({ error: 'Invalid portal access link.' }, { status: 401 })
     }
 
@@ -41,6 +48,8 @@ export async function POST(request: Request) {
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
     })
+    Object.entries(privateNoStoreHeaders()).forEach(([key, value]) => response.headers.set(key, value))
+    response.headers.set('Referrer-Policy', 'no-referrer')
     return response
   } catch (error) {
     console.error('POST /api/portal/session', error)

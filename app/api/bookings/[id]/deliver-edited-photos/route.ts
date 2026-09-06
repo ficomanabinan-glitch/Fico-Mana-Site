@@ -8,6 +8,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { saveBookingToDb, addNotificationToDb } from '@/lib/supabase-store'
 import { sendEditedPhotosEmail } from '@/lib/email'
 import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 type Body = {
   editedPhotoLink?: string
@@ -22,7 +23,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { id } = await params
@@ -86,10 +87,10 @@ export async function POST(
         console.error('edited photo DB update failed:', error.message)
         const viaUpsert = await saveBookingToDb(admin, updatedBooking)
         if (!viaUpsert) {
-          return NextResponse.json(
-            { error: `Database save failed: ${error.message}. Run the edited photo delivery migration in Supabase.` },
-            { status: 500 },
-          )
+          return secureErrorResponse(error, 'Failed to save the edited-photo delivery.', {
+            request,
+            context: 'POST /api/bookings/[id]/deliver-edited-photos',
+          })
         }
         saved = viaUpsert
       } else {

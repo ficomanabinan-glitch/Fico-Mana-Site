@@ -46,7 +46,7 @@ export function isAdminUser(user: User | null | undefined) {
     ? user.app_metadata.roles.filter((value): value is string => typeof value === 'string')
     : []
 
-  if (role === 'admin' || roles.includes('admin')) return true
+  if (role === 'owner' || role === 'admin' || roles.includes('owner') || roles.includes('admin')) return true
 
   const email = user.email?.trim().toLowerCase()
   return !!email && adminEmailAllowlist().has(email)

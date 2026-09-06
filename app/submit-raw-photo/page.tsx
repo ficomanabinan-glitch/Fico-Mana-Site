@@ -30,6 +30,7 @@ function SubmitSelectionForm() {
   const searchParams = useSearchParams()
 
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [driveLink, setDriveLink] = useState('')
   const [bookingId, setBookingId] = useState('')
   const [showBookingId, setShowBookingId] = useState(false)
@@ -57,6 +58,7 @@ function SubmitSelectionForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
+          email: email.trim(),
           rawPhotoLink: driveLink.trim(),
           bookingId: (resolvedBookingId || bookingId).trim() || undefined,
         }),
@@ -107,6 +109,7 @@ function SubmitSelectionForm() {
           onClick={() => {
             setDone(null)
             setName('')
+            setEmail('')
             setDriveLink('')
             setBookingId('')
             setMatches([])
@@ -131,7 +134,7 @@ function SubmitSelectionForm() {
             <p className="text-sm font-semibold text-white">Submit your 5 Enhanced Photos</p>
             <p className="text-[11px] text-white/45 mt-1 leading-relaxed">
               Paste the Google Drive link to your <strong className="text-white/70">5 Enhanced Photos</strong> folder
-              (with your 5 original raw photos and a photo of the completed Printing Template), then enter your full name.
+              (with your 5 original raw photos and a photo of the completed Printing Template), then verify your booking name and email.
             </p>
           </div>
         </div>
@@ -145,6 +148,19 @@ function SubmitSelectionForm() {
             placeholder="Same name used when booking"
             className={inputClass + ' mt-1.5'}
             autoComplete="name"
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Booking Email</label>
+          <input
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Same email used when booking"
+            className={inputClass + ' mt-1.5'}
+            autoComplete="email"
           />
         </div>
 

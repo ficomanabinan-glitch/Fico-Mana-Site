@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { listBookingsFromDb } from '@/lib/supabase-store'
 import { calculateSalesSummary, type SalesPeriod } from '@/lib/sales-finance'
-import { getSalesSettings, listSalesExpenses } from '@/lib/sales-store'
+import { getSalesSettings, listSalesBookings, listSalesExpenses } from '@/lib/sales-store'
+import { secureErrorResponse } from '@/lib/security/error-response'
 
 const VALID_PERIODS = new Set<SalesPeriod>(['month', 'quarter', 'year'])
 
@@ -25,20 +25,16 @@ export async function GET(request: Request) {
     }
 
     const [bookings, expenses, settings] = await Promise.all([
-      listBookingsFromDb(admin),
-      listSalesExpenses(admin),
+      listSalesBookings(admin),
+      listSalesExpenses(admin, { activeOnly: true, ordered: false }),
       getSalesSettings(admin),
     ])
-
-    if (!bookings) return NextResponse.json({ error: 'Could not load bookings.' }, { status: 500 })
 
     return NextResponse.json({
       summary: calculateSalesSummary(bookings, expenses, settings, period, anchor),
       settings,
-      expenses,
     })
   } catch (error) {
-    console.error('GET /api/sales/summary', error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to load sales summary.' }, { status: 500 })
+    return secureErrorResponse(error, 'Failed to load sales summary.', { request, context: 'GET /api/sales/summary' })
   }
 }

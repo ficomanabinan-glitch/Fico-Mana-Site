@@ -2,7 +2,7 @@ import type { User } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/auth/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
-export type WorkflowRole = 'owner' | 'admin' | 'editor' | 'staff'
+export type WorkflowRole = 'owner' | 'admin' | 'editor' | 'onsite' | 'staff'
 export type WorkflowCapability = 'view' | 'onsite' | 'edit' | 'admin'
 
 export type WorkflowAccess = {
@@ -17,6 +17,7 @@ const CAPABILITIES: Record<WorkflowRole, ReadonlySet<WorkflowCapability>> = {
   owner: new Set(['view', 'onsite', 'edit', 'admin']),
   admin: new Set(['view', 'onsite', 'edit', 'admin']),
   editor: new Set(['view', 'onsite', 'edit']),
+  onsite: new Set(['view', 'onsite']),
   staff: new Set(['view', 'onsite']),
 }
 
@@ -69,10 +70,11 @@ export async function getWorkflowAccess(user: User): Promise<WorkflowAccess | nu
     .single()
   if (workspaceError || !workspace) throw new Error('Studio workspace is not configured.')
   const displayName = user.email?.split('@')[0] || 'Administrator'
+  const trustedRole = user.app_metadata?.role === 'owner' ? 'owner' : 'admin'
   const { error: memberError } = await admin.from('workspace_members').insert({
     workspace_id: workspace.id,
     user_id: user.id,
-    role: 'admin',
+    role: trustedRole,
     display_name: displayName,
   })
   if (memberError) throw new Error(memberError.message)
@@ -80,7 +82,7 @@ export async function getWorkflowAccess(user: User): Promise<WorkflowAccess | nu
     workspaceId: String(workspace.id),
     workspaceName: String(workspace.name),
     workspaceSlug: String(workspace.slug),
-    role: 'admin',
+    role: trustedRole,
     displayName,
   }
 }
