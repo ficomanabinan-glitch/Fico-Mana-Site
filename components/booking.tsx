@@ -825,7 +825,7 @@ function BookingForm() {
                         key={bg.id}
                         className="relative aspect-square sm:w-20 sm:h-20 md:w-24 md:h-24 overflow-hidden border-2 border-white/20"
                       >
-                        <Image src={bg.image} alt={bg.label} fill className="object-cover" />
+                        <Image src={bg.image} alt={bg.label} fill sizes="(max-width: 640px) 33vw, 96px" className="object-cover" />
                         <span className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[8px] uppercase py-0.5 text-center">
                           {bg.label}
                         </span>

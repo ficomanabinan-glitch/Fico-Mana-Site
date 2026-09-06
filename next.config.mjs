@@ -69,7 +69,11 @@ const nextConfig = {
     root: projectRoot,
   },
   images: {
-    unoptimized: true,
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [360, 640, 750, 828, 1080, 1200, 1600],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 2592000,
+    localPatterns: [{ pathname: '/**' }],
   },
   async headers() {
     return [
@@ -86,7 +90,7 @@ const nextConfig = {
           },
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=604800, stale-while-revalidate=2592000',
           },
         ],
       },

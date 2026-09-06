@@ -49,10 +49,10 @@ export default function Footer() {
           <div className="grid md:grid-cols-12 gap-12 md:gap-8 mb-16">
             <motion.div variants={itemVariants} className="md:col-span-4">
               <Image
-                src="/logoo%20(1).png"
+                src="/fico_navbar.png?v=3"
                 alt="Fico Mana Self Portrait Studio"
                 width={180}
-                height={54}
+                height={130}
                 className="h-14 w-auto mb-4"
               />
               <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-white/50 mb-3">

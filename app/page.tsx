@@ -9,8 +9,7 @@ import PackageTeaser from '@/components/package-teaser'
 import Pricing from '@/components/pricing'
 import FAQ from '@/components/faq'
 import Contact from '@/components/contact'
-import Booking from '@/components/booking'
-import BookingResubmit from '@/components/booking-resubmit'
+import DeferredBooking from '@/components/deferred-booking'
 import Footer from '@/components/footer'
 
 export default function Home() {
@@ -27,8 +26,7 @@ export default function Home() {
       <PackageTeaser />
       <FAQ />
       <Contact />
-      <Booking />
-      <BookingResubmit />
+      <DeferredBooking />
       <Footer />
     </main>
   )

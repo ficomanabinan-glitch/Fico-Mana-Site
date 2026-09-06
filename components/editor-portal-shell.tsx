@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { CloudUpload, LayoutDashboard, ListFilter, LogOut, Menu, ShieldCheck, X } from 'lucide-react'
+import { CloudUpload, FolderUp, LayoutDashboard, ListFilter, LogOut, Menu, ShieldCheck, X } from 'lucide-react'
 import { AdminToastProvider } from '@/components/admin-toast-provider'
 import EditorLoadingSkeleton from '@/components/editor-page-skeleton'
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
@@ -14,7 +14,7 @@ export default function EditorPortalShell({children}:{children:React.ReactNode})
   const pathname=usePathname();const router=useRouter();const[session,setSession]=useState<Session|null>(null);const[loading,setLoading]=useState(pathname!=='/editor/login');const[menu,setMenu]=useState(false)
   const loginPage=pathname==='/editor/login'
   useEffect(()=>{if(loginPage){setLoading(false);return}let cancelled=false;fetch('/api/editor-workflow/session',{cache:'no-store',credentials:'include'}).then(async(response)=>{if(!response.ok){const client=createSupabaseBrowserClient();await client.auth.signOut();router.replace('/editor/login');return}const body=await response.json() as Session;if(!cancelled)setSession(body)}).catch(()=>router.replace('/editor/login')).finally(()=>{if(!cancelled)setLoading(false)});return()=>{cancelled=true}},[loginPage,pathname,router])
-  const navigation=useMemo(()=>{if(!session)return[];return[{label:'Dashboard',href:'/editor',icon:LayoutDashboard,show:true},{label:'Editing Queue',href:'/editor/queue',icon:ListFilter,show:session.capabilities.edit},{label:'Onsite Upload',href:'/editor/onsite',icon:CloudUpload,show:session.capabilities.onsite}].filter((item)=>item.show)},[session])
+  const navigation=useMemo(()=>{if(!session)return[];return[{label:'Dashboard',href:'/editor',icon:LayoutDashboard,show:true},{label:'Editing Queue',href:'/editor/queue',icon:ListFilter,show:session.capabilities.edit},{label:'Upload Photos',href:'/editor/upload',icon:FolderUp,show:session.capabilities.edit},{label:'Onsite Upload',href:'/editor/onsite',icon:CloudUpload,show:session.capabilities.onsite}].filter((item)=>item.show)},[session])
   const logout=async()=>{await createSupabaseBrowserClient().auth.signOut();router.push('/editor/login');router.refresh()}
   if(loginPage)return <>{children}</>
   if(loading||!session)return <div className="admin-console min-h-screen bg-[#222222] p-6 text-white"><EditorLoadingSkeleton/></div>

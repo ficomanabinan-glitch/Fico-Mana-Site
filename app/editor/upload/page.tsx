@@ -1,18 +1,23 @@
 import { redirect } from 'next/navigation'
-import OnsiteUpload from '@/components/onsite-upload'
+import EditorUploadPhotos from '@/components/editor-upload-photos'
 import { canUseWorkflow, getWorkflowAccess } from '@/lib/auth/workflow'
 import { getStaffUser } from '@/lib/supabase/server'
 
-export default async function OnsiteUploadPage({
+export default async function EditorUploadPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; booking?: string }>
+  searchParams: Promise<{ batch?: string; retry?: string }>
 }) {
   const user = await getStaffUser()
   if (!user) redirect('/editor/login')
   const access = await getWorkflowAccess(user)
   if (!access) redirect('/editor/login')
-  if (!canUseWorkflow(access, 'onsite')) redirect('/editor/queue')
+  if (!canUseWorkflow(access, 'edit')) redirect('/editor/onsite')
   const params = await searchParams
-  return <OnsiteUpload initialDate={String(params.date || '')} initialBooking={String(params.booking || '')} />
+  return (
+    <EditorUploadPhotos
+      initialBatchId={String(params.batch || '')}
+      initialFailedOnly={params.retry === '1'}
+    />
+  )
 }

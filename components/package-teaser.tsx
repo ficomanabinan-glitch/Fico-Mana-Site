@@ -23,6 +23,7 @@ export default function PackageTeaser() {
         src="/bg_package.jpg"
         alt=""
         fill
+        sizes="100vw"
         className="object-cover object-center opacity-[0.08]"
         priority={false}
       />

@@ -14,6 +14,7 @@ import {
   getBatchDetail,
   getBatchFailedBookingIds,
   getBatchList,
+  getUploadReport,
   getPortalData,
   getPortalFile,
   getWorkflowMembers,
@@ -198,6 +199,12 @@ async function handle(request: NextRequest, path: string[]) {
       return json({ shootDate, batch: detail })
     }
 
+    if (path[0] === 'uploads' && path[1] === 'report' && method === 'GET') {
+      const denied = requireCapability('edit')
+      if (denied) return denied
+      return json(await getUploadReport(workspaceId, Number(request.nextUrl.searchParams.get('limit') || 30)))
+    }
+
     if (path[0] === 'folders' && path[1] && method === 'POST') {
       const denied = requireCapability('onsite')
       if (denied) return denied
@@ -274,7 +281,7 @@ async function handle(request: NextRequest, path: string[]) {
         if (denied) return denied
         const body = (await request.json().catch(() => ({}))) as { bookingIds?: unknown }
         const bookingIds = Array.isArray(body.bookingIds) ? body.bookingIds.map(String) : []
-        return json(await createBatchUploadRun(workspaceId, batchId, bookingIds, actorId, canUseWorkflow(access, 'admin')))
+        return json(await createBatchUploadRun(workspaceId, batchId, bookingIds, actorId))
       }
       if (path[2] === 'upload-session' && method === 'POST') {
         const denied = requireCapability('edit')

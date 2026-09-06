@@ -27,6 +27,7 @@ export default function About() {
               src="/model/model_5.jpg"
               alt="FICO MANA Studio portrait session"
               fill
+              sizes="(max-width: 1024px) 100vw, 50vw"
               className="object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primary/40 via-transparent to-transparent" />

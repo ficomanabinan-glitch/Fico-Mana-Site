@@ -24,6 +24,7 @@ export default function Pricing() {
           src="/bg_pricing.jpg"
           alt=""
           fill
+          sizes="100vw"
           className="object-cover object-center opacity-20"
           priority={false}
         />
@@ -146,6 +147,7 @@ export default function Pricing() {
           src="/capping_bg.jpg"
           alt=""
           fill
+          sizes="100vw"
           className="object-cover object-center opacity-20"
           priority={false}
         />

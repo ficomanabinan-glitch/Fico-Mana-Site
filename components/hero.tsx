@@ -45,8 +45,7 @@ export default function Hero() {
           fill
           className="object-cover object-center brightness-[1.08] contrast-[1.04]"
           priority
-          quality={95}
-          sizes="100vw"
+          sizes="(max-width: 639px) 100vw, 1px"
         />
         {/* Darken only the bottom for text/CTAs — keep the top of the photo clean */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
@@ -66,8 +65,7 @@ export default function Hero() {
             fill
             className="object-cover object-center brightness-[1.1] contrast-[1.04]"
             priority
-            quality={95}
-            sizes="100vw"
+            sizes="(max-width: 639px) 1px, 100vw"
           />
         </motion.div>
 

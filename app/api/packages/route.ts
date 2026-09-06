@@ -4,6 +4,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { listPackagesFromDb } from '@/lib/supabase-store'
 import { bookingPackages, enrichBookingPackageFromCatalog, type BookingPackage } from '@/lib/booking-packages'
 
+const catalogCacheHeaders = {
+  'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+  'CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+  'Vercel-CDN-Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+}
+
 function codePackagesToApi(category?: string | null): BookingPackage[] {
   return category ? bookingPackages.filter((p) => p.category === category) : bookingPackages
 }
@@ -43,13 +49,13 @@ export async function GET(request: Request) {
             note: p.note,
           }),
         )
-        return NextResponse.json(bookable, { headers: { 'Cache-Control': 'public, no-store, max-age=0' } })
+        return NextResponse.json(bookable, { headers: catalogCacheHeaders })
       }
 
       return NextResponse.json({ error: 'Package catalog is temporarily unavailable.' }, { status: 503 })
     }
 
-    return NextResponse.json(codePackagesToApi(category), { headers: { 'Cache-Control': 'public, no-store, max-age=0' } })
+    return NextResponse.json(codePackagesToApi(category), { headers: catalogCacheHeaders })
   } catch (error) {
     console.error('GET /api/packages', error)
     return NextResponse.json({ error: 'Failed to load packages' }, { status: 500 })

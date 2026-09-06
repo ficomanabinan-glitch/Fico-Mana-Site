@@ -374,6 +374,88 @@ export async function getBatchDetail(workspaceId: string, displayId: string) {
   }
 }
 
+export async function getUploadReport(workspaceId: string, requestedLimit = 30) {
+  const admin = adminClient()
+  const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit) || 30))
+  const { data: runs, error: runsError } = await admin
+    .from('batch_upload_jobs')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (runsError) throw new Error(runsError.message)
+  if (!runs?.length) return []
+
+  const runIds = runs.map((run) => String(run.id))
+  const batchIds = [...new Set(runs.map((run) => String(run.batch_id)))]
+  const [{ data: batches, error: batchesError }, { data: items, error: itemsError }] = await Promise.all([
+    admin.from('editing_batches').select('id,display_id,shoot_date').in('id', batchIds),
+    admin.from('batch_upload_items').select('*').in('upload_job_id', runIds),
+  ])
+  if (batchesError) throw new Error(batchesError.message)
+  if (itemsError) throw new Error(itemsError.message)
+
+  const bookingIds = [...new Set((items || []).map((item) => String(item.booking_id)))]
+  const bookingsResult = bookingIds.length
+    ? await admin.from('bookings').select('id,customer_name,package_name').in('id', bookingIds)
+    : { data: [], error: null }
+  const foldersResult = bookingIds.length
+    ? await admin
+        .from('drive_folders')
+        .select('booking_id,folder_type,drive_folder_id,web_view_url')
+        .in('booking_id', bookingIds)
+        .in('folder_type', ['EDITED', 'DELIVERABLES'])
+    : { data: [], error: null }
+  if (bookingsResult.error) throw new Error(bookingsResult.error.message)
+  if (foldersResult.error) throw new Error(foldersResult.error.message)
+
+  const batchMap = new Map((batches || []).map((batch) => [String(batch.id), batch]))
+  const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
+  const folderMap = new Map(
+    (foldersResult.data || []).map((folder) => [`${folder.booking_id}:${folder.folder_type}`, folder]),
+  )
+
+  return runs.map((run) => {
+    const batch = batchMap.get(String(run.batch_id))
+    return {
+      id: String(run.id),
+      batchId: String(batch?.display_id || run.batch_id),
+      shootDate: String(batch?.shoot_date || ''),
+      status: String(run.status),
+      totalClients: Number(run.total_clients || 0),
+      completedClients: Number(run.completed_clients || 0),
+      failedClients: Number(run.failed_clients || 0),
+      photosUploaded: Number(run.photos_uploaded || 0),
+      createdAt: String(run.created_at),
+      completedAt: run.completed_at ? String(run.completed_at) : null,
+      clients: (items || [])
+        .filter((item) => String(item.upload_job_id) === String(run.id))
+        .map((item) => {
+          const bookingId = String(item.booking_id)
+          const booking = bookingMap.get(bookingId)
+          const edited = folderMap.get(`${bookingId}:EDITED`)
+          const deliverables = folderMap.get(`${bookingId}:DELIVERABLES`)
+          return {
+            bookingId,
+            customerName: String(booking?.customer_name || bookingId),
+            packageName: String(booking?.package_name || ''),
+            status: String(item.status),
+            expectedFiles: Number(item.expected_files || 0),
+            uploadedFiles: Number(item.uploaded_files || 0),
+            lastError: item.last_error ? String(item.last_error) : null,
+            updatedAt: String(item.updated_at),
+            editedFolderUrl: String(
+              edited?.web_view_url || driveFolderUrl(edited?.drive_folder_id),
+            ),
+            deliverablesFolderUrl: String(
+              deliverables?.web_view_url || driveFolderUrl(deliverables?.drive_folder_id),
+            ),
+          }
+        }),
+    }
+  })
+}
+
 export async function recordMatchReviews(
   workspaceId: string,
   displayId: string,
@@ -1149,14 +1231,13 @@ export async function prepareBatchDownload(
   const now = Date.now()
   const jobs = (readyJobs || []).filter((job) => {
     if (allowOverride) return true
-    const assignedElsewhere = job.assigned_editor_id && job.assigned_editor_id !== actorId
     const lockedElsewhere =
       job.download_locked_by !== actorId &&
       job.download_lock_expires_at &&
       new Date(job.download_lock_expires_at).getTime() > now
-    return !assignedElsewhere && !lockedElsewhere
+    return !lockedElsewhere
   })
-  if (!jobs.length) throw new Error('No unclaimed READY FOR EDITING jobs are available in this batch.')
+  if (!jobs.length) throw new Error('No READY FOR EDITING jobs are available in this batch.')
   const lockExpiresAt = new Date(now + 2 * 60 * 60 * 1000).toISOString()
   const { error: lockError } = await admin
     .from('editing_jobs')
@@ -1209,8 +1290,6 @@ export async function prepareBatchDownload(
         deliverables_folder_drive_id: folderMap.get(`${job.booking_id}:DELIVERABLES`)?.drive_folder_id || null,
         portal_id: portalMap.get(String(job.booking_id)) || null,
         customer_name: String(booking?.customer_name || job.booking_id),
-        assigned_editor_id: job.assigned_editor_id || null,
-        assigned_editor_name: job.assigned_editor_name || null,
       }
     }),
   }
@@ -1290,7 +1369,7 @@ export async function prepareBatchCollectionDownload(
     try {
       prepared.push(await prepareBatchDownload(workspaceId, batch.id, actorId, allowOverride))
     } catch (error) {
-      if (!/No unclaimed READY FOR EDITING/.test(error instanceof Error ? error.message : '')) throw error
+      if (!/No READY FOR EDITING/.test(error instanceof Error ? error.message : '')) throw error
     }
   }
   if (!prepared.length) throw new Error(`No downloadable jobs are available for this ${scope}.`)
@@ -1317,7 +1396,6 @@ export async function createBatchUploadRun(
   displayId: string,
   bookingIds: string[],
   actorId: string,
-  allowOverride = false,
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
@@ -1329,8 +1407,6 @@ export async function createBatchUploadRun(
     .in('booking_id', uniqueIds)
   if (error) throw new Error(error.message)
   if (!jobs?.length || jobs.length !== uniqueIds.length) throw new Error('Upload manifest contains unknown batch clients.')
-  const assignedElsewhere = jobs.find((job) => job.assigned_editor_id && job.assigned_editor_id !== actorId)
-  if (assignedElsewhere && !allowOverride) throw new Error(`${assignedElsewhere.booking_id} is assigned to another editor.`)
   const invalid = jobs.find((job) => !['DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'].includes(job.status))
   if (invalid) throw new Error(`${invalid.booking_id} is not ready for deliverable upload.`)
   const { data: run, error: runError } = await admin

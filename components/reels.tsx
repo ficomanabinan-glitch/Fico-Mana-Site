@@ -5,15 +5,22 @@ import { Volume2, VolumeX, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 const REEL_VIDEO = '/breanna-reel.mp4'
-const PLAY_LEAD_VH = 1.75
-const PRELOAD_LEAD_VH = 2.5
+const PLAY_LEAD_VH = 0.35
+const PRELOAD_LEAD_VH = 1
 const PAUSE_ABOVE_VH = 1.2
+
+function loadReel(video: HTMLVideoElement) {
+  if (video.dataset.loaded === 'true') return
+  video.dataset.loaded = 'true'
+  video.src = REEL_VIDEO
+  video.preload = 'metadata'
+  video.load()
+}
 
 export default function Reels() {
   const sectionRef = useRef<HTMLElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const shouldPlayRef = useRef(false)
-  const hasLoadedRef = useRef(false)
   const preloadStartedRef = useRef(false)
   const [muted, setMuted] = useState(true)
   const [playing, setPlaying] = useState(false)
@@ -29,12 +36,7 @@ export default function Reels() {
     video.setAttribute('webkit-playsinline', '')
     video.muted = true
     video.defaultMuted = true
-    video.preload = 'auto'
-
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true
-      video.load()
-    }
+    video.preload = 'none'
 
     const showPreviewFrame = () => {
       if (video.paused && video.readyState >= 2 && video.currentTime === 0) {
@@ -74,7 +76,7 @@ export default function Reels() {
 
       if (top <= preloadThreshold && !preloadStartedRef.current) {
         preloadStartedRef.current = true
-        video.load()
+        loadReel(video)
       }
 
       const wantsPlay = top <= playThreshold && bottom > 0
@@ -134,6 +136,7 @@ export default function Reels() {
   const toggleMute = () => {
     const video = videoRef.current
     if (!video) return
+    loadReel(video)
     const next = !muted
     setMuted(next)
     video.muted = next
@@ -144,6 +147,7 @@ export default function Reels() {
   const tapToPlay = () => {
     const video = videoRef.current
     if (!video) return
+    loadReel(video)
     shouldPlayRef.current = true
     void video.play().then(() => setPlaying(true)).catch(() => {})
   }
@@ -176,12 +180,11 @@ export default function Reels() {
 
                 <video
                   ref={videoRef}
-                  src={REEL_VIDEO}
                   className="absolute inset-0 h-full w-full object-cover"
                   playsInline
                   loop
                   muted
-                  preload="auto"
+                  preload="none"
                   onClick={tapToPlay}
                 />
 

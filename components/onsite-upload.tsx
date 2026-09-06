@@ -102,10 +102,16 @@ function uploadRawFile(
   })
 }
 
-export default function OnsiteUpload() {
+export default function OnsiteUpload({
+  initialDate = todayKey(),
+  initialBooking = '',
+}: {
+  initialDate?: string
+  initialBooking?: string
+}) {
   const toast = useAdminToast()
-  const [date, setDate] = useState(todayKey())
-  const [search, setSearch] = useState('')
+  const [date, setDate] = useState(/^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey())
+  const [search, setSearch] = useState(initialBooking)
   const [data, setData] = useState<OnsiteResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')

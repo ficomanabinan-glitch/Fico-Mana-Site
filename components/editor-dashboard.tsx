@@ -1,25 +1,300 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, CalendarDays, CheckCircle2, Download, FolderUp, ImagePlus } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  FolderUp,
+  ImagePlus,
+  RefreshCw,
+  UploadCloud,
+} from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
 
-type Batch={id:string;shootDate:string;totalClients:number;counts:{readyForEditing:number;downloaded:number;editing:number;readyToUpload:number;uploading:number;delivered:number;failed:number}}
-type Session={role:string;capabilities:{onsite:boolean;edit:boolean;admin:boolean}}
-function dateKey(date=new Date()){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
-function weekStart(value=new Date()){const date=new Date(value);date.setHours(12,0,0,0);date.setDate(date.getDate()+(date.getDay()===0?-6:1-date.getDay()));return dateKey(date)}
-function inWeek(day:string,key:string){const date=new Date(`${day}T12:00:00`);const start=new Date(`${key}T12:00:00`);const end=new Date(start);end.setDate(end.getDate()+7);return date>=start&&date<end}
-
-export default function EditorDashboard(){
-  const toast=useAdminToast();const[batches,setBatches]=useState<Batch[]>([]);const[session,setSession]=useState<Session|null>(null);const[loading,setLoading]=useState(true);const[downloading,setDownloading]=useState('')
-  useEffect(()=>{Promise.all([fetch('/api/editor-workflow/batches',{cache:'no-store',credentials:'include'}),fetch('/api/editor-workflow/session',{cache:'no-store',credentials:'include'})]).then(async([batchResponse,sessionResponse])=>{if(!batchResponse.ok||!sessionResponse.ok)throw new Error('Editor dashboard could not be loaded.');setBatches(await batchResponse.json() as Batch[]);setSession(await sessionResponse.json() as Session)}).catch((error)=>toast.error('Dashboard unavailable',error instanceof Error?error.message:'Try again.')).finally(()=>setLoading(false))},[toast])
-  const stats=useMemo(()=>{const today=dateKey();const week=weekStart();const month=today.slice(0,7);const sum=(rows:Batch[])=>rows.reduce((total,batch)=>total+batch.totalClients,0);const todayRows=batches.filter((batch)=>batch.shootDate===today);const weekRows=batches.filter((batch)=>inWeek(batch.shootDate,week));const monthRows=batches.filter((batch)=>batch.shootDate.startsWith(month));const counts=batches.reduce((value,batch)=>{value.ready+=batch.counts.readyForEditing;value.editing+=batch.counts.downloaded+batch.counts.editing;value.upload+=batch.counts.readyToUpload+batch.counts.uploading+batch.counts.failed;value.completed+=batch.counts.delivered;return value},{ready:0,editing:0,upload:0,completed:0});return{today,week,month,todayJobs:sum(todayRows),weekJobs:sum(weekRows),monthJobs:sum(monthRows),counts}},[batches])
-  const download=(scope:'day'|'week',key:string)=>{setDownloading(scope);const anchor=document.createElement('a');anchor.href=`/api/editor-workflow/collections/download?scope=${scope}&key=${encodeURIComponent(key)}`;anchor.download=`FICO-MANA-${scope}-${key}.zip`;document.body.appendChild(anchor);anchor.click();anchor.remove();toast.success('Download started','Ready jobs are locked to you and organized into separate client folders.');window.setTimeout(()=>setDownloading(''),3000)}
-  if(loading)return <EditorPageSkeleton variant="dashboard"/>
-  return <div className="space-y-6"><div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#C4CEFF]">Post-production command center</p><h1 className="mt-2 font-serif text-3xl font-bold">Today’s editor workflow</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/40">Upload onsite photos, download Lightroom-ready batches, then return every client’s finished work with one structured upload.</p></div><span className="inline-flex w-fit items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-[9px] font-bold uppercase text-emerald-300"><CheckCircle2 className="size-3.5"/>{session?.role} access active</span></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Ready for Editing" value={stats.counts.ready} tone="text-cyan-300"/><Metric label="Downloaded / Editing" value={stats.counts.editing} tone="text-amber-300"/><Metric label="Waiting Final Upload" value={stats.counts.upload} tone="text-violet-300"/><Metric label="Completed" value={stats.counts.completed} tone="text-emerald-300"/></div><section className={`${adminPanel} p-5`}><div className="flex items-center gap-2"><CalendarDays className="size-4 text-[#C4CEFF]"/><h2 className="text-sm font-semibold">Backlog by schedule</h2></div><div className="mt-4 grid gap-px overflow-hidden border border-white/[0.07] bg-white/[0.07] sm:grid-cols-3"><Backlog label="Today" value={stats.todayJobs} detail={stats.today}/><Backlog label="This Week" value={stats.weekJobs} detail={`Starting ${stats.week}`}/><Backlog label="This Month" value={stats.monthJobs} detail={stats.month}/></div></section><section className="grid gap-4 lg:grid-cols-2"><div className={`${adminPanel} p-5`}><p className="text-[9px] font-bold uppercase tracking-wider text-white/30">Editor actions</p><h2 className="mt-1 text-lg font-semibold">One-click download</h2><p className="mt-2 text-xs leading-relaxed text-white/40">Every ZIP keeps clients separated and includes internal booking, client, and Drive destination IDs.</p><div className="mt-5 flex flex-wrap gap-2">{session?.capabilities.edit?<><button onClick={()=>download('day',stats.today)} disabled={downloading==='day'} className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5`}><Download className="size-4"/>Download Today’s Jobs</button><button onClick={()=>download('week',stats.week)} disabled={downloading==='week'} className={`${adminBtnGhost} inline-flex items-center gap-2 px-4 py-2.5`}><Download className="size-4"/>Download This Week</button><Link href="/editor/queue" className={`${adminBtnGhost} inline-flex items-center gap-2 px-4 py-2.5`}>Upload Edited Jobs <FolderUp className="size-4"/></Link></>:<p className="text-xs text-white/35">Editing downloads are available to Editor and Admin roles.</p>}</div></div><div className={`${adminPanel} p-5`}><p className="text-[9px] font-bold uppercase tracking-wider text-white/30">Onsite actions</p><h2 className="mt-1 text-lg font-semibold">Automatic Drive routing</h2><p className="mt-2 text-xs leading-relaxed text-white/40">Select the shoot date and client. Fico Mana handles the destination and records every uploaded file.</p><div className="mt-5 flex flex-wrap gap-2">{session?.capabilities.onsite?<Link href="/editor/onsite" className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5`}><ImagePlus className="size-4"/>Open Onsite Upload</Link>:null}<Link href="/editor/queue" className={`${adminBtnGhost} inline-flex items-center gap-2 px-4 py-2.5`}>View Editing Queue <ArrowRight className="size-4"/></Link></div></div></section></div>
+type Batch = {
+  id: string
+  shootDate: string
+  totalClients: number
+  counts: {
+    readyForEditing: number
+    downloaded: number
+    editing: number
+    readyToUpload: number
+    uploading: number
+    delivered: number
+    failed: number
+  }
 }
-function Metric({label,value,tone}:{label:string;value:number;tone:string}){return <div className={`${adminPanel} p-4`}><p className="text-[9px] font-bold uppercase tracking-wider text-white/30">{label}</p><p className={`mt-2 text-3xl font-bold ${tone}`}>{value}</p></div>}
-function Backlog({label,value,detail}:{label:string;value:number;detail:string}){return <div className="bg-[#222222] p-4"><p className="text-[9px] font-bold uppercase tracking-wider text-white/30">{label}</p><p className="mt-1 text-2xl font-bold">{value} <span className="text-xs font-normal text-white/30">jobs</span></p><p className="mt-1 text-[10px] text-white/30">{detail}</p></div>}
+
+type TodayJob = {
+  bookingId: string
+  customerName: string
+  packageName: string
+  bookingTime: string
+  galleryCount: number
+  rawFolderDriveId?: string | null
+}
+
+type Session = {
+  role: string
+  capabilities: { onsite: boolean; edit: boolean; admin: boolean }
+}
+
+function dateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function dayLabel(value: string) {
+  return new Date(`${value}T12:00:00`).toLocaleDateString('en-PH', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+export default function EditorDashboard() {
+  const toast = useAdminToast()
+  const [batches, setBatches] = useState<Batch[]>([])
+  const [todayJobs, setTodayJobs] = useState<TodayJob[]>([])
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState('')
+  const today = dateKey()
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const [batchResponse, sessionResponse, onsiteResponse] = await Promise.all([
+        fetch('/api/editor-workflow/batches', { cache: 'no-store', credentials: 'include' }),
+        fetch('/api/editor-workflow/session', { cache: 'no-store', credentials: 'include' }),
+        fetch(`/api/editor-workflow/onsite?date=${encodeURIComponent(today)}`, {
+          cache: 'no-store',
+          credentials: 'include',
+        }),
+      ])
+      if (!batchResponse.ok || !sessionResponse.ok || !onsiteResponse.ok) {
+        throw new Error('Editor dashboard could not be loaded.')
+      }
+      const onsite = (await onsiteResponse.json()) as { batch?: { jobs?: TodayJob[] } | null }
+      setBatches((await batchResponse.json()) as Batch[])
+      setSession((await sessionResponse.json()) as Session)
+      setTodayJobs(onsite.batch?.jobs || [])
+    } catch (error) {
+      if (!silent) toast.error('Dashboard unavailable', error instanceof Error ? error.message : 'Try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [toast, today])
+
+  useEffect(() => {
+    void load()
+    const refresh = () => void load(true)
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [load])
+
+  const totals = useMemo(
+    () =>
+      batches.reduce(
+        (value, batch) => {
+          value.download += batch.counts.readyForEditing
+          value.uploading += batch.counts.uploading
+          value.failed += batch.counts.failed
+          return value
+        },
+        { download: 0, uploading: 0, failed: 0 },
+      ),
+    [batches],
+  )
+
+  const startDownload = (batch: Batch) => {
+    setDownloading(batch.id)
+    const anchor = document.createElement('a')
+    anchor.href = `/api/editor-workflow/batches/${encodeURIComponent(batch.id)}/download`
+    anchor.download = `${batch.id}.zip`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    toast.success('Batch download started', 'Client folders and the secure batch manifest are included.')
+    window.setTimeout(() => {
+      setDownloading('')
+      void load(true)
+    }, 3000)
+  }
+
+  if (loading) return <EditorPageSkeleton variant="dashboard" />
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#C4CEFF]">Editor Dashboard</p>
+          <h1 className="mt-2 font-serif text-3xl font-bold">Today’s upload and editing work</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/40">
+            See today’s onsite clients, download each day batch, upload finished folders, and retry failures.
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-[9px] font-bold uppercase text-emerald-300">
+          <CheckCircle2 className="size-3.5" />{session?.role} access active
+        </span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Onsite Clients Today" value={todayJobs.length} tone="text-cyan-300" icon={ImagePlus} />
+        <Metric label="Ready to Download" value={totals.download} tone="text-amber-300" icon={Download} />
+        <Metric label="Uploading" value={totals.uploading} tone="text-violet-300" icon={UploadCloud} />
+        <Metric label="Upload Failed" value={totals.failed} tone="text-red-300" icon={AlertTriangle} />
+      </div>
+
+      <section className={`${adminPanel} overflow-hidden`}>
+        <div className="flex flex-col gap-3 border-b border-white/[0.08] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="size-4 text-[#C4CEFF]" />
+              <p className="text-[9px] font-bold uppercase tracking-wider text-[#C4CEFF]">Onsite upload per client today</p>
+            </div>
+            <h2 className="mt-2 text-base font-semibold">{dayLabel(today)}</h2>
+          </div>
+          {session?.capabilities.onsite ? (
+            <Link href="/editor/onsite" className={`${adminBtnPrimary} inline-flex items-center justify-center gap-2 px-4 py-2.5`}>
+              <ImagePlus className="size-4" />Open Onsite Upload
+            </Link>
+          ) : null}
+        </div>
+        {todayJobs.length === 0 ? (
+          <div className="p-10 text-center text-xs text-white/35">No client shoots are scheduled today.</div>
+        ) : (
+          <div className="divide-y divide-white/[0.06]">
+            {todayJobs.map((job) => (
+              <div key={job.bookingId} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                <div>
+                  <p className="text-sm font-semibold">{job.customerName}</p>
+                  <p className="mt-1 text-[10px] text-white/35">{job.bookingTime} · {job.packageName} · {job.bookingId}</p>
+                </div>
+                <div className="text-[10px] text-white/40 sm:text-right">
+                  <p>{job.galleryCount} photo{job.galleryCount === 1 ? '' : 's'} uploaded</p>
+                  <p className={job.rawFolderDriveId ? 'mt-1 text-emerald-300' : 'mt-1 text-amber-300'}>
+                    {job.rawFolderDriveId ? 'Drive folder ready' : 'Drive folder needs setup'}
+                  </p>
+                </div>
+                {session?.capabilities.onsite ? (
+                  <Link
+                    href={`/editor/onsite?date=${encodeURIComponent(today)}&booking=${encodeURIComponent(job.bookingId)}`}
+                    className={`${adminBtnGhost} inline-flex items-center justify-center gap-2 px-3 py-2`}
+                  >
+                    Upload Photos <ImagePlus className="size-3.5" />
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#C4CEFF]">Editing Queue</p>
+            <h2 className="mt-1 text-lg font-semibold">Download and upload per day batch</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void load()} className={`${adminBtnGhost} inline-flex items-center gap-2 px-3 py-2`}>
+              <RefreshCw className="size-3.5" />Refresh
+            </button>
+            <Link href="/editor/upload" className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5`}>
+              <FolderUp className="size-4" />Upload Photos
+            </Link>
+          </div>
+        </div>
+
+        {batches.length === 0 ? (
+          <div className={`${adminPanel} p-12 text-center text-xs text-white/35`}>No editing batches are available.</div>
+        ) : (
+          <div className="grid gap-4">
+            {batches.map((batch) => {
+              const completed = batch.counts.delivered
+              const percent = Math.round((completed / Math.max(1, batch.totalClients)) * 100)
+              return (
+                <article key={batch.id} className={`${adminPanel} overflow-hidden`}>
+                  <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)_auto] lg:items-center">
+                    <div>
+                      <p className="text-base font-semibold">{dayLabel(batch.shootDate)}</p>
+                      <p className="mt-1 font-mono text-[9px] text-white/30">{batch.id}</p>
+                      <p className="mt-2 text-[10px] text-white/40">
+                        {batch.totalClients} clients · {batch.counts.readyForEditing} ready to download · {batch.counts.readyToUpload} ready to upload
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-white/35">
+                        <span>Upload progress</span>
+                        <span>{completed} / {batch.totalClients}</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                        <div className="h-full rounded-full bg-[#6678FF]" style={{ width: `${percent}%` }} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3 text-[9px]">
+                        <span className="text-violet-300">{batch.counts.uploading} uploading</span>
+                        <span className="text-emerald-300">{batch.counts.delivered} delivered</span>
+                        <span className={batch.counts.failed ? 'text-red-300' : 'text-white/30'}>{batch.counts.failed} failed</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => startDownload(batch)}
+                        disabled={!batch.counts.readyForEditing || downloading === batch.id}
+                        className={`${adminBtnPrimary} inline-flex items-center gap-2 px-3 py-2 disabled:opacity-35`}
+                      >
+                        <Download className="size-3.5" />
+                        {downloading === batch.id ? 'Preparing…' : 'Download Batch'}
+                      </button>
+                      <Link
+                        href={`/editor/upload?batch=${encodeURIComponent(batch.id)}${batch.counts.failed ? '&retry=1' : ''}`}
+                        className={`${batch.counts.failed ? 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15' : adminBtnGhost} inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase`}
+                      >
+                        <FolderUp className="size-3.5" />{batch.counts.failed ? 'Retry Upload' : 'Upload Batch'}
+                      </Link>
+                    </div>
+                  </div>
+                  {batch.counts.failed ? (
+                    <div className="flex items-center gap-2 border-t border-red-500/15 bg-red-500/[0.04] px-5 py-3 text-[10px] text-red-200/70">
+                      <AlertTriangle className="size-3.5" />{batch.counts.failed} client upload{batch.counts.failed === 1 ? '' : 's'} failed. Open Upload Batch and enable “Retry failed clients only.”
+                    </div>
+                  ) : null}
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function Metric({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string
+  value: number
+  tone: string
+  icon: typeof ImagePlus
+}) {
+  return (
+    <div className={`${adminPanel} p-4`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[9px] font-bold uppercase tracking-wider text-white/30">{label}</p>
+        <Icon className={`size-4 ${tone}`} />
+      </div>
+      <p className={`mt-2 text-3xl font-bold ${tone}`}>{value}</p>
+    </div>
+  )
+}

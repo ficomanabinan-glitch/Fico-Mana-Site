@@ -33,6 +33,7 @@ import { buildDayPriorityMap, getDayPriorityCount } from '@/lib/booking-priority
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import AdminReceiptActions from '@/components/admin-receipt-actions'
 import BookingPrioritySelect from '@/components/booking-priority-select'
+import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
 import { 
   Search, 
   Filter, 
@@ -729,6 +730,7 @@ function BookingsManagement() {
 
   return (
     <div className={adminPage}>
+      <ReceiptUploadEnhancer />
       <AdminPageHeader
         title="Booking Management"
         subtitle="Search, filter, edit, reschedule, or cancel client portrait appointments."
@@ -1478,6 +1480,8 @@ function BookingsManagement() {
                           src={selectedBooking.receiptUrl}
                           alt="Receipt thumbnail"
                           fill
+                          sizes="96px"
+                          unoptimized
                           className="object-cover"
                         />
                       )}

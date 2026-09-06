@@ -16,7 +16,7 @@ export type WorkflowAccess = {
 const CAPABILITIES: Record<WorkflowRole, ReadonlySet<WorkflowCapability>> = {
   owner: new Set(['view', 'onsite', 'edit', 'admin']),
   admin: new Set(['view', 'onsite', 'edit', 'admin']),
-  editor: new Set(['view', 'edit']),
+  editor: new Set(['view', 'onsite', 'edit']),
   staff: new Set(['view', 'onsite']),
 }
 

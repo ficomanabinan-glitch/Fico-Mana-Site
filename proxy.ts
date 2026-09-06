@@ -1,21 +1,12 @@
 import { type NextRequest, type NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
-function isDocumentLikePath(pathname: string) {
-  const lastSegment = pathname.split('/').filter(Boolean).at(-1) ?? ''
-  return pathname === '/' || !lastSegment.includes('.')
-}
-
 function shouldDisableCaching(request: NextRequest) {
   const { pathname } = request.nextUrl
   if (request.method !== 'GET' && request.method !== 'HEAD') return true
   return (
-    isDocumentLikePath(pathname) ||
-    pathname === '/robots.txt' ||
-    pathname === '/sitemap.xml' ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/editor') ||
-    pathname.startsWith('/api/') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/portal/') ||
     pathname.startsWith('/filtering') ||

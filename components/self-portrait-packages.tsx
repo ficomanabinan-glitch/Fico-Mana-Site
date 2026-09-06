@@ -215,6 +215,7 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
         src="/bg_package.jpg"
         alt=""
         fill
+        sizes="100vw"
         className="object-cover object-center opacity-[0.12]"
         priority={false}
       />
