@@ -3,8 +3,8 @@
   "alias": ["admin.ficomana.com", "editor.ficomana.com"],
   "env": {
     "ADMIN_HOSTNAME": "admin.ficomana.com",
-    "ADMIN_ENFORCE_SUBDOMAIN": "false",
+    "ADMIN_ENFORCE_SUBDOMAIN": "true",
     "EDITOR_HOSTNAME": "editor.ficomana.com",
-    "EDITOR_ENFORCE_SUBDOMAIN": "false"
+    "EDITOR_ENFORCE_SUBDOMAIN": "true"
   }
 }
