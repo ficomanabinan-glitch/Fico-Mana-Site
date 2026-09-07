@@ -6,6 +6,11 @@ import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { listNotificationsFromDb, addNotificationToDb } from '@/lib/supabase-store'
 import type { Notification } from '@/lib/data-store'
 import { getActiveEmailStorageReminder } from '@/lib/ops-subscriptions'
+import { getWorkflowAccess } from '@/lib/auth/workflow'
+import { canManageShootReminders } from '@/lib/shoot-reminder-settings'
+import { getShootReminderHealth, notifyShootReminderIssue } from '@/lib/shoot-reminder-alerts'
+import { SHOOT_REMINDER_NOTIFICATION_PREFIX } from '@/lib/shoot-reminder-issues'
+import { privateNoStoreHeaders } from '@/lib/security/request-security'
 
 function mergeNotifications(primary: Notification[], secondary: Notification[]) {
   const map = new Map<string, Notification>()
@@ -47,8 +52,24 @@ async function ensureOpsReminders(existing: Notification[]): Promise<Notificatio
 
 export async function GET() {
   try {
-    const { error: authError } = await requireStaffAuth()
+    const { user, error: authError } = await requireStaffAuth()
     if (authError) return authError
+
+    // Failure to resolve reminder access must not break ordinary booking notifications.
+    const access = await getWorkflowAccess(user!).catch(() => null)
+    const reminderAdmin = canManageShootReminders(access)
+
+    // Recover alerts from saved delivery/run state if the worker could not persist
+    // its notification, and detect missing scheduled checks. Never claim or send.
+    const reminderAdminClient = getSupabaseAdmin()
+    if (reminderAdmin && access && reminderAdminClient) {
+      try {
+        const health = await getShootReminderHealth(reminderAdminClient, access.workspaceId)
+        if (health.available && health.issue) await notifyShootReminderIssue(reminderAdminClient, health.issue.code)
+      } catch {
+        console.error('Reminder notification health check unavailable; existing notifications are preserved.')
+      }
+    }
 
     let notifications: Notification[] = []
 
@@ -68,7 +89,7 @@ export async function GET() {
     }
 
     notifications = await ensureOpsReminders(notifications)
-    return NextResponse.json(notifications)
+    return NextResponse.json(notifications.filter(n => reminderAdmin || !n.bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)), { headers: privateNoStoreHeaders() })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to load notifications' }, { status: 500 })
   }
@@ -84,6 +105,9 @@ export async function POST(request: Request) {
       bookingId: string
       type: Notification['type']
       message: string
+    }
+    if (typeof bookingId !== 'string' || bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)) {
+      return NextResponse.json({ error: 'This notification reference is reserved for the reminder service.' }, { status: 400, headers: privateNoStoreHeaders() })
     }
 
     const admin = getSupabaseAdmin()

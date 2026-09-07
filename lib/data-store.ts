@@ -554,7 +554,8 @@ async function fetchNotificationsFresh(signalUpdate = false): Promise<Notificati
   }
 }
 
-export async function getNotifications(): Promise<Notification[]> {
+export async function getNotifications(options: { force?: boolean } = {}): Promise<Notification[]> {
+  if (options.force) return fetchNotificationsFresh(false)
   const cached = getCachedNotifications()
   if (cached.length > 0 && cacheIsFresh(cachedAt(NOTIFS_AT_KEY))) return cached
   if (cached.length > 0) {

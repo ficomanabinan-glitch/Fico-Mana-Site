@@ -6,6 +6,7 @@ import { enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
 import { getResendFromAddress, isResendConfigured } from '@/lib/resend-config'
 import { canManageShootReminders, shootReminderSettingsAction } from '@/lib/shoot-reminder-settings'
+import { getShootReminderHealth } from '@/lib/shoot-reminder-alerts'
 
 async function handle(request: Request, mutate: boolean) {
   const headers = privateNoStoreHeaders()
@@ -25,7 +26,7 @@ async function handle(request: Request, mutate: boolean) {
       }, [user!.id, access.workspaceId])
       if (limited) return limited
       const parsed = shootReminderSettingsAction.safeParse(await request.json().catch(() => null))
-      if (!parsed.success) return NextResponse.json({ error: 'Choose Check Reminder Service, Enable Reminders, or Pause Reminders.' }, { status: 400, headers })
+      if (!parsed.success) return NextResponse.json({ error: 'Choose Check Reminder Service, Enable Reminders, or Disable Reminders.' }, { status: 400, headers })
       action = parsed.data.action
       if (action !== 'pause' && !isResendConfigured()) {
         return NextResponse.json({ error: 'Email setup is incomplete. Try: ask your administrator to check the email settings. No emails were sent.' }, { status: 503, headers })
@@ -38,12 +39,14 @@ async function handle(request: Request, mutate: boolean) {
         ? await admin.rpc('set_shoot_reminders_enabled', { ...args, p_enabled: action === 'enable' })
         : await admin.rpc('get_shoot_reminder_control', args)
     if (result.error) {
-      if (result.error.code === '22023') return NextResponse.json({ error: 'Please run Check Reminder Service and wait for a successful result, then enable reminders within 10 minutes.' }, { status: 409, headers })
+      if (result.error.code === '22023') return NextResponse.json({ error: 'The activation check needs refreshing. Try: Check Reminder Service, wait for a successful result, then Enable Reminders. Once enabled, reminders stay on until an administrator disables them.' }, { status: 409, headers })
       if (result.error.code === '42501') return NextResponse.json({ error: 'Your account cannot change these reminder settings.' }, { status: 403, headers })
       throw new Error('Reminder configuration unavailable')
     }
     if (!result.data) throw new Error('Reminder configuration unavailable')
+    const health = await getShootReminderHealth(admin, access.workspaceId)
     return NextResponse.json({ ...result.data, emailConfigured: isResendConfigured(),
+      runtimeIssue: health.issue, failedToday: health.failedToday,
       senderAddress: isResendConfigured() ? getResendFromAddress() : null }, { headers })
   } catch {
     return NextResponse.json({ error: 'Reminder settings are temporarily unavailable. Try: refresh this page, or ask your administrator to check the reminder settings.' }, { status: 503, headers })

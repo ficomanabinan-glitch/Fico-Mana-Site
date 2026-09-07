@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
 import { runShootReminderWorker } from '@/lib/shoot-reminder-worker'
 import { getResendClient } from '@/lib/resend-config'
+import { recordShootReminderRunFailure } from '@/lib/shoot-reminder-alerts'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -18,9 +19,10 @@ export async function POST(request: Request) {
     p_secret_hash: createHash('sha256').update(bearer).digest('hex'),
   })
   if (error || !authorized) return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers })
+  const dryRun = new URL(request.url).searchParams.get('dryRun') === '1'
   try {
     // Readiness probe does not claim jobs or send emails (provider delivery is not tested).
-    if (new URL(request.url).searchParams.get('dryRun') === '1') {
+    if (dryRun) {
       if (!getResendClient()) throw new Error('Email service not configured')
       const { data: settings, error: readError } = await admin.from('shoot_reminder_settings')
         .select('enabled,last_started_at,last_completed_at,last_result').eq('id',1).single()
@@ -29,7 +31,10 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ success: true, ...await runShootReminderWorker(admin) }, { headers })
   } catch (failure) {
-    console.error('Scheduled shoot reminder run failed:', failure instanceof Error ? failure.message : 'Unknown error')
+    // Only an authenticated, automatic run may create a failure alert. A readiness
+    // probe and anonymous requests must not overwrite real delivery health/history.
+    if (!dryRun) await recordShootReminderRunFailure(admin, failure)
+    console.error('Scheduled shoot reminder run failed. Check Shoot Reminders in Admin.')
     return NextResponse.json({ error: 'Reminders could not finish. Try: check Shoot Reminders in Admin; pending emails will retry automatically.' }, { status: 503, headers })
   }
 }

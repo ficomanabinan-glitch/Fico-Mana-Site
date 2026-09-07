@@ -31,6 +31,7 @@ import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge } from '@/lib/admin-ui'
 import { clearSalesReadCache } from '@/lib/sales-read-cache'
 import { clearManagedPackageCache } from '@/lib/package-manager-cache'
+import { SHOOT_REMINDER_NOTIFICATION_PREFIX } from '@/lib/shoot-reminder-issues'
 import {
   DashboardSidebarNavigation,
   DashboardSidebarProfile,
@@ -146,6 +147,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     window.addEventListener('admin:db-synced', onSync)
     return () => window.removeEventListener('admin:db-synced', onSync)
   }, [isLoggedIn, refreshConsoleData])
+
+  useEffect(() => {
+    if (!isLoggedIn || isAuthPage) return
+    let disposed = false
+    const refreshNotifications = async () => {
+      if (document.visibilityState !== 'visible') return
+      const notifs = await getNotifications({ force: true })
+      if (!disposed) setNotifications(notifs)
+    }
+    // Lightweight notification refresh only; do not reload bookings or the page.
+    const timer = setInterval(() => void refreshNotifications(), 3 * 60_000)
+    document.addEventListener('visibilitychange', refreshNotifications)
+    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', refreshNotifications) }
+  }, [isLoggedIn, isAuthPage])
 
   useEffect(() => {
     setPendingHref(null)
@@ -291,7 +306,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <AdminSyncStatus />
                 <div className="relative">
                   <button
-                    onClick={() => setShowNotifDrawer((previous) => !previous)}
+                    onClick={() => {
+                      setShowNotifDrawer((previous) => !previous)
+                      if (!showNotifDrawer) void getNotifications({ force: true }).then(setNotifications)
+                    }}
                     className="relative rounded-lg p-2 text-white/50 hover:bg-white/5 hover:text-white"
                     title="Notifications"
                   >
@@ -331,9 +349,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     notification.type,
                                   )}`}
                                 >
-                                  {notification.type.replace(/_/g, ' ')}
+                                  {notification.bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)?'Shoot reminder':notification.type.replace(/_/g, ' ')}
                                 </p>
                                 <p className="mt-1.5 text-white/70">{notification.message}</p>
+                                {notification.bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)?<Link href="/admin/shoot-reminders" onClick={()=>setShowNotifDrawer(false)} className="mt-2 mr-3 inline-block cursor-pointer text-[10px] font-semibold text-[#C4CEFF] hover:underline">Review shoot reminders</Link>:null}
                                 {!notification.isRead ? (
                                   <button
                                     onClick={() => void handleMarkRead(notification.id)}

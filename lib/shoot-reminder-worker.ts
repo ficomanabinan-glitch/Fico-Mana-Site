@@ -2,14 +2,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildShootReminder, type ShootReminderKind, type ShootReminderPayload } from './shoot-reminder-content'
 import { getResendClient, getResendFromAddress } from './resend-config'
 import { getSiteUrl } from './site-url'
+import { notifyShootReminderIssue, ShootReminderRunError } from './shoot-reminder-alerts'
+import { reminderDeliveryIssue } from './shoot-reminder-issues'
 
 type Delivery = { id: string; claim_token: string; kind: ShootReminderKind; payload: ShootReminderPayload }
 
 export async function runShootReminderWorker(admin: SupabaseClient) {
   const resend = getResendClient()
-  if (!resend) throw new Error('Reminder email service is not configured.')
+  if (!resend) throw new ShootReminderRunError('email_setup')
   const { data, error } = await admin.rpc('claim_shoot_reminders', { p_limit: 40 })
-  if (error) throw new Error('Could not load scheduled reminders. Try: check the reminder settings.')
+  if (error) throw new ShootReminderRunError('queue')
   const jobs = (data || []) as Delivery[]
   const result = { claimed: jobs.length, sent: 0, failed: 0, skipped: 0, deferred: 0 }
   const deadline = Date.now() + 85_000
@@ -20,8 +22,9 @@ export async function runShootReminderWorker(admin: SupabaseClient) {
       const { error: finishError } = await admin.rpc('finish_shoot_reminder', {
         p_id: job.id, p_claim: job.claim_token, p_status: status, ...details,
       })
-      if (finishError) throw new Error('Reminder receipt could not be saved; retry will use the same email idempotency key.')
+      if (finishError) throw new ShootReminderRunError('receipt')
       result[status]++
+      if (status === 'failed') await notifyShootReminderIssue(admin, reminderDeliveryIssue(details.p_error))
     }
     const { data: current, error: checkError } = await admin.rpc('shoot_reminder_is_current', {
       p_id: job.id, p_claim: job.claim_token,
@@ -39,7 +42,10 @@ export async function runShootReminderWorker(admin: SupabaseClient) {
       } else {
         await finish('sent', { p_provider_id: response.data.id, p_subject: content.subject, p_html: content.html })
       }
-    } catch {
+    } catch (failure) {
+      // A database acknowledgement error must reach the run-level warning, not turn an
+      // already accepted email into a different outcome or resend it in this invocation.
+      if (failure instanceof ShootReminderRunError) throw failure
       // A lost acknowledgement is safely retried with the same immutable payload and key.
       await finish('failed', { p_error: 'Email request or receipt failed. Automatic retry is scheduled.' })
     }
@@ -48,6 +54,6 @@ export async function runShootReminderWorker(admin: SupabaseClient) {
   }
   const { error: recordError } = await admin.from('shoot_reminder_settings')
     .update({ last_completed_at: new Date().toISOString(), last_result: result }).eq('id', 1)
-  if (recordError) throw new Error('Reminder run status could not be saved.')
+  if (recordError) throw new ShootReminderRunError('receipt')
   return result
 }

@@ -135,4 +135,22 @@ test('Admin reminder configuration runs against PostgreSQL with isolated externa
       await db.exec('reset role')
     }
   })
+  await t.test('enabled reminders do not expire when readiness ages, disappears, fails or the worker reports errors', async()=> {
+    await query("update shoot_reminder_settings set readiness_started_at=now()-interval '1 minute'")
+    await call('check_shoot_reminder_service')
+    await respondToProbe(200,'{"success":true,"dryRun":true}')
+    await setEnabled(true)
+    await query("update shoot_reminder_settings set readiness_started_at=now()-interval '30 days',last_result='{\"errorCode\":\"queue\"}'::jsonb")
+    for (const mode of ['old','missing','failed']) {
+      if (mode==='missing') await query('delete from net._http_response')
+      if (mode==='failed') await respondToProbe(503,'{}')
+      const state=await call('get_shoot_reminder_control')
+      assert.equal(state.enabled,true)
+      assert.equal(state.schedulerActive,true)
+      assert.equal(state.canActivate,false,'only activation readiness expires, never the saved enabled state')
+    }
+    const disabled=await setEnabled(false)
+    assert.equal(disabled.enabled,false)
+    assert.equal(disabled.schedulerActive,false)
+  })
 })

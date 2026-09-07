@@ -7,6 +7,7 @@ import ShootReminderSettings from '@/components/shoot-reminder-settings'
 import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import { adminCard, adminInput, adminPage, adminSelect } from '@/lib/admin-ui'
 import type { ShootResponse } from '@/lib/shoot-reminder-content'
+import { reminderDeliveryIssue, reminderIssue } from '@/lib/shoot-reminder-issues'
 
 type Attendance = {
   bookingId: string; customerName: string; email: string; shootDate: string; bookingTime: string; packageName: string
@@ -27,7 +28,7 @@ function DeliveryStatus({ status, sentAt, error, fallback }: { status: string | 
   return <div className="text-xs leading-relaxed">
     <p className={status==='failed'?'text-red-300':status==='sent'?'text-emerald-300':'text-white/60'}>{status==='sent'?'Sent':status==='failed'?'Failed':status==='sending'?'Sending':status==='pending'?'Queued':status==='skipped'?'Skipped':fallback}</p>
     {sentAt?<p className="text-white/40">{timeLabel(sentAt)} PHT</p>:null}
-    {error?<p className="mt-1 text-white/45">{error}{status==='failed'?' Try: check the recipient address and email service; eligible failures retry during 6–8 AM.':''}</p>:null}
+    {status==='failed'?<p className="mt-1 text-white/45">{reminderIssue(reminderDeliveryIssue(error)).message}</p>:error?<p className="mt-1 text-white/45">{error}</p>:null}
   </div>
 }
 

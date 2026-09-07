@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ShootReminderIssue } from './shoot-reminder-issues'
 
 export const shootReminderSettingsAction = z.object({
   action: z.enum(['check', 'enable', 'pause']),
@@ -21,6 +22,8 @@ export type ShootReminderControl = {
   morningRule: 'confirmed_or_no_response_after_first_email'
   emailConfigured: boolean
   senderAddress: string | null
+  runtimeIssue?: ShootReminderIssue | null
+  failedToday?: number | null
 }
 
 export function canManageShootReminders(access: { workspaceSlug: string; role: string } | null) {

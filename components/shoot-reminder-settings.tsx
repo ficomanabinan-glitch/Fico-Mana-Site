@@ -53,6 +53,15 @@ export default function ShootReminderSettings() {
     return () => { controller.abort(); clearTimeout(timer) }
   }, [control?.probeStatus, control?.checkedAt, busy, refresh])
 
+  useEffect(() => {
+    if (!control?.enabled) return
+    const controller = new AbortController()
+    const update = () => { if (document.visibilityState === 'visible') void refresh(controller.signal) }
+    const timer = setInterval(update, 3 * 60_000)
+    document.addEventListener('visibilitychange', update)
+    return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', update) }
+  }, [control?.enabled, refresh])
+
   async function apply(action: 'check' | 'enable' | 'pause') {
     if (mutationInFlight.current) return
     mutationInFlight.current = true
@@ -66,8 +75,8 @@ export default function ShootReminderSettings() {
       if (!response.ok) throw new Error(body.error || 'Settings were not saved. Try: refresh and try again.')
       if (version === requestVersion.current) {
         setControl(body)
-        setMessage(action === 'enable' ? 'Reminders enabled. The next scheduled check will use the attendance rule below.'
-          : action === 'pause' ? 'Reminders paused. Client responses and email history are preserved.'
+        setMessage(action === 'enable' ? 'Reminders enabled. They stay on until an administrator disables them.'
+          : action === 'pause' ? 'Reminders disabled. Client responses and email history are preserved.'
             : 'Checking the reminder service. This check does not send client emails.')
       }
     } catch (failure) {
@@ -76,7 +85,7 @@ export default function ShootReminderSettings() {
   }
 
   const checking = control?.probeStatus === 'checking'
-  const enabled = control?.enabled && control.schedulerActive
+  const enabled = control?.enabled
   const mismatch = control && control.enabled !== control.schedulerActive
   const button = 'inline-flex cursor-pointer items-center justify-center gap-2 px-4 py-3 disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -85,9 +94,9 @@ export default function ShootReminderSettings() {
       <div>
         <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[#C4CEFF]"><Bell className="size-4"/>Automation settings</p>
         <h2 id="reminder-settings-title" className="mt-2 text-lg font-semibold">Shoot reminders</h2>
-        <p className="mt-1 max-w-2xl text-sm text-white/50">Manage the schedule here. Client responses and sent-email history are kept when reminders are paused.</p>
+        <p className="mt-1 max-w-2xl text-sm text-white/50">Once enabled, reminders stay on until an administrator disables them. Errors are reported without switching reminders off.</p>
       </div>
-      {!loading && control ? <span role="status" className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${enabled?'border-emerald-300/25 text-emerald-300':'border-amber-200/25 text-amber-200'}`}>{mismatch?'Needs attention':enabled?'Enabled':'Paused'}</span>:null}
+      {!loading && control ? <span role="status" className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${enabled&&!mismatch&&!control.runtimeIssue?'border-emerald-300/25 text-emerald-300':'border-amber-200/25 text-amber-200'}`}>{enabled?(mismatch||control.runtimeIssue?'Enabled · Needs attention':'Enabled'):mismatch?'Disabled · Needs attention':'Disabled'}</span>:null}
     </div>
 
     {loading ? <div role="status" aria-label="Loading reminder settings" className="mt-5 animate-pulse space-y-3"><div className="h-20 rounded-lg bg-white/5"/><div className="h-11 w-56 rounded-lg bg-white/10"/></div> : <>
@@ -103,20 +112,21 @@ export default function ShootReminderSettings() {
         {control.lastCompletedAt?<p>Last scheduled run: {stamp(control.lastCompletedAt)} PHT</p>:null}
         <p className="pt-1 text-white/35">This check confirms that reminders can run. Use a test email to check delivery. Failed reminders are retried between 6 and 8 AM.</p>
       </div>:null}
-      {mismatch?<p role="alert" className="mt-4 text-sm text-amber-200">The reminder schedule needs attention. Try: Check Reminder Service to repair the schedule, or Pause Reminders to stop future sends.</p>:null}
+      {mismatch?<p role="alert" className="mt-4 text-sm text-amber-200">The reminder schedule needs attention. Try: Check Reminder Service to repair the schedule, or Disable Reminders to stop future sends.</p>:null}
       {control?.problem?<p role="alert" className="mt-4 text-sm text-amber-200">{control.problem}</p>:null}
+      {control?.runtimeIssue?<p role="alert" className="mt-4 text-sm text-amber-200">{control.runtimeIssue.message}{typeof control.failedToday==='number'&&control.failedToday>0?` ${control.failedToday} reminder${control.failedToday===1?'':'s'} failed today.`:''} {enabled?'Reminders are still enabled.':'Reminders are disabled.'}</p>:null}
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <button type="button" disabled={!!busy || !!checking || !control} onClick={()=>void apply('check')} className={`${adminBtnGhost} ${button}`}>
           <ShieldCheck className="size-4"/>{busy==='check'||checking?'Checking…':'Check Reminder Service'}
         </button>
         {control?.enabled || control?.schedulerActive ? <button type="button" disabled={!!busy} onClick={()=>void apply('pause')} className={`${adminBtnGhost} ${button}`}>
-          <Pause className="size-4"/>{busy==='pause'?'Pausing…':'Pause Reminders'}
+          <Pause className="size-4"/>{busy==='pause'?'Disabling…':'Disable Reminders'}
         </button> : <button type="button" disabled={!!busy || !control?.canActivate || !control.emailConfigured} onClick={()=>void apply('enable')} className={`${adminBtnPrimary} ${button}`}>
           <CheckCircle2 className="size-4"/>{busy==='enable'?'Enabling…':'Enable Reminders'}
         </button>}
         <button type="button" disabled={!!busy} onClick={()=>void refresh()} className={`${button} rounded-lg text-xs text-white/50 transition hover:bg-white/5 hover:text-white`}>Refresh status</button>
       </div>
-      {!enabled&&!control?.canActivate?<p className="mt-3 text-xs text-white/40">Check the service first. A successful check unlocks Enable Reminders for 10 minutes.</p>:null}
+      {!enabled&&!control?.canActivate?<p className="mt-3 text-xs text-white/40">Check the service before enabling reminders. Once enabled, they stay on until an administrator disables them.</p>:null}
     </>}
     {error?<p role="alert" className="mt-4 rounded-lg border border-red-400/25 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>:null}
     {message?<p role="status" className="mt-4 text-sm text-[#C4CEFF]">{message.startsWith('Checking')&&control?.probeStatus==='ready'?'Reminder service check passed. No client emails were sent by this check.':message.startsWith('Checking')&&control?.probeStatus==='failed'?'The service check failed; reminder settings were not enabled.':message}</p>:null}
