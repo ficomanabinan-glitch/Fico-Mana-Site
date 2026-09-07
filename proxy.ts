@@ -19,7 +19,12 @@ function shouldDisableCaching(request: NextRequest) {
 
 function applyResponseHardening(request: NextRequest, response: NextResponse) {
   response.headers.set('X-Request-ID', request.headers.get('x-request-id') || crypto.randomUUID())
-  if (shouldDisableCaching(request)) {
+  // Only this exact GET delegates cache headers to its authorized file handler.
+  // Middleware errors/redirects and all other private routes remain no-store.
+  const portalImagePassThrough = request.method === 'GET' &&
+    /^\/api\/editor-workflow\/portal\/[^/]+\/file\/[^/]+$/.test(request.nextUrl.pathname) &&
+    response.headers.get('x-middleware-next') === '1'
+  if (shouldDisableCaching(request) && !portalImagePassThrough) {
     response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate')
     response.headers.set('Pragma', 'no-cache')
     response.headers.set('Expires', '0')

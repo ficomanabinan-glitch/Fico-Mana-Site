@@ -185,11 +185,17 @@ async function handlePortal(request: NextRequest, path: string[]) {
   }
   if (path[2] === 'file' && path[3] && method === 'GET') {
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'gallery'
-    const file = await getPortalFile(publicId, decodeURIComponent(path[3]), kind)
+    const file = await getPortalFile(publicId, decodeURIComponent(path[3]), kind, request.headers.get('if-none-match'))
     return new Response(file.data, {
+      status: file.notModified ? 304 : 200,
       headers: {
-        'content-type': file.mimeType,
-        'cache-control': 'private, no-store, max-age=0, must-revalidate',
+        ...(file.notModified ? {} : { 'content-type': file.mimeType }),
+        // The browser retains bytes but must re-check access and freshness on each reuse.
+        'cache-control': 'private, no-cache, must-revalidate',
+        'cdn-cache-control': 'no-store',
+        'vercel-cdn-cache-control': 'no-store',
+        'etag': file.etag,
+        'vary': 'Cookie',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
         ...(kind === 'deliverable' && file.fileName

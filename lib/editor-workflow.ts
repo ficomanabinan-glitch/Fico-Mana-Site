@@ -24,6 +24,7 @@ import { assertGraduationBooking, graduationBookingIds, graduationPackageIds } f
 import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { buildPrintManifest, type PrintManifest } from '@/lib/print-manifest'
 import { fulfillBookingPrints, savePrintManifest } from '@/lib/print-workflow'
+import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -818,11 +819,12 @@ export async function ensureBookingFolders(admin: SupabaseClient, workspaceId: s
   }
   const batch = batchResult.data
   if (!batch) throw new Error('Editing batch could not be prepared for this booking.')
-  const { data: provisioning } = await admin
+  const { data: provisioning, error: provisioningReadError } = await admin
     .from('booking_provisioning')
     .select('*')
     .eq('booking_id', bookingId)
     .maybeSingle()
+  if (provisioningReadError) throw new Error('The saved client folder could not be loaded. Try: refresh and retry.')
   const hierarchy = await ensureShootHierarchy({
     admin,
     bookingId,
@@ -830,7 +832,9 @@ export async function ensureBookingFolders(admin: SupabaseClient, workspaceId: s
     clientName: String(booking.customer_name),
     selectionLimit: Number(booking.selection_limit || 5),
     existingClientFolderId: provisioning?.drive_client_folder_id || null,
+    existingRootFolderId: provisioning?.drive_root_folder_id || null,
   })
+  await saveShootFolderMappings(admin, workspaceId, bookingId, hierarchy, String(batch.id))
   const portal = await ensurePortal(admin, workspaceId, bookingId)
   const { error: provisioningError } = await admin.from('booking_provisioning').upsert({
     booking_id: bookingId,
@@ -847,40 +851,6 @@ export async function ensureBookingFolders(admin: SupabaseClient, workspaceId: s
     updated_at: nowIso(),
   })
   if (provisioningError) throw new Error(provisioningError.message)
-  await admin
-    .from('editing_batches')
-    .update({
-      drive_day_folder_id: hierarchy.day.id,
-      drive_day_folder_url: driveFolderUrl(hierarchy.day.id),
-      updated_at: nowIso(),
-    })
-    .eq('id', batch.id)
-
-  const records = [
-    { folder_type: 'ROOT', folder: hierarchy.root, booking_id: null, batch_id: null },
-    { folder_type: 'MONTH', folder: hierarchy.month, booking_id: null, batch_id: null },
-    { folder_type: 'DAY', folder: hierarchy.day, booking_id: null, batch_id: batch.id },
-    { folder_type: 'CLIENT', folder: hierarchy.client, booking_id: bookingId, batch_id: batch.id },
-    { folder_type: 'RAW', folder: hierarchy.raw, booking_id: bookingId, batch_id: batch.id },
-    { folder_type: 'SELECTED', folder: hierarchy.selected, booking_id: bookingId, batch_id: batch.id },
-    { folder_type: 'EDITED', folder: hierarchy.edited, booking_id: bookingId, batch_id: batch.id },
-    { folder_type: 'DELIVERABLES', folder: hierarchy.deliverables, booking_id: bookingId, batch_id: batch.id },
-  ]
-  const { error: foldersError } = await admin.from('drive_folders').upsert(
-    records.map((record) => ({
-      workspace_id: workspaceId,
-      booking_id: record.booking_id,
-      batch_id: record.batch_id,
-      folder_type: record.folder_type,
-      drive_folder_id: record.folder.id,
-      name: record.folder.name,
-      parent_drive_folder_id: record.folder.parents?.[0] || null,
-      web_view_url: driveFolderUrl(record.folder.id),
-      updated_at: nowIso(),
-    })),
-    { onConflict: 'workspace_id,drive_folder_id' },
-  )
-  if (foldersError) throw new Error(foldersError.message)
   return { hierarchy, batch, portal, booking }
 }
 
@@ -1213,7 +1183,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   }
 }
 
-export async function getPortalFile(publicId: string, fileId: string, kind: 'gallery' | 'deliverable') {
+export async function getPortalFile(publicId: string, fileId: string, kind: 'gallery' | 'deliverable', ifNoneMatch?: string | null) {
   const { admin, portal } = await portalRecord(publicId)
   const table = kind === 'deliverable' ? 'deliverable_files' : 'gallery_files'
   const { data, error } = await admin
@@ -1225,15 +1195,26 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Photo not found.')
+  // Authorize the live portal and the exact workspace/booking file BEFORE accepting a validator.
+  // Weak validators describe the managed preview version; no private provider IDs leave this endpoint.
+  const etag = `W/"${createHash('sha256').update(JSON.stringify([
+    'portal-photo-v1', publicId, portal.workspace_id, portal.booking_id, kind, data.id,
+    data.drive_file_id, data.checksum, data.updated_at, data.created_at, data.published_at,
+    data.file_size, data.mime_type, data.file_name, data.thumbnail_reference, data.preview_reference,
+  ])).digest('hex')}"`
+  const cached = { etag, mimeType: kind === 'gallery' ? 'image/jpeg' : String(data.mime_type || 'application/octet-stream'), fileName: String(data.file_name || 'photo') }
+  if (ifNoneMatch?.split(',').some(value => value.trim() === '*' || value.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
+    return { ...cached, notModified: true, data: null }
+  }
   if (kind === 'gallery') {
     const reference = String(data.thumbnail_reference || data.preview_reference || '')
     if (reference && !reference.startsWith('http')) {
       const { data: object, error: storageError } = await admin.storage.from('fico-mana-thumbnails').download(reference)
-      if (!storageError && object) return { data: Buffer.from(await object.arrayBuffer()), mimeType: 'image/jpeg' }
+      if (!storageError && object) return { ...cached, notModified: false, data: Buffer.from(await object.arrayBuffer()), mimeType: 'image/jpeg' }
     }
     if (reference.startsWith('http')) {
       try {
-        return { data: await downloadDriveThumbnail(reference), mimeType: 'image/jpeg' }
+        return { ...cached, notModified: false, data: await downloadDriveThumbnail(reference), mimeType: 'image/jpeg' }
       } catch {
         // Google thumbnail URLs are short-lived. Refresh the file metadata and
         // persist the replacement so future portal views use the current URL.
@@ -1247,12 +1228,14 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
               preview_reference: freshFile.thumbnailLink,
             })
             .eq('id', data.id)
-          return { data: thumbnail, mimeType: 'image/jpeg' }
+          return { ...cached, notModified: false, data: thumbnail, mimeType: 'image/jpeg' }
         }
       }
     }
   }
   return {
+    ...cached,
+    notModified: false,
     data: await downloadDriveFile(String(data.drive_file_id)),
     mimeType: String(data.mime_type || 'application/octet-stream'),
     fileName: String(data.file_name || 'photo'),

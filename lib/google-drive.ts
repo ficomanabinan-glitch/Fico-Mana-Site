@@ -11,6 +11,9 @@ const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 export class GoogleDriveConfigError extends Error {}
+export class GoogleDriveRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = 'GoogleDriveRequestError' }
+}
 
 let cachedAccessToken: { value: string; expiresAt: number } | null = null
 
@@ -94,7 +97,7 @@ async function driveFetch<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const data = (await response.json().catch(() => ({}))) as T & { error?: { message?: string } }
   if (!response.ok) {
-    throw new Error(data.error?.message || `Google Drive request failed (${response.status}).`)
+    throw new GoogleDriveRequestError(data.error?.message || `Google Drive request failed (${response.status}).`, response.status)
   }
   return data
 }
@@ -119,6 +122,8 @@ export type DriveFolder = {
   mimeType?: string
   parents?: string[]
   webViewLink?: string
+  trashed?: boolean
+  appProperties?: Record<string, string>
 }
 
 export type DriveFile = {
@@ -446,9 +451,10 @@ export async function promoteRawUpload(file: DriveFile, incomingFolderId: string
 
 export async function getDriveFolder(id: string): Promise<DriveFolder> {
   const folder = await driveFetch<DriveFolder>(
-    `/files/${encodeURIComponent(id)}?fields=id,name,mimeType,parents,webViewLink&supportsAllDrives=true`,
+    `/files/${encodeURIComponent(id)}?fields=id,name,mimeType,parents,webViewLink,trashed,appProperties&supportsAllDrives=true`,
   )
   if (folder.mimeType !== FOLDER_MIME) throw new Error('The Google Drive ID does not point to a folder.')
+  if (folder.trashed) throw new GoogleDriveRequestError('The saved Google Drive folder is in Trash.', 404)
   return folder
 }
 
@@ -469,11 +475,11 @@ export async function findFolder(parentId: string, name: string): Promise<DriveF
   return data.files?.[0] ?? null
 }
 
-export async function createFolder(parentId: string, name: string): Promise<DriveFolder> {
+export async function createFolder(parentId: string, name: string, appProperties?: Record<string, string>): Promise<DriveFolder> {
   const safeName = normalizeDriveFolderName(name)
-  return driveFetch<DriveFolder>('/files?fields=id,name,parents,webViewLink&supportsAllDrives=true', {
+  return driveFetch<DriveFolder>('/files?fields=id,name,parents,webViewLink,appProperties&supportsAllDrives=true', {
     method: 'POST',
-    body: JSON.stringify({ name: safeName, mimeType: FOLDER_MIME, parents: [parentId] }),
+    body: JSON.stringify({ name: safeName, mimeType: FOLDER_MIME, parents: [parentId], ...(appProperties ? { appProperties } : {}) }),
   })
 }
 
@@ -505,17 +511,25 @@ export async function moveFolder(folderId: string, newParentId: string): Promise
 }
 
 export async function resolveDriveRootFolder(admin: SupabaseClient): Promise<DriveFolder> {
-  const { data: settings } = await admin
+  const { data: settings, error } = await admin
     .from('google_drive_settings')
     .select('root_folder_id, root_folder_name')
     .eq('id', 1)
     .maybeSingle()
+  if (error) throw new Error('The saved storage root could not be loaded. Try: reload settings, then retry provisioning.')
 
   const configuredId = String(settings?.root_folder_id || env('GOOGLE_DRIVE_ROOT_FOLDER_ID') || '').trim()
   if (configuredId) {
-    const folder = await getDriveFolder(configuredId)
+    let folder: DriveFolder
+    try { folder = await getDriveFolder(configuredId) } catch (error) {
+      if (error instanceof GoogleDriveRequestError && error.status === 404) {
+        throw new Error('The current storage root is missing or unavailable to the connected Drive account. Try: verify the root in Production storage, or create a new root, then click Retry.')
+      }
+      throw error
+    }
     if (!settings?.root_folder_id) {
-      await admin.from('google_drive_settings').update({ root_folder_id: folder.id, updated_at: new Date().toISOString() }).eq('id', 1)
+      const { error: saveError } = await admin.from('google_drive_settings').update({ root_folder_id: folder.id, updated_at: new Date().toISOString() }).eq('id', 1)
+      if (saveError) throw new Error('The storage root could not be saved. Try: verify and save it in Production storage, then retry.')
     }
     return folder
   }
@@ -523,20 +537,36 @@ export async function resolveDriveRootFolder(admin: SupabaseClient): Promise<Dri
   return initializeDriveRootFolder(admin)
 }
 
-export async function initializeDriveRootFolder(admin: SupabaseClient): Promise<DriveFolder> {
-  const { data: settings } = await admin
+export async function initializeDriveRootFolder(admin: SupabaseClient, options: { forceNew?: boolean } = {}): Promise<DriveFolder> {
+  const { data: settings, error: settingsError } = await admin
     .from('google_drive_settings')
     .select('root_folder_name')
     .eq('id', 1)
     .maybeSingle()
+  if (settingsError) throw new Error('Storage settings could not be loaded. Try: refresh settings and try again.')
 
   const rootName = normalizeDriveFolderName(String(settings?.root_folder_name || 'FICOMANA SHOOTS')) || 'FICOMANA SHOOTS'
-  const folder = (await findFolder('root', rootName)) ?? (await createFolder('root', rootName))
-  await admin
+  const folder = options.forceNew ? await createFolder('root', rootName)
+    : (await findFolder('root', rootName)) ?? (await createFolder('root', rootName))
+  const { error } = await admin
     .from('google_drive_settings')
     .update({ root_folder_id: folder.id, root_folder_name: rootName, updated_at: new Date().toISOString() })
     .eq('id', 1)
+  if (error) throw new Error('The new root was created, but its settings could not be saved. Try: paste its folder ID into Production storage and press Verify & Save.')
   return folder
+}
+
+async function findManagedClientFolder(parentId: string, bookingId: string): Promise<DriveFolder | null> {
+  const q = [`'${escapeDriveQuery(parentId)}' in parents`, `mimeType = '${FOLDER_MIME}'`, 'trashed = false',
+    `appProperties has { key='bookingId' and value='${escapeDriveQuery(bookingId)}' }`,
+    "appProperties has { key='purpose' and value='client-shoot-folder' }"].join(' and ')
+  const params = new URLSearchParams({ q, fields: 'files(id,name,parents,webViewLink,appProperties),nextPageToken', pageSize: '10',
+    spaces: 'drive', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true' })
+  const result = await driveFetch<{ files?: DriveFolder[]; nextPageToken?: string }>(`/files?${params}`)
+  if (result.nextPageToken || (result.files?.length || 0) > 1) {
+    throw new Error('More than one managed folder matches this booking. Try: ask the administrator to check its folders before retrying.')
+  }
+  return result.files?.[0] || null
 }
 
 export async function ensureShootHierarchy(input: {
@@ -546,6 +576,7 @@ export async function ensureShootHierarchy(input: {
   clientName: string
   selectionLimit?: number
   existingClientFolderId?: string | null
+  existingRootFolderId?: string | null
 }) {
   await assertGraduationBooking(input.admin, input.bookingId)
   const root = await resolveDriveRootFolder(input.admin)
@@ -558,10 +589,21 @@ export async function ensureShootHierarchy(input: {
   const day = await findOrCreateFolder(month.id, dayName)
 
   const baseClientName = normalizeDriveFolderName(input.clientName).toUpperCase() || input.bookingId
-  let client: DriveFolder
-
-  if (input.existingClientFolderId) {
-    client = await getDriveFolder(input.existingClientFolderId)
+  let client: DriveFolder | null = null
+  // A root switch creates a new hierarchy. Never read/move an old-root client folder.
+  const rootChanged = Boolean(input.existingRootFolderId && input.existingRootFolderId !== root.id)
+  if (input.existingClientFolderId && !rootChanged) {
+    try { client = await getDriveFolder(input.existingClientFolderId) } catch (error) {
+      // Only a missing/trashed old client is replaceable. Permissions, quotas and outages fail visibly.
+      if (!(error instanceof GoogleDriveRequestError) || error.status !== 404) throw error
+    }
+    if (client?.appProperties?.bookingId && client.appProperties.bookingId !== input.bookingId) {
+      throw new Error('The saved folder belongs to another booking. Try: ask the administrator to check the folder mapping.')
+    }
+    // Legacy rows without a recorded root must not move an unrelated old-root hierarchy.
+    if (client && !input.existingRootFolderId && !client.parents?.includes(day.id)) client = null
+  }
+  if (client) {
     if (!client.parents?.includes(day.id)) client = await moveFolder(client.id, day.id)
     if (client.name !== baseClientName && !client.name.endsWith(` - ${input.bookingId}`)) {
       const collision = await findFolder(day.id, baseClientName)
@@ -569,10 +611,13 @@ export async function ensureShootHierarchy(input: {
       client = await renameFolder(client.id, desired)
     }
   } else {
-    const collision = await findFolder(day.id, baseClientName)
-    client = collision
-      ? await findOrCreateFolder(day.id, `${baseClientName} - ${input.bookingId}`)
-      : await createFolder(day.id, baseClientName)
+    // Recover folders from a partial attempt even if the database mapping was not saved yet.
+    client = await findManagedClientFolder(day.id, input.bookingId)
+    if (!client) {
+      const collision = await findFolder(day.id, baseClientName)
+      const desired = collision ? `${baseClientName} - ${input.bookingId}` : baseClientName
+      client = await createFolder(day.id, desired, { bookingId: input.bookingId, purpose: 'client-shoot-folder' })
+    }
   }
 
   const raw = await findOrCreateFolder(client.id, 'RAW')

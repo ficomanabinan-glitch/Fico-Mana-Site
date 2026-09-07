@@ -111,6 +111,7 @@ function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolea
     },
     '@/lib/google-drive-scopes': {}, '@/lib/client-portal': {}, '@/lib/email': {},
     '@/lib/print-manifest': {}, '@/lib/print-workflow': {},
+    '@/lib/drive-folder-mappings': {},
     '@/lib/portal-expiry': { hasPortalExpired: (value: string) => Date.parse(value) < Date.now() },
     '@/lib/booking-provisioning': {}, '@/lib/security/file-validation': {},
     '@/lib/supabase/admin': { getSupabaseAdmin: () => db },
@@ -127,7 +128,8 @@ test('real portal file reader rejects cross-client/workspace files and expired o
   await assert.rejects(workflow.getPortalFile('portal-a', 'foreign-deliverable', 'deliverable'), /Photo not found/)
   assert.equal(driveReads.length, 0)
   const own = await workflow.getPortalFile('portal-a', 'own', 'gallery')
-  assert.equal(own.data.toString(), 'synthetic')
+  assert.equal(own.notModified, false)
+  assert.equal(own.data?.toString(), 'synthetic')
   assert.deepEqual(driveReads, ['drive-own'])
   await assert.rejects(workflowFixture({ expired: true }).workflow.getPortalFile('portal-a', 'own', 'gallery'), /expired/)
   await assert.rejects(workflowFixture({ mismatchedPortal: true }).workflow.getPortalFile('portal-a', 'own', 'gallery'), /Portal not found/)

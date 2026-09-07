@@ -74,7 +74,7 @@ export async function PUT(request: Request) {
         throw error
       }
     } else if (body.initializeRoot) {
-      const folder = await initializeDriveRootFolder(admin)
+      const folder = await initializeDriveRootFolder(admin, { forceNew: true })
       rootFolderId = folder.id
       rootFolderName = folder.name
     }

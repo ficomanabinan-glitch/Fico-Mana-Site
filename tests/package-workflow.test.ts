@@ -104,6 +104,7 @@ test('real self-portrait provisioning confirms payment without creating a portal
   let externalWrites = 0
   const provisioning = loadTs<typeof import('../lib/booking-provisioning.ts')>('lib/booking-provisioning.ts', {
     '@/lib/booking-db': bookingDb,
+    '@/lib/drive-folder-mappings': {},
     '@/lib/google-drive': { ensureShootHierarchy: async () => { externalWrites++; throw new Error('Unexpected Drive creation') } },
     '@/lib/client-portal': {}, '@/lib/portal-expiry': {},
     '@/lib/portal-email': { sendPortalAccessIfNeeded: async () => { externalWrites++; throw new Error('Unexpected portal email') } },
@@ -132,7 +133,7 @@ test('all resource creation paths are guarded while ordinary payment confirmatio
   const provision = provisioning.slice(provisioning.indexOf('export async function provisionBookingResources'), provisioning.indexOf('export async function disableClientPortal'))
   const skip = provision.indexOf('if (!requiresPhotoWorkflow || !row) return null')
   assert.ok(skip > provision.indexOf(".update({ booking_status: 'Confirmed'"))
-  assert.ok(skip < provision.indexOf('driveResult = await ensureShootHierarchy'))
+  assert.ok(skip < provision.indexOf('const hierarchy = await ensureShootHierarchy'))
   assert.ok(skip < provision.indexOf('const ensuredPortal = await ensurePortal'))
   assert.match(provision, /requiresPhotoWorkflow \? await getProvisioningRow\(admin, bookingId\) : null/)
   const snapshot = provisioning.slice(provisioning.indexOf('export async function getProvisioningSnapshot'), provisioning.indexOf('export async function provisionBookingResources'))

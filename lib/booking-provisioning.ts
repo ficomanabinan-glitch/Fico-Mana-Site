@@ -7,6 +7,7 @@ import { hasPortalExpired } from '@/lib/portal-expiry'
 import { sendPortalAccessIfNeeded } from '@/lib/portal-email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { assertGraduationBooking, packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
+import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
 
 export type ProvisioningStatus = 'NOT_STARTED' | 'PROVISIONING' | 'ACTIVE' | 'PARTIAL_FAILURE' | 'FAILED'
 
@@ -239,21 +240,24 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   const errors: string[] = []
 
   try {
-    driveResult = await ensureShootHierarchy({
+    const hierarchy = await ensureShootHierarchy({
       admin,
       bookingId,
       shootDate: booking.bookingDate,
       clientName: booking.customerName,
       selectionLimit: Number(booking.selectionLimit || 5),
       existingClientFolderId: row.drive_client_folder_id,
+      existingRootFolderId: row.drive_root_folder_id,
     })
+    await saveShootFolderMappings(admin, String(row.workspace_id || ''), bookingId, hierarchy)
     await updateProvisioning(admin, bookingId, {
-      drive_root_folder_id: driveResult.root.id,
-      drive_month_folder_id: driveResult.month.id,
-      drive_day_folder_id: driveResult.day.id,
-      drive_client_folder_id: driveResult.client.id,
-      drive_client_folder_url: driveResult.clientUrl,
+      drive_root_folder_id: hierarchy.root.id,
+      drive_month_folder_id: hierarchy.month.id,
+      drive_day_folder_id: hierarchy.day.id,
+      drive_client_folder_id: hierarchy.client.id,
+      drive_client_folder_url: hierarchy.clientUrl,
     })
+    driveResult = hierarchy
     await audit(admin, bookingId, row.drive_client_folder_id ? 'drive_folder_reconciled' : 'drive_client_folder_created', actor, {
       externalResourceId: driveResult.client.id,
       metadata: {
@@ -261,10 +265,14 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
         monthId: driveResult.month.id,
         dayId: driveResult.day.id,
         url: driveResult.clientUrl,
+        previousRootId: row.drive_root_folder_id || null,
+        previousClientFolderId: row.drive_client_folder_id || null,
+        rootChanged: Boolean(row.drive_root_folder_id && row.drive_root_folder_id !== driveResult.root.id),
       },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Google Drive provisioning failed.'
+    const detail = error instanceof Error ? error.message : 'Google Drive provisioning failed.'
+    const message = /\bTry:/i.test(detail) ? detail : `${detail} Try: verify the current root and connected Drive account in Production storage, then click Retry.`
     errors.push(message)
     await audit(admin, bookingId, 'drive_provisioning_failed', actor, { error: message })
   }
