@@ -10,11 +10,11 @@ const driveUrl = 'https://drive.google.com/drive/folders/client-raw'
 
 function setup(initialUrl?: string) {
   const hooks = componentHarness()
-  const module = loadTs<typeof import('../components/portal-drive-photos.tsx')>('components/portal-drive-photos.tsx', {
+  const componentModule = loadTs<typeof import('../components/portal-drive-photos.tsx')>('components/portal-drive-photos.tsx', {
     react: hooks.react,
     '@/components/ui/sheet': { Sheet: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null },
   })
-  return { ...hooks, render: () => hooks.render(() => module.default({ publicId: id, initialUrl })) }
+  return { ...hooks, render: () => hooks.render(() => componentModule.default({ publicId: id, initialUrl })) }
 }
 
 test('verified submission link is a normal Drive navigation, never a download, popup or stored PIN', () => {
