@@ -4,6 +4,11 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
+test('Open Folder uses the existing button wrapper and keeps direct new-tab navigation', () => {
+  const portals = source('app/admin/provisioning/page.tsx')
+  assert.match(portals, /<a href=\{item\.driveClientFolderUrl\} target="_blank" rel="noopener noreferrer" className=\{`\$\{actionButton\} min-h-10 whitespace-nowrap text-green-300`\}>Open folder/)
+})
+
 test('sales insight cards use the same rounded corners as other dashboard metrics', () => {
   const sales = source('app/admin/sales/page.tsx')
   const insight = sales.slice(sales.indexOf('function Insight('), sales.indexOf('function ExpenseBar('))
