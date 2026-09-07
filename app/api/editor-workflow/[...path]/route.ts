@@ -364,6 +364,7 @@ async function handle(request: NextRequest, path: string[]) {
             mimeType: body.mimeType,
             fileSize: body.fileSize,
             checksum: body.checksum,
+            browserOrigin: request.headers.get('origin') || '',
           }),
         )
       }
@@ -433,7 +434,7 @@ async function handle(request: NextRequest, path: string[]) {
         if (path[2] === 'upload-session') {
           const parsed = rawUploadMetadataSchema.safeParse(value)
           if (!parsed.success) return json({ error: 'Choose a supported photo up to 100 MB with a filename of at most 120 characters. Try: check the file and select it again.' }, 400)
-          return json(await startRawUpload(context, parsed.data))
+          return json(await startRawUpload(context, parsed.data, request.headers.get('origin') || ''))
         }
         const parsed = rawUploadCompleteSchema.safeParse(value)
         if (!parsed.success) return json({ error: 'Upload confirmation is invalid. Try: select the file again.' }, 400)

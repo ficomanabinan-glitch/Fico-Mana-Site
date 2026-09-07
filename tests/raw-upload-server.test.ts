@@ -55,6 +55,7 @@ function fixture(options: { invalidContent?: boolean; scanRejected?: boolean; sc
       createDriveResumableUpload: async (input: Record<string, unknown>) => {
         calls.push('session'); assert.equal(input.existingDriveFileId, undefined, 'Never overwrite an existing original')
         assert.equal(input.destinationFolderId, 'incoming'); assert.equal(input.purpose, 'raw')
+        assert.equal(input.browserOrigin, 'https://admin.ficomana.com')
         file = { id: 'new-photo', name: String(input.fileName), mimeType: String(input.mimeType), size: String(input.fileSize), parents: ['incoming'],
           appProperties: { bookingId: String(input.bookingId), relativePath: String(input.relativePath), checksum: String(input.checksum),
             purpose: 'raw', rawUploadKey: String(input.uploadKey), rawVerification: 'pending' } }
@@ -86,7 +87,7 @@ test('signed raw upload permissions bind staff, workspace, booking, metadata and
 
 test('direct original is checked, scanned and promoted before indexing; retry reuses its existing Drive file', async () => {
   const f = fixture()
-  const session = await f.server.startRawUpload(context, f.metadata)
+  const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
   assert.equal(f.gallery.size, 0)
   assert.ok('uploadUrl' in session)
   const result = await f.server.completeRawUpload(context, session.grant, f.file.id)
@@ -94,7 +95,7 @@ test('direct original is checked, scanned and promoted before indexing; retry re
   assert.ok(f.calls.indexOf('read-bytes') < f.calls.indexOf('scan'))
   assert.ok(f.calls.indexOf('scan') < f.calls.indexOf('promote'))
   assert.ok(f.calls.indexOf('promote') < f.calls.indexOf('upsert:gallery_files'))
-  const retry = await f.server.startRawUpload(context, f.metadata)
+  const retry = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
   assert.equal('driveFileId' in retry && retry.driveFileId, f.file.id)
   assert.equal(f.calls.filter(call => call === 'session').length, 1)
   await f.server.completeRawUpload(context, retry.grant, f.file.id)
@@ -103,7 +104,7 @@ test('direct original is checked, scanned and promoted before indexing; retry re
 
 test('forged permissions and foreign files are refused before file content access', async () => {
   const f = fixture()
-  const session = await f.server.startRawUpload(context, f.metadata)
+  const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
   const count = f.calls.length
   await assert.rejects(f.server.completeRawUpload(context, `${session.grant}tampered`, f.file.id))
   assert.equal(f.calls.length, count)
@@ -112,7 +113,7 @@ test('forged permissions and foreign files are refused before file content acces
   assert.equal(f.calls.includes('read-bytes'), false)
   assert.equal(f.gallery.size, 0)
   const unauthorized = fixture({ forbiddenBooking: true })
-  await assert.rejects(unauthorized.server.startRawUpload(context, unauthorized.metadata))
+  await assert.rejects(unauthorized.server.startRawUpload(context, unauthorized.metadata, 'https://admin.ficomana.com'))
   assert.deepEqual(unauthorized.calls, ['authorize-booking'])
 })
 
@@ -120,7 +121,7 @@ test('portal previews are small separate derivatives and never replace original 
   const bytes = await sharp({ create: { width: 2400, height: 1200, channels: 3, background: '#555555' } }).jpeg().toBuffer()
   const before = Buffer.from(bytes)
   const f = fixture({ bytes })
-  const session = await f.server.startRawUpload(context, f.metadata)
+  const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
   await f.server.completeRawUpload(context, session.grant, f.file.id)
   assert.deepEqual(bytes, before)
   assert.equal(f.previews.length, 1)
@@ -135,7 +136,7 @@ test('server verifies and indexes a full 50 MiB synthetic CR3 original without c
   bytes.writeUInt32BE(24, 0); bytes.write('ftypcrx ', 4, 'ascii')
   const hash = createHash('sha256').update(bytes).digest('hex')
   const f = fixture({ bytes, fileName: 'PRO_CAMERA_50MB.CR3' })
-  const session = await f.server.startRawUpload(context, f.metadata)
+  const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
   assert.equal(session.mimeType, 'application/octet-stream')
   await f.server.completeRawUpload(context, session.grant, f.file.id)
   const row = f.gallery.get(f.file.id)!
@@ -150,7 +151,7 @@ test('server verifies and indexes a full 50 MiB synthetic CR3 original without c
 test('bad contents, size, checksum, scanner or audit failures cannot promote or index an upload', async () => {
   for (const options of [{ invalidContent: true }, { scanRejected: true }, { scannerDown: true }, { auditError: true }]) {
     const f = fixture(options)
-    const session = await f.server.startRawUpload(context, f.metadata)
+    const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
     await assert.rejects(f.server.completeRawUpload(context, session.grant, f.file.id))
     assert.equal(f.calls.includes('promote'), false)
     assert.equal(f.gallery.size, 0)
@@ -158,7 +159,7 @@ test('bad contents, size, checksum, scanner or audit failures cannot promote or 
   for (const tamper of [(file: import('../lib/google-drive.ts').DriveFile) => { file.size = '999' },
     (file: import('../lib/google-drive.ts').DriveFile) => { file.appProperties!.checksum = 'f'.repeat(64) },
     (file: import('../lib/google-drive.ts').DriveFile) => { file.parents = ['other-client'] }]) {
-    const f = fixture(); const session = await f.server.startRawUpload(context, f.metadata); tamper(f.file)
+    const f = fixture(); const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com'); tamper(f.file)
     await assert.rejects(f.server.completeRawUpload(context, session.grant, f.file.id))
     assert.equal(f.calls.includes('read-bytes'), false)
   }

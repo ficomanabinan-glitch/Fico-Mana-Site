@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { decryptGoogleRefreshToken, googleOAuthClientCredentials } from '@/lib/google-oauth'
 import { googleThumbnailUrl, readBoundedResponse } from '@/lib/security/outbound-url'
 import { assertGraduationBooking } from '@/lib/package-workflow-server'
+import { validateDriveUploadOrigin } from '@/lib/security/origin'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -382,7 +383,9 @@ export async function createDriveResumableUpload(input: {
   checksum: string
   purpose?: 'raw' | 'deliverable'
   uploadKey?: string
+  browserOrigin?: string
 }): Promise<string> {
+  const origin = input.browserOrigin === undefined ? undefined : validateDriveUploadOrigin(input.browserOrigin)
   const token = await getGoogleDriveAccessToken()
   const metadata = {
     name: normalizeDriveFolderName(input.fileName) || 'photo',
@@ -407,6 +410,8 @@ export async function createDriveResumableUpload(input: {
         'Content-Type': 'application/json; charset=UTF-8',
         'X-Upload-Content-Type': input.mimeType,
         'X-Upload-Content-Length': String(input.fileSize),
+        // Google binds resumable-session CORS to the initiating request's Origin.
+        ...(origin ? { Origin: origin } : {}),
       },
       body: JSON.stringify(metadata),
       cache: 'no-store',

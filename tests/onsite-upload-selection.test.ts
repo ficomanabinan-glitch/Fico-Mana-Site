@@ -6,6 +6,7 @@ import { loadTs } from './helpers/load-ts.ts'
 const onsite = loadTs<typeof import('../components/onsite-upload.tsx')>('components/onsite-upload.tsx', {
   '@/components/admin-toast-provider': {}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': {},
   '@/lib/raw-upload-client': { uploadRawDirect: () => {} },
+  '@/lib/raw-upload-queue': {},
 })
 
 test('onsite selection snapshots the live file list before clearing the input', () => {

@@ -3,6 +3,7 @@ import { MAX_RAW_UPLOAD_BYTES, validateRawSessionUrl } from '@/lib/raw-upload-sh
 type Session = { grant: string; expiresAt: number; mimeType: string; uploadUrl?: string; driveFileId?: string; started?: boolean }
 type ChunkResponse = { status: number; range: string | null; body: Record<string, unknown> }
 const sessions = new WeakMap<File, Map<string, Session>>()
+const sessionStarts = new Map<string, Promise<unknown>>()
 const CHUNK_BYTES = 4 * 1024 * 1024 // A multiple of Google's required 256 KiB.
 
 class TransferError extends Error {
@@ -19,6 +20,20 @@ async function api(bookingId: string, action: string, payload: unknown) {
   return body
 }
 
+async function startSession(bookingId: string, payload: unknown) {
+  // Initialize folders one at a time per client; transfers proceed in parallel afterwards.
+  const previous = sessionStarts.get(bookingId) || Promise.resolve()
+  const pending = previous.catch(() => {}).then(() => api(bookingId, 'upload-session', payload))
+  sessionStarts.set(bookingId, pending)
+  try { return await pending } finally { if (sessionStarts.get(bookingId) === pending) sessionStarts.delete(bookingId) }
+}
+
+function connectionMessage() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
+    ? 'This browser is offline. Try: reconnect, keep this page open, and retry the failed file.'
+    : 'The browser could not reach or read the Google Drive upload response. This can be a browser permission or connection issue, even when other websites work. Try: reload this page to renew the upload permission, then select the failed files again. If it continues, check extensions or VPN settings that block Google requests.'
+}
+
 function put(url: string, body: Blob | null, range: string, mimeType: string, progress: (bytes: number) => void) {
   return new Promise<ChunkResponse>((resolve, reject) => {
     const request = new XMLHttpRequest()
@@ -29,7 +44,7 @@ function put(url: string, body: Blob | null, range: string, mimeType: string, pr
     request.setRequestHeader('Content-Type', mimeType)
     request.setRequestHeader('Content-Range', range)
     request.upload.addEventListener('progress', event => progress(Math.min(event.loaded, body?.size || 0)))
-    request.addEventListener('error', () => reject(new TransferError('The connection was interrupted. Try: check your connection and retry the failed file.')))
+    request.addEventListener('error', () => reject(new TransferError(connectionMessage())))
     request.addEventListener('timeout', () => reject(new TransferError('The upload timed out. Try: check your connection and retry the failed file.')))
     request.addEventListener('abort', () => reject(new TransferError('The upload was cancelled. Try: retry the failed file.')))
     request.addEventListener('load', () => {
@@ -64,7 +79,7 @@ export async function uploadRawDirect(bookingId: string, file: File, onProgress:
     onProgress(0, file.size)
     const checksum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())))
       .map(value => value.toString(16).padStart(2, '0')).join('')
-    const response = await api(bookingId, 'upload-session', { fileName: file.name, fileSize: file.size, checksum })
+    const response = await startSession(bookingId, { fileName: file.name, fileSize: file.size, checksum })
     if (typeof response.grant !== 'string' || typeof response.expiresAt !== 'number' || typeof response.mimeType !== 'string' ||
       (typeof response.uploadUrl !== 'string' && typeof response.driveFileId !== 'string')) {
       throw new Error('The upload permission was incomplete. Try: refresh the page and retry.')

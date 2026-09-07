@@ -25,7 +25,7 @@ function photoMime(name: string) {
   return known[extension] || 'application/octet-stream'
 }
 
-export async function startRawUpload(context: Context, supplied: RawUploadMetadata) {
+export async function startRawUpload(context: Context, supplied: RawUploadMetadata, browserOrigin: string) {
   const metadata = rawUploadMetadataSchema.parse(supplied)
   metadata.fileName = normalizeDriveFolderName(metadata.fileName)
   const admin = adminClient()
@@ -44,7 +44,7 @@ export async function startRawUpload(context: Context, supplied: RawUploadMetada
   if (completed) return { grant, expiresAt, mimeType, driveFileId: completed.id }
   const uploadUrl = validateRawSessionUrl(await createDriveResumableUpload({
     destinationFolderId: incoming.id, bookingId: context.bookingId, relativePath: `RAW/${metadata.fileName}`,
-    ...metadata, mimeType, purpose: 'raw', uploadKey,
+    ...metadata, mimeType, purpose: 'raw', uploadKey, browserOrigin,
   }))
   return { grant, expiresAt, mimeType, uploadUrl }
 }

@@ -39,6 +39,7 @@ test('enhanced print copies are individually keyed, repeat-safe, and replace onl
   const drive = loadTs<typeof import('../lib/google-drive.ts')>('lib/google-drive.ts', {
     '@/lib/supabase/admin': { getSupabaseAdmin: () => null }, '@/lib/google-oauth': {},
     '@/lib/security/outbound-url': {}, '@/lib/package-workflow-server': {},
+    '@/lib/security/origin': {},
   })
   const options = { source, bookingId: 'booking', selectionId: 'selection', destinationFolderId: 'prints', printKey: 'TOGA_PICTURE_4R:1',
     checksum: 'a'.repeat(64), fileName: 'TOGA PICTURE - 0920.JPG' }

@@ -1972,7 +1972,7 @@ export async function createDeliverableUploadSession(
   workspaceId: string,
   displayId: string,
   uploadJobId: string,
-  input: UploadFileInput,
+  input: UploadFileInput & { browserOrigin?: string },
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
@@ -2061,6 +2061,7 @@ export async function createDeliverableUploadSession(
       mimeType: input.mimeType || 'application/octet-stream',
       fileSize: input.fileSize,
       checksum,
+      browserOrigin: input.browserOrigin,
     })
     return { uploadFileId: String(uploadFile.id), uploadUrl, duplicate: false }
   } catch (uploadError) {

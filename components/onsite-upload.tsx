@@ -15,6 +15,7 @@ import { useAdminToast } from '@/components/admin-toast-provider'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminInput, adminPanel } from '@/lib/admin-ui'
 import { uploadRawDirect as uploadRawFile } from '@/lib/raw-upload-client'
+import { uploadRawQueue, type RawQueueProgress } from '@/lib/raw-upload-queue'
 export { uploadRawFile }
 
 type Job = {
@@ -34,18 +35,7 @@ type OnsiteResponse = {
   error?: string
 }
 
-type Progress = {
-  uploaded: number
-  total: number
-  failed: File[]
-  bytesProcessed: number
-  totalBytes: number
-  currentFile: string | null
-  currentFileLoaded: number
-  currentFileTotal: number
-  status: 'uploading' | 'complete' | 'partial'
-  lastError?: string | null
-}
+type Progress = RawQueueProgress
 
 function todayKey() {
   const now = new Date()
@@ -87,6 +77,7 @@ export default function OnsiteUpload({
   const [progress, setProgress] = useState<Record<string, Progress>>({})
   const target = useRef('')
   const input = useRef<HTMLInputElement | null>(null)
+  const uploading = useRef(new Set<string>())
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -156,94 +147,24 @@ export default function OnsiteUpload({
   }
 
   const uploadFiles = async (bookingId: string, files: File[]) => {
-    if (!files.length) return
-
-    const totalBytes = files.reduce((sum, file) => sum + file.size, 0)
-    const failed: File[] = []
-    let uploaded = 0
-    let completedBytes = 0
-    let lastError: string | null = null
-
+    if (!files.length || uploading.current.has(bookingId)) return
+    uploading.current.add(bookingId)
     setBusy(bookingId)
-    setProgress((current) => ({
-      ...current,
-      [bookingId]: {
-        uploaded: 0,
-        total: files.length,
-        failed: [],
-        bytesProcessed: 0,
-        totalBytes,
-        currentFile: files[0]?.name || null,
-        currentFileLoaded: 0,
-        currentFileTotal: files[0]?.size || 0,
-        status: 'uploading',
-        lastError: null,
-      },
-    }))
-
-    for (const file of files) {
-      setProgress((current) => ({
-        ...current,
-        [bookingId]: {
-          ...current[bookingId],
-          uploaded,
-          failed: [...failed],
-          bytesProcessed: completedBytes,
-          currentFile: file.name,
-          currentFileLoaded: 0,
-          currentFileTotal: file.size,
-          status: 'uploading',
-        },
-      }))
-
-      try {
-        await uploadRawFile(bookingId, file, (loaded, fileTotal) => {
-          setProgress((current) => ({
-            ...current,
-            [bookingId]: {
-              ...current[bookingId],
-              bytesProcessed: Math.min(totalBytes, completedBytes + loaded),
-              currentFile: file.name,
-              currentFileLoaded: loaded,
-              currentFileTotal: fileTotal,
-            },
-          }))
-        })
-        uploaded += 1
-      } catch (error) {
-        failed.push(file)
-        lastError = error instanceof Error ? error.message : 'The file could not be uploaded. Try: check your connection and retry the failed file.'
-        if (!/\bTry:/i.test(lastError)) lastError += ' Try: check your connection and retry the failed file.'
+    try {
+      const result = await uploadRawQueue(bookingId, files, state => {
+        setProgress(current => ({ ...current, [bookingId]: state }))
+      })
+      if (result.failed.length) {
+        toast.warning('Upload partially completed',
+          `${result.uploaded} uploaded · ${result.failed.length} failed. ${result.lastError || 'Try: retry only the failed files.'}`)
+      } else {
+        toast.success('RAW upload complete', `${result.uploaded} files uploaded to the correct client folder.`)
       }
-
-      completedBytes += file.size
-      setProgress((current) => ({
-        ...current,
-        [bookingId]: {
-          ...current[bookingId],
-          uploaded,
-          failed: [...failed],
-          bytesProcessed: Math.min(totalBytes, completedBytes),
-          currentFile: null,
-          currentFileLoaded: 0,
-          currentFileTotal: 0,
-          status: completedBytes >= totalBytes ? (failed.length ? 'partial' : 'complete') : 'uploading',
-          lastError,
-        },
-      }))
+    } finally {
+      uploading.current.delete(bookingId)
+      setBusy(current => current === bookingId ? '' : current)
+      await load(true)
     }
-
-    if (failed.length) {
-      toast.warning(
-        'Upload partially completed',
-        `${uploaded} uploaded · ${failed.length} failed. ${lastError || 'Try: retry only the failed files.'}`,
-      )
-    } else {
-      toast.success('RAW upload complete', `${uploaded} files uploaded to the correct client folder.`)
-    }
-
-    setBusy('')
-    await load(true)
   }
 
   const picked = async (files: FileList | null) => {
@@ -340,12 +261,7 @@ export default function OnsiteUpload({
             const overallPercent = state
               ? Math.min(100, Math.round((state.bytesProcessed / Math.max(1, state.totalBytes)) * 100))
               : 0
-            const currentFilePercent = state?.currentFile
-              ? Math.min(
-                  100,
-                  Math.round((state.currentFileLoaded / Math.max(1, state.currentFileTotal)) * 100),
-                )
-              : 0
+            const isBusy = busy === job.bookingId || state?.status === 'uploading'
             const driveStatus = job.rawFolderDriveId
               ? 'Ready'
               : job.lastError && /permission/i.test(job.lastError)
@@ -398,12 +314,14 @@ export default function OnsiteUpload({
                                 ? 'Upload complete'
                                 : state.status === 'partial'
                                   ? 'Upload completed with failures'
-                                  : state.currentFile && state.currentFileLoaded >= state.currentFileTotal
-                                    ? 'Verifying uploaded photo'
+                                  : state.activeFiles.length && state.activeFiles.every(file => file.verifying)
+                                    ? 'Verifying uploaded photos'
                                     : 'Uploading RAW photos'}
                             </p>
                             <p className="mt-1 max-w-sm truncate text-[10px] text-white/35">
-                              {state.currentFile || `${state.uploaded} file${state.uploaded === 1 ? '' : 's'} uploaded`}
+                              {state.status === 'uploading'
+                                ? `${state.activeFiles.length} active · Up to 3 parallel uploads`
+                                : `${state.uploaded} file${state.uploaded === 1 ? '' : 's'} uploaded`}
                             </p>
                           </div>
                           <p className="text-right text-sm font-bold tabular-nums text-[#C4CEFF]">
@@ -433,27 +351,28 @@ export default function OnsiteUpload({
                             {formatBytes(state.bytesProcessed)} / {formatBytes(state.totalBytes)}
                           </span>
                         </div>
-                        {state.currentFile ? (
-                          <div className="mt-3">
+                        {state.activeFiles.map(file => {
+                          const percent = Math.min(100, Math.round(file.loaded / Math.max(1, file.total) * 100))
+                          return <div key={file.index} className="mt-3">
                             <div className="flex justify-between gap-2 text-[9px] text-white/35">
-                              <span className="truncate">Current file</span>
-                              <span className="shrink-0 tabular-nums">{currentFilePercent}%</span>
+                              <span className="truncate">{file.name}</span>
+                              <span className="shrink-0 tabular-nums">{file.verifying ? 'Verifying' : `${percent}%`}</span>
                             </div>
                             <div
                               className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.08]"
                               role="progressbar"
-                              aria-label={`${state.currentFile} upload progress`}
+                              aria-label={`${file.name} upload progress`}
                               aria-valuemin={0}
                               aria-valuemax={100}
-                              aria-valuenow={currentFilePercent}
+                              aria-valuenow={percent}
                             >
                               <div
                                 className="h-full rounded-full bg-emerald-400 transition-[width] duration-150"
-                                style={{ width: `${currentFilePercent}%` }}
+                                style={{ width: `${percent}%` }}
                               />
                             </div>
                           </div>
-                        ) : null}
+                        })}
                         {state.failed.length ? (
                           <div className="mt-3 text-[9px] leading-relaxed text-amber-200/70">
                             <p>Failed: {state.failed.map((file) => file.name).join(', ')}</p>
@@ -474,7 +393,7 @@ export default function OnsiteUpload({
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={busy === job.bookingId}
+                      disabled={isBusy}
                       onClick={() => void folders(job.bookingId, false)}
                       className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}
                     >
@@ -484,7 +403,7 @@ export default function OnsiteUpload({
                     {job.rawFolderDriveId ? (
                       <button
                         type="button"
-                        disabled={busy === job.bookingId}
+                        disabled={isBusy}
                         onClick={() => {
                           if (
                             window.confirm(
@@ -502,7 +421,7 @@ export default function OnsiteUpload({
                     ) : null}
                     <button
                       type="button"
-                      disabled={busy === job.bookingId || !job.rawFolderDriveId}
+                      disabled={isBusy || !job.rawFolderDriveId}
                       onClick={() => choose(job.bookingId)}
                       className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
                     >
@@ -511,7 +430,7 @@ export default function OnsiteUpload({
                     </button>
                     <button
                       type="button"
-                      disabled={busy === job.bookingId || !job.rawFolderDriveId}
+                      disabled={isBusy || !job.rawFolderDriveId}
                       onClick={() => void sync(job.bookingId)}
                       className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
                     >
@@ -521,7 +440,7 @@ export default function OnsiteUpload({
                     {state?.failed.length ? (
                       <button
                         type="button"
-                        disabled={busy === job.bookingId}
+                        disabled={isBusy}
                         onClick={() => void uploadFiles(job.bookingId, state.failed)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[10px] font-bold uppercase text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20 disabled:opacity-35"
                       >
