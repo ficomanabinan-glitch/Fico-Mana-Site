@@ -166,7 +166,7 @@ export default function BookingPrioritySelect({
 
   if (!displayPriority || maxPriority < 1) {
     return (
-      <span className={`text-[10px] text-white/35 font-semibold uppercase tracking-wider ${className}`}>
+      <span className={`text-caption text-white/35 font-semibold uppercase tracking-wider ${className}`}>
         —
       </span>
     )
@@ -266,7 +266,7 @@ export default function BookingPrioritySelect({
       onChange={(event) => void updatePriority(Number(event.target.value))}
       title="Set who arrived first in the studio"
       aria-label={`Studio arrival order: Client ${displayPriority} of ${maxPriority}`}
-      className={`rounded-md border border-white/15 bg-black/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white focus:outline-none focus:border-primary/60 disabled:opacity-50 disabled:cursor-wait ${className}`}
+      className={`rounded-md border border-white/15 bg-black/40 px-2 py-1.5 text-caption font-semibold uppercase tracking-wider text-white focus:outline-none focus:border-primary/60 disabled:opacity-50 disabled:cursor-wait ${className}`}
     >
       {options.map((n) => (
         <option key={n} value={n}>

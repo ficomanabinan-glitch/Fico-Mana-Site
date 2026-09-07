@@ -56,7 +56,7 @@ export default function SchoolAffiliations() {
               />
             </div>
             <div>
-              <p className="text-[9px] font-semibold tracking-[0.2em] uppercase text-white mb-2">
+              <p className="text-caption font-semibold tracking-label uppercase text-white mb-2">
                 {school.tag}
               </p>
               <h3 className="text-sm font-semibold text-white leading-snug">{school.name}</h3>

@@ -35,7 +35,7 @@ function IncludeItem({ item }: { item: string }) {
   return (
     <span
       className={cn(
-        'text-[11px] md:text-xs tracking-[0.02em] leading-relaxed',
+        'text-caption md:text-xs tracking-[0.02em] leading-relaxed',
         isHighlight && 'text-white font-medium',
         isMuted && 'text-white/40 font-light italic',
         !isHighlight && !isMuted && 'text-white/70 font-light',
@@ -55,29 +55,29 @@ function PackageCard({ pkg, index }: { pkg: SelfPortraitPackage; index: number }
       className="relative border border-white/12 bg-black/40 backdrop-blur-sm px-6 py-7 md:px-8 md:py-9 flex flex-col h-full"
     >
       {pkg.badge && (
-        <span className="absolute top-4 right-4 text-[8px] font-semibold tracking-[0.2em] uppercase bg-[#0500D0] text-white px-2.5 py-1">
+        <span className="absolute top-4 right-4 text-caption font-semibold tracking-label uppercase bg-[#0500D0] text-white px-2.5 py-1">
           {pkg.badge}
         </span>
       )}
 
       <div className="mb-6 pb-6 border-b border-white/10">
-        <h3 className="text-sm md:text-[15px] font-semibold tracking-[0.18em] text-white uppercase">
+        <h3 className="text-sm md:text-[15px] font-semibold tracking-label text-white uppercase">
           {pkg.tier}
         </h3>
-        <p className="mt-2 text-[11px] md:text-xs font-light text-white/50 tracking-[0.08em] uppercase">
+        <p className="mt-2 text-caption md:text-xs font-light text-white/50 tracking-[0.08em] uppercase">
           {pkg.title}
         </p>
         <p className="mt-4 text-lg md:text-xl font-light text-white tracking-[0.06em]">
           {pkg.price}
         </p>
         {pkg.selectionLimit ? (
-          <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#C4CEFF]">
+          <p className="mt-2 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
             Client selects {pkg.selectionLimit} photo{pkg.selectionLimit === 1 ? '' : 's'} for editing
           </p>
         ) : null}
         {pkg.secondaryPrice && pkg.secondaryPriceLabel && (
-          <p className="mt-2 text-[11px] md:text-xs font-light text-white/55 tracking-[0.04em] leading-relaxed">
-            <span className="block text-white/40 uppercase tracking-[0.12em] text-[9px] mb-1">
+          <p className="mt-2 text-caption md:text-xs font-light text-white/55 tracking-[0.04em] leading-relaxed">
+            <span className="block text-white/40 uppercase tracking-[0.12em] text-caption mb-1">
               {pkg.secondaryPriceLabel}
             </span>
             {pkg.secondaryPrice}
@@ -85,14 +85,14 @@ function PackageCard({ pkg, index }: { pkg: SelfPortraitPackage; index: number }
         )}
       </div>
 
-      <p className="text-[9px] font-medium tracking-[0.3em] uppercase text-white/35 mb-5">
+      <p className="text-caption font-medium tracking-label uppercase text-white/35 mb-5">
         Includes
       </p>
 
       <ul className="divide-y divide-white/6 flex-1">
         {pkg.includes.map((item, i) => (
           <li key={item} className="flex items-start gap-4 py-2.5 first:pt-0 last:pb-0">
-            <span className="text-[9px] font-light tabular-nums text-white/25 w-4 shrink-0 pt-0.5">
+            <span className="text-caption font-light tabular-nums text-white/25 w-4 shrink-0 pt-0.5">
               {String(i + 1).padStart(2, '0')}
             </span>
             <IncludeItem item={item} />
@@ -101,7 +101,7 @@ function PackageCard({ pkg, index }: { pkg: SelfPortraitPackage; index: number }
       </ul>
 
       {pkg.note && (
-        <p className="mt-5 pt-4 border-t border-white/8 text-[10px] font-light text-white/45 leading-relaxed italic">
+        <p className="mt-5 pt-4 border-t border-white/8 text-caption font-light text-white/45 leading-relaxed italic">
           Note: {pkg.note}
         </p>
       )}
@@ -115,7 +115,7 @@ function PackageCard({ pkg, index }: { pkg: SelfPortraitPackage; index: number }
               render={<Link href={getBookingUrl(variant.id)} />}
               className={cn(
                 buttonVariants({ variant: 'outline', size: 'lg' }),
-                'w-full rounded-none border-white/25 bg-transparent hover:bg-white/10 text-white text-[9px] md:text-[10px] font-bold tracking-[0.12em] uppercase h-10',
+                'w-full rounded-none border-white/25 bg-transparent hover:bg-white/10 text-white text-caption md:text-caption font-semibold tracking-[0.12em] uppercase h-10',
               )}
             >
               {variant.label}
@@ -128,7 +128,7 @@ function PackageCard({ pkg, index }: { pkg: SelfPortraitPackage; index: number }
           render={<Link href={getBookingUrl(pkg.id)} />}
           className={cn(
             buttonVariants({ variant: 'outline', size: 'lg' }),
-            'mt-6 w-full rounded-none border-white/25 bg-transparent hover:bg-white/10 text-white text-[9px] md:text-[10px] font-bold tracking-[0.16em] uppercase h-10',
+            'mt-6 w-full rounded-none border-white/25 bg-transparent hover:bg-white/10 text-white text-caption md:text-caption font-semibold tracking-label uppercase h-10',
           )}
         >
           Book This Package
@@ -172,13 +172,13 @@ function PackageSection({
         viewport={{ once: true }}
         className="text-center mb-8 md:mb-10"
       >
-        <p className="text-[9px] md:text-[10px] font-light tracking-[0.4em] uppercase text-white/40 mb-3">
+        <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
           {label}
         </p>
         <h2 className="text-xl md:text-2xl font-normal tracking-[0.14em] uppercase text-white">
           {title}
         </h2>
-        <p className="mt-3 text-[10px] md:text-[11px] font-light text-white/70 tracking-[0.08em]">
+        <p className="mt-3 text-caption md:text-caption font-light text-white/70 tracking-[0.08em]">
           {ladder}
         </p>
       </motion.div>
@@ -228,13 +228,13 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
           viewport={{ once: true }}
           className="text-center mb-10 md:mb-12"
         >
-          <p className="text-[9px] md:text-[10px] font-light tracking-[0.4em] uppercase text-white/40 mb-3">
+          <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
             Self Portrait Studio
           </p>
           <h1 className="text-2xl md:text-3xl font-normal tracking-[0.14em] uppercase text-white">
             More Packages
           </h1>
-          <p className="mt-4 text-[11px] md:text-xs font-light text-white/50 tracking-[0.06em] max-w-lg mx-auto leading-relaxed">
+          <p className="mt-4 text-caption md:text-xs font-light text-white/50 tracking-[0.06em] max-w-lg mx-auto leading-relaxed">
             Solo, duo, family, and barkada sessions — choose the package that fits your shoot.
           </p>
         </motion.div>
@@ -259,10 +259,10 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
                   : 'border-white/12 bg-transparent text-white/50',
               )}
             >
-              <span className="block text-[11px] font-semibold tracking-[0.18em] uppercase">
+              <span className="block text-caption font-semibold tracking-label uppercase">
                 {tab.label}
               </span>
-              <span className="block mt-1 text-[8px] font-light tracking-[0.1em] uppercase">
+              <span className="block mt-1 text-caption font-light tracking-[0.1em] uppercase">
                 {tab.sub}
               </span>
             </button>
@@ -361,7 +361,7 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
               render={<Link href="/#booking" />}
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'rounded-none bg-[#0500D0] hover:bg-[#03008F] text-[10px] md:text-[11px] font-bold tracking-[0.18em] uppercase h-11 md:h-12 px-8 w-full sm:w-auto',
+                'rounded-none bg-[#0500D0] hover:bg-[#03008F] text-caption md:text-caption font-semibold tracking-label uppercase h-11 md:h-12 px-8 w-full sm:w-auto',
               )}
             >
               Book a Session
@@ -372,7 +372,7 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
               variant="outline"
               className={cn(
                 buttonVariants({ variant: 'outline', size: 'lg' }),
-                'rounded-none border-white/40 bg-transparent text-white hover:bg-white/10 text-[10px] md:text-[11px] font-bold tracking-[0.18em] uppercase h-11 md:h-12 px-8 w-full sm:w-auto',
+                'rounded-none border-white/40 bg-transparent text-white hover:bg-white/10 text-caption md:text-caption font-semibold tracking-label uppercase h-11 md:h-12 px-8 w-full sm:w-auto',
               )}
             >
               Graduation Packages
@@ -391,7 +391,7 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
               render={<Link href="/#booking" />}
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'rounded-none bg-[#0500D0] hover:bg-[#03008F] text-[10px] md:text-[11px] font-bold tracking-[0.18em] uppercase h-11 md:h-12 px-8',
+                'rounded-none bg-[#0500D0] hover:bg-[#03008F] text-caption md:text-caption font-semibold tracking-label uppercase h-11 md:h-12 px-8',
               )}
             >
               Book a Session

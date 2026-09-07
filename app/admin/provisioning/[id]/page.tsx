@@ -180,23 +180,23 @@ export default function ProvisioningBookingPage() {
     <div className={adminPage}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <Link href="/admin/provisioning" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white/45 hover:text-white"><ArrowLeft className="w-3.5 h-3.5" />Provisioning</Link>
+          <Link href="/admin/provisioning" className="inline-flex items-center gap-1 text-caption font-semibold uppercase tracking-wider text-white/45 hover:text-white"><ArrowLeft className="w-3.5 h-3.5" />Provisioning</Link>
           <h1 className="text-2xl font-semibold mt-3">{booking.customerName}</h1>
           <p className="text-xs font-mono text-[#C4CEFF] mt-1">{booking.id}</p>
           <p className="text-xs text-white/45 mt-1">{booking.packageName} · {booking.bookingDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {snapshot?.driveClientFolderUrl ? <a href={snapshot.driveClientFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-[10px] font-bold uppercase hover:border-white/30">Drive <ExternalLink className="w-3.5 h-3.5" /></a> : null}
-          {snapshot?.clientPortalUrl ? <a href={snapshot.clientPortalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-[10px] font-bold uppercase hover:border-white/30">Client Portal <ExternalLink className="w-3.5 h-3.5" /></a> : null}
-          <button disabled={busy || snapshot?.required === false} onClick={retry} className="inline-flex items-center gap-1.5 bg-primary px-3 py-2 text-[10px] font-bold uppercase disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />{snapshot?.required === false ? 'Portal not required' : 'Retry / Reconcile'}</button>
+          {snapshot?.driveClientFolderUrl ? <a href={snapshot.driveClientFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-caption font-semibold uppercase hover:border-white/30">Drive <ExternalLink className="w-3.5 h-3.5" /></a> : null}
+          {snapshot?.clientPortalUrl ? <a href={snapshot.clientPortalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-caption font-semibold uppercase hover:border-white/30">Client Portal <ExternalLink className="w-3.5 h-3.5" /></a> : null}
+          <button disabled={busy || snapshot?.required === false} onClick={retry} className="inline-flex items-center gap-1.5 bg-primary px-3 py-2 text-caption font-semibold uppercase disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />{snapshot?.required === false ? 'Portal not required' : 'Retry / Reconcile'}</button>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Provisioning</p><p className="font-semibold mt-2">{snapshot?.required === false ? 'Not required' : snapshot?.status || 'NOT_STARTED'}</p></div>
-        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Portal</p><p className="font-semibold mt-2 capitalize">{snapshot?.required === false ? 'Not required' : snapshot?.clientPortalStatus || 'Not created'}</p></div>
-        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Confirmed payments</p><p className="font-semibold mt-2">₱{Number(snapshot?.confirmedPayments || 0).toFixed(2)}</p></div>
-        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Required deposit</p><p className="font-semibold mt-2">₱{Number(snapshot?.requiredDeposit || 0).toFixed(2)}</p></div>
+        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-caption uppercase tracking-wider text-white/40">Provisioning</p><p className="font-semibold mt-2">{snapshot?.required === false ? 'Not required' : snapshot?.status || 'NOT_STARTED'}</p></div>
+        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-caption uppercase tracking-wider text-white/40">Portal</p><p className="font-semibold mt-2 capitalize">{snapshot?.required === false ? 'Not required' : snapshot?.clientPortalStatus || 'Not created'}</p></div>
+        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-caption uppercase tracking-wider text-white/40">Confirmed payments</p><p className="font-semibold mt-2">₱{Number(snapshot?.confirmedPayments || 0).toFixed(2)}</p></div>
+        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-caption uppercase tracking-wider text-white/40">Required deposit</p><p className="font-semibold mt-2">₱{Number(snapshot?.requiredDeposit || 0).toFixed(2)}</p></div>
       </div>
       {snapshot?.lastError ? <div className="border border-red-500/25 bg-red-500/10 p-4 text-xs text-red-200">{snapshot.lastError}</div> : null}
 
@@ -205,18 +205,18 @@ export default function ProvisioningBookingPage() {
           <div><h2 className="text-sm font-semibold">Approved Client Portal resources</h2><p className="text-xs text-white/45 mt-1">Only add files, links, documents, or updates the client is allowed to see.</p></div>
           <form onSubmit={addResource} className="space-y-3 border border-white/10 bg-black/10 p-4">
             <div className="grid sm:grid-cols-2 gap-3">
-              <label className="space-y-1.5"><span className="text-[9px] uppercase tracking-wider text-white/40">Type</span><select value={resourceType} onChange={(e) => setResourceType(e.target.value as Resource['resource_type'])} className={adminSelect}>{resourceTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-              <label className="space-y-1.5"><span className="text-[9px] uppercase tracking-wider text-white/40">Title</span><input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Official Invoice" className={adminInput} /></label>
+              <label className="space-y-1.5"><span className="text-caption uppercase tracking-wider text-white/40">Type</span><select value={resourceType} onChange={(e) => setResourceType(e.target.value as Resource['resource_type'])} className={adminSelect}>{resourceTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
+              <label className="space-y-1.5"><span className="text-caption uppercase tracking-wider text-white/40">Title</span><input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Official Invoice" className={adminInput} /></label>
             </div>
-            <label className="space-y-1.5 block"><span className="text-[9px] uppercase tracking-wider text-white/40">HTTPS link (optional)</span><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className={adminInput} /></label>
-            <label className="space-y-1.5 block"><span className="text-[9px] uppercase tracking-wider text-white/40">Client-facing update text (optional)</span><textarea rows={3} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Approved project update…" className={`${adminInput} resize-y`} /></label>
-            <button disabled={busy || !title.trim() || (!url.trim() && !content.trim())} className="inline-flex items-center gap-1.5 bg-primary px-4 py-2.5 text-[10px] font-bold uppercase disabled:opacity-50"><FilePlus2 className="w-3.5 h-3.5" />Add approved resource</button>
+            <label className="space-y-1.5 block"><span className="text-caption uppercase tracking-wider text-white/40">HTTPS link (optional)</span><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className={adminInput} /></label>
+            <label className="space-y-1.5 block"><span className="text-caption uppercase tracking-wider text-white/40">Client-facing update text (optional)</span><textarea rows={3} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Approved project update…" className={`${adminInput} resize-y`} /></label>
+            <button disabled={busy || !title.trim() || (!url.trim() && !content.trim())} className="inline-flex items-center gap-1.5 bg-primary px-4 py-2.5 text-caption font-semibold uppercase disabled:opacity-50"><FilePlus2 className="w-3.5 h-3.5" />Add approved resource</button>
           </form>
 
           <div className="space-y-2">
             {resources.length === 0 ? <p className="text-xs text-white/40">No approved resources attached yet.</p> : resources.map((resource) => (
               <div key={resource.id} className="border border-white/10 bg-white/[0.025] p-3 flex items-start gap-3">
-                <div className="flex-1 min-w-0"><p className="text-xs font-semibold">{resource.title}</p><p className="text-[9px] uppercase tracking-wider text-white/35 mt-1">{resource.resource_type.replace(/_/g, ' ')}</p>{resource.content ? <p className="text-[11px] text-white/55 mt-2 whitespace-pre-wrap">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-[#C4CEFF] hover:underline mt-2">Open resource <ExternalLink className="w-3 h-3" /></a> : null}</div>
+                <div className="flex-1 min-w-0"><p className="text-xs font-semibold">{resource.title}</p><p className="text-caption uppercase tracking-wider text-white/35 mt-1">{resource.resource_type.replace(/_/g, ' ')}</p>{resource.content ? <p className="text-caption text-white/55 mt-2 whitespace-pre-wrap">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-caption text-[#C4CEFF] hover:underline mt-2">Open resource <ExternalLink className="w-3 h-3" /></a> : null}</div>
                 <button disabled={busy} onClick={() => removeResource(resource.id)} className="p-2 text-white/35 hover:text-red-300"><Trash2 className="w-4 h-4" /></button>
               </div>
             ))}
@@ -228,10 +228,10 @@ export default function ProvisioningBookingPage() {
           <div className="mt-5 space-y-2 max-h-[760px] overflow-y-auto pr-1">
             {audit.length === 0 ? <p className="text-xs text-white/40">No audit events yet.</p> : audit.map((event) => (
               <div key={event.id} className="border-l-2 border-white/10 pl-3 py-2">
-                <div className="flex items-start justify-between gap-3"><p className="text-[11px] font-semibold text-white/80">{event.action.replace(/_/g, ' ')}</p><time className="text-[9px] text-white/30 whitespace-nowrap">{new Date(event.created_at).toLocaleString()}</time></div>
-                <p className="text-[9px] uppercase tracking-wider text-white/30 mt-1">{event.actor_type}{event.actor_id ? ` · ${event.actor_id.slice(0, 8)}…` : ''}</p>
-                {event.error ? <p className="text-[10px] text-red-300 mt-1">{event.error}</p> : null}
-                {event.external_resource_id ? <p className="text-[9px] font-mono text-white/30 mt-1 break-all">Resource: {event.external_resource_id}</p> : null}
+                <div className="flex items-start justify-between gap-3"><p className="text-caption font-semibold text-white/80">{event.action.replace(/_/g, ' ')}</p><time className="text-caption text-white/30 whitespace-nowrap">{new Date(event.created_at).toLocaleString()}</time></div>
+                <p className="text-caption uppercase tracking-wider text-white/30 mt-1">{event.actor_type}{event.actor_id ? ` · ${event.actor_id.slice(0, 8)}…` : ''}</p>
+                {event.error ? <p className="text-caption text-red-300 mt-1">{event.error}</p> : null}
+                {event.external_resource_id ? <p className="text-caption font-mono text-white/30 mt-1 break-all">Resource: {event.external_resource_id}</p> : null}
               </div>
             ))}
           </div>

@@ -12,7 +12,7 @@ function HeaderSkeleton() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="space-y-2.5">
-        <Bar className="h-7 w-56" />
+        <Bar className="h-[2.1rem] w-56 sm:h-12" />
         <Bar className="h-4 w-[min(34rem,75vw)]" />
       </div>
       <Bar className="h-10 w-32" />

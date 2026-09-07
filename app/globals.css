@@ -12,6 +12,31 @@
   --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
   --font-aileron: var(--font-geist-sans), 'Geist Fallback', Arial, sans-serif;
   --font-neue: var(--font-geist-sans), 'Geist Fallback', Arial, sans-serif;
+  /* Rounded modular scale: a visual guide, not a literal phi multiplier. */
+  --text-caption: var(--fico-text-caption);
+  --text-caption--line-height: 1.5;
+  --text-small: var(--fico-text-small);
+  --text-small--line-height: 1.5;
+  --text-body: var(--fico-text-body);
+  --text-body--line-height: 1.6;
+  --text-large: var(--fico-text-large);
+  --text-large--line-height: 1.5;
+  --text-card-title: var(--fico-text-card-title);
+  --text-card-title--line-height: 1.25;
+  --text-h3: var(--fico-text-h3);
+  --text-h3--line-height: 1.25;
+  --text-h2: var(--fico-text-h2);
+  --text-h2--line-height: 1.2;
+  --text-page-title: var(--fico-text-page-title);
+  --text-page-title--line-height: 1.2;
+  --text-display: var(--fico-text-display);
+  --text-display--line-height: 1.1;
+  --tracking-label: 0.06em;
+  --tracking-heading: -0.01em;
+  --radius-card: var(--fico-radius-card);
+  --radius-control: var(--fico-radius-control);
+  --spacing-card: var(--fico-space-card);
+  --spacing-section: var(--fico-space-section);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -53,6 +78,28 @@
 }
 
 :root {
+  --fico-text-caption: 0.75rem;
+  --fico-text-small: 0.875rem;
+  --fico-text-body: 1rem;
+  --fico-text-large: 1.125rem;
+  --fico-text-card-title: 1.25rem;
+  --fico-text-h3: 1.5rem;
+  --fico-text-h2: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+  --fico-text-page-title: clamp(1.75rem, 1.35rem + 1.5vw, 2.5rem);
+  --fico-text-display: clamp(2.25rem, 1.75rem + 2vw, 3.25rem);
+  --fico-space-1: 0.25rem;
+  --fico-space-2: 0.5rem;
+  --fico-space-3: 0.75rem;
+  --fico-space-4: 1rem;
+  --fico-space-6: 1.5rem;
+  --fico-space-8: 2rem;
+  --fico-space-12: 3rem;
+  --fico-space-16: 4rem;
+  --fico-space-20: 5rem;
+  --fico-space-card: clamp(1rem, 0.75rem + 1vw, 1.5rem);
+  --fico-space-section: clamp(3rem, 2rem + 4vw, 5rem);
+  --fico-radius-card: 1rem;
+  --fico-radius-control: 0.625rem;
   color-scheme: dark;
   --brand-blue: #0500D0;
   --brand-blue-dark: #03008F;
@@ -147,23 +194,48 @@
 
 @layer components {
   .heading-xl {
-    @apply font-serif text-5xl md:text-6xl lg:text-7xl font-light tracking-tight leading-[1.1] text-balance;
+    @apply font-serif text-display font-light tracking-[-0.03em] text-balance;
   }
 
   .heading-lg {
-    @apply font-serif text-3xl md:text-4xl lg:text-5xl font-light tracking-tight leading-tight text-balance;
+    @apply font-serif text-h2 font-light tracking-heading text-balance;
   }
 
   .heading-md {
-    @apply font-serif text-2xl md:text-3xl font-normal tracking-tight;
+    @apply font-serif text-h3 font-normal tracking-heading;
   }
 
   .label-premium {
-    @apply text-[11px] font-medium tracking-[0.3em] uppercase text-white;
+    @apply text-caption font-medium tracking-label uppercase text-white;
   }
 
   .section-padding {
-    @apply py-24 md:py-32 px-6 md:px-12;
+    @apply py-section px-4 sm:px-6 lg:px-12;
+  }
+
+  .fico-card {
+    border-radius: var(--fico-radius-card);
+    padding: var(--fico-space-card);
+    min-width: 0;
+  }
+
+  /* Keep operational layouts full-width. Only contextual portal panels split. */
+  .fico-portal-columns {
+    display: grid;
+    gap: var(--fico-space-6);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (min-width: 1024px) {
+    .fico-portal-columns {
+      grid-template-columns: minmax(0, 1.618fr) minmax(18rem, 1fr);
+    }
+  }
+
+  .fico-table {
+    font-size: var(--fico-text-small);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
   }
 
   .border-brutal {
@@ -333,11 +405,16 @@
 
 /* Admin / filtering: softer blue accents on dark UI (not deep #0500D0) */
 .admin-console {
+  --radius: var(--fico-radius-control);
   --primary: #8fa0ff;
   --accent: #8fa0ff;
   --brand-blue: #8fa0ff;
   --ring: #a5b4fc;
   --sidebar-primary: #8fa0ff;
+}
+
+.client-portal {
+  --radius: var(--fico-radius-control);
 }
 
 /* Keep desktop console navigation available while long pages scroll. */

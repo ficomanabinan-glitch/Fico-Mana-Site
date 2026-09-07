@@ -173,7 +173,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
             <div className="shrink-0 border-b border-white/[0.08] p-6">
               <Link href="/editor" prefetch onClick={() => navigate('/editor', false)}>
                 <h1 className="font-serif text-xl font-bold">FICO MANA</h1>
-                <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-[#C4CEFF]">
+                <p className="mt-1 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
                   Editor Workspace
                 </p>
               </Link>
@@ -193,7 +193,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
               {session.capabilities.admin ? (
                 <a
                   href="https://admin.ficomana.com/admin/dashboard"
-                  className="mt-3 flex items-center gap-1.5 border-t border-white/[0.07] pt-3 text-[9px] font-bold uppercase text-white/35 hover:text-white"
+                  className="mt-3 flex items-center gap-1.5 border-t border-white/[0.07] pt-3 text-caption font-semibold uppercase text-white/35 hover:text-white"
                 >
                   <ShieldCheck className="size-3" />
                   Open Admin Console
@@ -215,12 +215,9 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
                 </button>
                 <div>
                   <p className="text-xs font-semibold text-white/55">{pageTitle}</p>
-                  <p className="hidden text-[8px] uppercase tracking-[0.18em] text-amber-300/65 sm:block">
-                    Secure production workspace
-                  </p>
                 </div>
               </div>
-              <p className="hidden text-[10px] text-white/35 sm:block">{session.workspace.name}</p>
+              <p className="hidden text-caption text-white/35 sm:block">{session.workspace.name}</p>
             </header>
 
             {menu ? (

@@ -23,9 +23,9 @@ export default function SectionHeader({
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
       viewport={{ once: true }}
-      className={`mb-14 md:mb-20 ${isCenter ? 'text-center' : ''}`}
+      className={`mb-8 md:mb-12 ${isCenter ? 'text-center' : ''}`}
     >
-      <div className={`flex items-center gap-4 mb-5 ${isCenter ? 'justify-center' : ''}`}>
+      <div className={`flex items-center gap-3 mb-4 ${isCenter ? 'justify-center' : ''}`}>
         {!isCenter && <span className="h-px w-10 bg-white" />}
         <span className="label-premium text-white">{eyebrow}</span>
         {isCenter && <span className="h-px w-10 bg-white" />}

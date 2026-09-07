@@ -40,10 +40,10 @@ function SlotButton({
         blocked && !full && 'border-amber-500/20 bg-amber-500/5',
       )}
     >
-      <span className="text-[9px] sm:text-[10px] font-bold tracking-[0.12em] uppercase leading-none">
+      <span className="text-caption sm:text-caption font-semibold tracking-[0.12em] uppercase leading-none">
         {slot.slotLabel}
       </span>
-      <span className="text-[7px] sm:text-[8px] text-white/60 leading-tight">
+      <span className="text-[7px] sm:text-caption text-white/60 leading-tight">
         {slot.arrivalTime} → {slot.shootTime}
       </span>
       <span
@@ -68,13 +68,13 @@ export default function BookingSlotPicker({
     <div className="flex flex-col min-h-0">
       <div className="min-w-[260px] sm:min-w-0">
         <div className="grid grid-cols-[minmax(0,1.15fr)_1fr_1fr] gap-1 sm:gap-1.5 mb-1.5 shrink-0">
-          <div className="text-[8px] font-semibold tracking-[0.14em] uppercase text-white/30 px-1">
+          <div className="text-caption font-semibold tracking-[0.14em] uppercase text-white/30 px-1">
             Session
           </div>
-          <div className="text-center text-[8px] font-bold tracking-[0.14em] uppercase py-1.5 border-b-2 text-white border-white">
+          <div className="text-center text-caption font-semibold tracking-[0.14em] uppercase py-1.5 border-b-2 text-white border-white">
             Slot 1
           </div>
-          <div className="text-center text-[8px] font-bold tracking-[0.14em] uppercase py-1.5 border-b-2 text-white border-white">
+          <div className="text-center text-caption font-semibold tracking-[0.14em] uppercase py-1.5 border-b-2 text-white border-white">
             Slot 2
           </div>
         </div>
@@ -94,7 +94,7 @@ export default function BookingSlotPicker({
                 )}
               >
                 <div className="flex flex-col justify-center px-1 sm:px-1.5 py-2 border border-white/8 bg-white/[0.02]">
-                  <p className="text-[8px] sm:text-[9px] font-medium leading-snug text-white/75 tracking-wide">
+                  <p className="text-caption sm:text-caption font-medium leading-snug text-white/75 tracking-wide">
                     {block.timeLabel.replace(' - ', ' – ')}
                   </p>
                   {sessionFull && (
@@ -118,7 +118,7 @@ export default function BookingSlotPicker({
           })}
         </div>
 
-        <p className="text-[9px] text-white/40 leading-snug border-t border-white/8 pt-3 mt-3">
+        <p className="text-caption text-white/40 leading-snug border-t border-white/8 pt-3 mt-3">
           With makeup · 1 booking per slot · Arrive 15 min early
         </p>
       </div>

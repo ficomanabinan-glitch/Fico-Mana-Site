@@ -58,9 +58,12 @@ test('an older package refresh cannot overwrite an acknowledged package edit', a
   assert.deepEqual(packages.getCachedManagedPackages(), [updated])
 })
 
-test('sidebar loaded HTML is identical to the baseline at desktop/mobile states', () => {
+test('sidebar structure, links and states are preserved with the approved typography tokens', () => {
   const path = 'components/dashboard-sidebar.tsx'
   const baseline = readFileSync('tests/fixtures/sidebar-before-performance.tsx', 'utf8')
+    .replace(/text-\[(?:8|9|10|11)px\]/g, 'text-caption')
+    .replace(/tracking-\[0\.22em\]/g, 'tracking-label')
+    .replace(/text-caption font-bold/g, 'text-caption font-semibold')
   const stubs = {
     'next/link': ({ href, className, children, ...props }: Record<string, unknown>) => createElement('a', { href: String(href), className: String(className), 'aria-current': props['aria-current'] as 'page' }, children as never),
     'next/navigation': { useRouter: () => ({ prefetch() {} }) },

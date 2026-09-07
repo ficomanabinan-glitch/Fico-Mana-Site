@@ -151,13 +151,13 @@ export default function EditorDashboard() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#C4CEFF]">Editor Dashboard</p>
-          <h1 className="mt-2 font-serif text-3xl font-bold">Today’s upload and editing work</h1>
+          <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editor Dashboard</p>
+          <h1 className="mt-2 font-serif text-page-title font-semibold tracking-heading text-balance">Today’s upload and editing work</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/40">
             Check today’s clients, downloads, and uploads.
           </p>
         </div>
-        <span className="inline-flex w-fit items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-[9px] font-bold uppercase text-emerald-300">
+        <span className="inline-flex w-fit items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-caption font-semibold uppercase text-emerald-300">
           <CheckCircle2 className="size-3.5" />{session?.role} access active
         </span>
       </div>
@@ -174,7 +174,7 @@ export default function EditorDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <CalendarDays className="size-4 text-[#C4CEFF]" />
-              <p className="text-[9px] font-bold uppercase tracking-wider text-[#C4CEFF]">Onsite upload per client today</p>
+              <p className="text-caption font-semibold uppercase tracking-wider text-[#C4CEFF]">Onsite upload per client today</p>
             </div>
             <h2 className="mt-2 text-base font-semibold">{dayLabel(today)}</h2>
           </div>
@@ -194,7 +194,7 @@ export default function EditorDashboard() {
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-300" />
               <div>
                 <p className="text-xs font-semibold text-amber-200">Today’s onsite list is temporarily unavailable</p>
-                <p className="mt-1 max-w-2xl text-[10px] leading-relaxed text-amber-100/60">{onsiteError}</p>
+                <p className="mt-1 max-w-2xl text-caption leading-relaxed text-amber-100/60">{onsiteError}</p>
               </div>
             </div>
             <button
@@ -213,9 +213,9 @@ export default function EditorDashboard() {
               <div key={job.bookingId} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center">
                 <div>
                   <p className="text-sm font-semibold">{job.customerName}</p>
-                  <p className="mt-1 text-[10px] text-white/35">{job.bookingTime} · {job.packageName} · {job.bookingId}</p>
+                  <p className="mt-1 text-caption text-white/35">{job.bookingTime} · {job.packageName} · {job.bookingId}</p>
                 </div>
-                <div className="text-[10px] text-white/40 sm:text-right">
+                <div className="text-caption text-white/40 sm:text-right">
                   <p>{job.galleryCount} photo{job.galleryCount === 1 ? '' : 's'} uploaded</p>
                   <p className={job.rawFolderDriveId ? 'mt-1 text-emerald-300' : 'mt-1 text-amber-300'}>
                     {job.rawFolderDriveId ? 'Drive folder ready' : 'Drive folder needs setup'}
@@ -238,7 +238,7 @@ export default function EditorDashboard() {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#C4CEFF]">Editing Queue</p>
+            <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editing Queue</p>
             <h2 className="mt-1 text-lg font-semibold">Download and upload per day batch</h2>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -265,20 +265,20 @@ export default function EditorDashboard() {
                   <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)_auto] lg:items-center">
                     <div>
                       <p className="text-base font-semibold">{dayLabel(batch.shootDate)}</p>
-                      <p className="mt-1 font-mono text-[9px] text-white/30">{batch.id}</p>
-                      <p className="mt-2 text-[10px] text-white/40">
+                      <p className="mt-1 font-mono text-caption text-white/30">{batch.id}</p>
+                      <p className="mt-2 text-caption text-white/40">
                         {batch.totalClients} clients · {batch.counts.readyForEditing} pending download · {batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.uploading} downloaded
                       </p>
                     </div>
                     <div>
-                      <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-white/35">
+                      <div className="flex items-center justify-between text-caption font-semibold uppercase tracking-wider text-white/35">
                         <span>Upload progress</span>
                         <span>{completed} / {batch.totalClients}</span>
                       </div>
                       <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.08]">
                         <div className="h-full rounded-full bg-[#6678FF]" style={{ width: `${percent}%` }} />
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-3 text-[9px]">
+                      <div className="mt-2 flex flex-wrap gap-3 text-caption">
                         <span className="text-violet-300">{batch.counts.uploading} uploading</span>
                         <span className="text-emerald-300">{batch.counts.delivered} delivered</span>
                         <span className={batch.counts.failed ? 'text-red-300' : 'text-white/30'}>{batch.counts.failed} failed</span>
@@ -296,14 +296,14 @@ export default function EditorDashboard() {
                       </button>
                       <Link
                         href={`/editor/upload?batch=${encodeURIComponent(batch.id)}${batch.counts.failed ? '&retry=1' : ''}`}
-                        className={`${batch.counts.failed ? 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15' : adminBtnGhost} inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase`}
+                        className={`${batch.counts.failed ? 'border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15' : adminBtnGhost} inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-caption font-semibold uppercase`}
                       >
                         <FolderUp className="size-3.5" />{batch.counts.failed ? 'Retry Upload' : 'Upload Batch'}
                       </Link>
                     </div>
                   </div>
                   {batch.counts.failed ? (
-                    <div className="flex items-center gap-2 border-t border-red-500/15 bg-red-500/[0.04] px-5 py-3 text-[10px] text-red-200/70">
+                    <div className="flex items-center gap-2 border-t border-red-500/15 bg-red-500/[0.04] px-5 py-3 text-caption text-red-200/70">
                       <AlertTriangle className="size-3.5" />{batch.counts.failed} client upload{batch.counts.failed === 1 ? '' : 's'} failed. Open Upload Batch and enable “Retry failed clients only.”
                     </div>
                   ) : null}
@@ -331,7 +331,7 @@ function Metric({
   return (
     <div className={`${adminPanel} p-4`}>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[9px] font-bold uppercase tracking-wider text-white/30">{label}</p>
+        <p className="text-caption font-semibold uppercase tracking-wider text-white/30">{label}</p>
         <Icon className={`size-4 ${tone}`} />
       </div>
       <p className={`mt-2 text-3xl font-bold ${tone}`}>{value}</p>

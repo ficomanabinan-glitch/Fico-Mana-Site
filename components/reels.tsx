@@ -241,7 +241,7 @@ export default function Reels() {
           >
             Graduation Shoot Reel
           </h2>
-          <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm md:text-base lg:text-lg font-light tracking-[0.25em] sm:tracking-[0.35em] uppercase text-white/80">
+          <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm md:text-base lg:text-lg font-light tracking-label sm:tracking-label uppercase text-white/80">
             Sample
           </p>
         </motion.div>

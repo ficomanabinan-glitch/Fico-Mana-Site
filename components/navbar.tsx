@@ -142,7 +142,7 @@ function NavDropdownMenu({
                   href={link.href}
                   role="menuitem"
                   onClick={() => setOpen(false)}
-                  className="relative mx-1.5 block rounded-sm px-3.5 py-2.5 text-[10px] tracking-[0.16em] uppercase text-white/65 outline-none transition-all duration-200 ease-out before:absolute before:left-0 before:top-1/2 before:h-0 before:w-0.5 before:-translate-y-1/2 before:bg-primary before:opacity-0 before:transition-all before:duration-200 hover:bg-white/[0.07] hover:pl-4 hover:text-white hover:before:h-3.5 hover:before:opacity-100"
+                  className="relative mx-1.5 block rounded-sm px-3.5 py-2.5 text-caption tracking-label uppercase text-white/65 outline-none transition-all duration-200 ease-out before:absolute before:left-0 before:top-1/2 before:h-0 before:w-0.5 before:-translate-y-1/2 before:bg-primary before:opacity-0 before:transition-all before:duration-200 hover:bg-white/[0.07] hover:pl-4 hover:text-white hover:before:h-3.5 hover:before:opacity-100"
                 >
                   {link.label}
                 </a>
@@ -187,7 +187,7 @@ export default function Navbar() {
       'font-semibold uppercase transition-colors duration-300 ease-out',
       mobile
         ? 'text-sm tracking-[0.15em] text-white/85 hover:text-white py-3 border-b border-white/[0.08] w-full text-left'
-        : 'text-[10px] tracking-[0.2em]',
+        : 'text-caption tracking-label',
       !mobile &&
         (isScrolled
           ? 'text-white/75 hover:text-white'
@@ -195,7 +195,7 @@ export default function Navbar() {
     )
 
   const bookButtonClass = cn(
-    'inline-flex shrink-0 items-center justify-center rounded-none text-[9px] sm:text-xs md:text-sm font-semibold tracking-[0.14em] sm:tracking-[0.2em] uppercase h-9 sm:h-10 md:h-12 px-3 sm:px-6 md:px-8 transition-all duration-300',
+    'inline-flex shrink-0 items-center justify-center rounded-none text-caption sm:text-xs md:text-sm font-semibold tracking-[0.14em] sm:tracking-label uppercase h-9 sm:h-10 md:h-12 px-3 sm:px-6 md:px-8 transition-all duration-300',
     'hidden md:inline-flex',
     isScrolled
       ? 'bg-white text-black hover:bg-white/90'
@@ -280,7 +280,7 @@ export default function Navbar() {
               className="w-[min(100vw-2rem,20rem)] sm:max-w-xs border-l border-white/10 bg-gradient-to-b from-[#1c1c1c] via-[#141414] to-black text-white shadow-[-12px_0_40px_rgba(0,0,0,0.55)] gap-0 p-0"
             >
               <SheetHeader className="shrink-0 border-b border-white/[0.08] px-4 pt-4 pb-4">
-                <SheetTitle className="text-left text-[10px] tracking-[0.28em] uppercase text-white/75 font-semibold">
+                <SheetTitle className="text-left text-caption tracking-label uppercase text-white/75 font-semibold">
                   Navigation
                 </SheetTitle>
               </SheetHeader>
@@ -301,7 +301,7 @@ export default function Navbar() {
                       >
                         {isDropdown(item) ? (
                           <div className="flex flex-col border-b border-white/[0.08] pb-2 mb-1">
-                            <p className="text-[10px] font-bold tracking-[0.22em] uppercase text-white pt-3 pb-2">
+                            <p className="text-caption font-semibold tracking-label uppercase text-white pt-3 pb-2">
                               {item.label}
                             </p>
                             {item.links.map((link) => (
@@ -342,7 +342,7 @@ export default function Navbar() {
                   render={
                     <Link
                       href="/#booking"
-                      className="flex w-full items-center justify-center rounded-none bg-white px-4 py-3 text-sm font-bold tracking-[0.16em] uppercase text-black transition-colors hover:bg-white/90"
+                      className="flex w-full items-center justify-center rounded-none bg-white px-4 py-3 text-sm font-bold tracking-label uppercase text-black transition-colors hover:bg-white/90"
                     >
                       Book Session
                     </Link>

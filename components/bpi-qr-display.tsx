@@ -25,7 +25,7 @@ export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Pro
   return (
     <>
       <div className={`border border-white/10 bg-white/[0.03] p-4 sm:p-5 text-center ${className}`}>
-        <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-white/50 mb-3">
+        <p className="text-caption font-semibold tracking-[0.12em] uppercase text-white/50 mb-3">
           BPI Deposit — {depositLabel}
         </p>
         <button
@@ -41,7 +41,7 @@ export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Pro
             className="object-contain"
             sizes="240px"
           />
-          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/65 py-1.5 text-[9px] font-semibold uppercase tracking-wider text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/65 py-1.5 text-caption font-semibold uppercase tracking-wider text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
             <Expand className="w-3 h-3" />
             View full size
           </span>
@@ -49,12 +49,12 @@ export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Pro
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-primary/80 hover:text-primary transition-colors"
+          className="mt-3 text-caption font-semibold uppercase tracking-wider text-primary/80 hover:text-primary transition-colors"
         >
           View full QR image
         </button>
         {hint && (
-          <p className="text-[10px] text-white/40 mt-3 leading-relaxed">{hint}</p>
+          <p className="text-caption text-white/40 mt-3 leading-relaxed">{hint}</p>
         )}
       </div>
 

@@ -98,7 +98,7 @@ export default function Contact() {
                     <Icon className="w-5 h-5 text-white" strokeWidth={1.5} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[9px] font-medium tracking-[0.2em] uppercase text-white/60 mb-1">
+                    <p className="text-caption font-medium tracking-label uppercase text-white/60 mb-1">
                       {method.label}
                     </p>
                     <p className="font-medium text-sm truncate text-white">{method.value}</p>
@@ -111,7 +111,7 @@ export default function Contact() {
 
           <a
             href="#booking"
-            className="inline-flex mt-8 items-center justify-center bg-primary text-primary-foreground px-10 py-3.5 text-xs font-bold tracking-[0.18em] uppercase hover:bg-[#03008F] transition-colors"
+            className="inline-flex mt-8 items-center justify-center bg-primary text-primary-foreground px-10 py-3.5 text-xs font-bold tracking-label uppercase hover:bg-[#03008F] transition-colors"
           >
             Book Now
           </a>
@@ -133,7 +133,7 @@ export default function Contact() {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
           <div className="absolute bottom-6 left-6 right-6">
-            <p className="text-[10px] tracking-[0.25em] uppercase text-white/70 mb-1">Visit Us</p>
+            <p className="text-caption tracking-label uppercase text-white/70 mb-1">Visit Us</p>
             <p className="text-sm text-white font-medium">Cabuyao Retail Plaza, Laguna</p>
           </div>
         </motion.div>

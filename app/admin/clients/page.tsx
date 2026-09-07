@@ -51,7 +51,7 @@ export default function ClientsPage() {
 
       <div className={`${adminPanel} overflow-x-auto`}>
         <table className="w-full min-w-[760px] text-left text-xs">
-          <thead className="border-b border-white/10 text-[9px] uppercase tracking-wider text-white/40">
+          <thead className="border-b border-white/10 text-caption uppercase tracking-wider text-white/40">
             <tr>
               <th className="p-4">Client</th>
               <th className="p-4">Contact</th>

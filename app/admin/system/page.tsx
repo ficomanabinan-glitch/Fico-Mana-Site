@@ -102,7 +102,7 @@ export default function SystemPage() {
 
       <section className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Production storage</p>
+          <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Production storage</p>
           <h2 className="mt-1 text-sm font-semibold">Google Drive folder and portal settings</h2>
           <p className="mt-1 text-xs text-white/40">Connect the account, choose the root folder, and manage live client portals.</p>
         </div>
@@ -117,7 +117,7 @@ export default function SystemPage() {
       <section className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
         <div className="flex items-start gap-3">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Website catalog</p>
+            <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Website catalog</p>
             <h2 className="mt-1 text-sm font-semibold">Packages and client photo-selection rules</h2>
             <p className="mt-1 text-xs text-white/40">Update prices, inclusions, visibility, and the number of photos clients select for each package.</p>
           </div>
@@ -146,9 +146,9 @@ function StatusCard({
   return (
     <div className="border border-white/10 bg-white/[0.02] p-5">
       <Icon className={tone === 'good' ? 'size-5 text-emerald-300' : 'size-5 text-amber-300'} />
-      <p className="mt-4 text-[9px] font-bold uppercase tracking-wider text-white/35">{title}</p>
+      <p className="mt-4 text-caption font-semibold uppercase tracking-wider text-white/35">{title}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/40">{detail}</p>
+      <p className="mt-2 text-caption leading-relaxed text-white/40">{detail}</p>
     </div>
   )
 }

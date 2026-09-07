@@ -37,7 +37,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center mb-10 md:mb-12"
           >
-            <p className="text-[9px] md:text-[10px] font-light tracking-[0.4em] uppercase text-white/40 mb-3">
+            <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
               Graduation Packages
             </p>
             <h2 className="text-xl md:text-2xl font-normal tracking-[0.14em] uppercase text-white">
@@ -56,27 +56,27 @@ export default function Pricing() {
                 className="border border-white/12 bg-black/40 backdrop-blur-sm px-6 py-7 md:px-8 md:py-9 flex flex-col"
               >
                 <div className="mb-6 pb-6 border-b border-white/10 text-center md:text-left">
-                  <h3 className="text-sm md:text-[15px] font-semibold tracking-[0.18em] text-white uppercase">
+                  <h3 className="text-sm md:text-[15px] font-semibold tracking-label text-white uppercase">
                     {pkg.title}
                   </h3>
                   {pkg.description ? (
-                    <p className="mt-2 text-[11px] md:text-xs font-light text-white/50 tracking-[0.08em]">
+                    <p className="mt-2 text-caption md:text-xs font-light text-white/50 tracking-[0.08em]">
                       {pkg.description}
                     </p>
                   ) : (
-                    <p className="mt-2 text-[11px] md:text-xs font-light text-transparent tracking-[0.08em] select-none">
+                    <p className="mt-2 text-caption md:text-xs font-light text-transparent tracking-[0.08em] select-none">
                       -
                     </p>
                   )}
                   <p className="mt-4 text-lg md:text-xl font-light text-white tracking-[0.06em]">
                     {pkg.price}
                   </p>
-                  <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#C4CEFF]">
+                  <p className="mt-2 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
                     Client selects {pkg.selectionLimit} photo{pkg.selectionLimit === 1 ? '' : 's'} for editing
                   </p>
                 </div>
 
-                <p className="text-[9px] font-medium tracking-[0.3em] uppercase text-white/35 mb-5 text-center md:text-left">
+                <p className="text-caption font-medium tracking-label uppercase text-white/35 mb-5 text-center md:text-left">
                   Includes
                 </p>
 
@@ -86,10 +86,10 @@ export default function Pricing() {
                       key={item}
                       className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0"
                     >
-                      <span className="text-[9px] font-light tabular-nums text-white/25 w-4 shrink-0">
+                      <span className="text-caption font-light tabular-nums text-white/25 w-4 shrink-0">
                         {String(i + 1).padStart(2, '0')}
                       </span>
-                      <span className="text-[11px] md:text-xs font-light text-white/70 tracking-[0.02em] leading-relaxed">
+                      <span className="text-caption md:text-xs font-light text-white/70 tracking-[0.02em] leading-relaxed">
                         {item}
                       </span>
                     </li>
@@ -102,7 +102,7 @@ export default function Pricing() {
                     render={<Link href={getBookingUrl(pkg.id)} />}
                     className={cn(
                       buttonVariants({ size: 'lg' }),
-                      'w-full rounded-none bg-[#0500D0] hover:bg-[#03008F] text-white text-[9px] md:text-[10px] font-bold tracking-[0.16em] uppercase h-10',
+                      'w-full rounded-none bg-[#0500D0] hover:bg-[#03008F] text-white text-caption md:text-caption font-semibold tracking-label uppercase h-10',
                     )}
                     style={{ fontFamily: 'var(--font-aileron)' }}
                   >
@@ -120,7 +120,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="mt-12 md:mt-14 text-center"
           >
-            <p className="text-[10px] md:text-[11px] font-light text-white/45 tracking-[0.08em] mb-5">
+            <p className="text-caption md:text-caption font-light text-white/45 tracking-[0.08em] mb-5">
               Looking for solo, duo, family, or barkada sessions?
             </p>
             <Button
@@ -128,7 +128,7 @@ export default function Pricing() {
               render={<Link href="/packages" />}
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'rounded-none border border-white/30 bg-transparent hover:bg-white/10 text-white text-[10px] md:text-[11px] font-bold tracking-[0.18em] uppercase h-11 md:h-12 px-8',
+                'rounded-none border border-white/30 bg-transparent hover:bg-white/10 text-white text-caption md:text-caption font-semibold tracking-label uppercase h-11 md:h-12 px-8',
               )}
               style={{ fontFamily: 'var(--font-aileron)' }}
             >
@@ -160,7 +160,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="text-center mb-10 md:mb-12"
           >
-            <p className="text-[9px] md:text-[10px] font-light tracking-[0.4em] uppercase text-white/40 mb-3">
+            <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
               Other Services
             </p>
             <h2 className="text-xl md:text-2xl font-normal tracking-[0.14em] uppercase text-white">
@@ -179,27 +179,27 @@ export default function Pricing() {
                 className="border border-white/12 bg-black/40 backdrop-blur-sm px-6 py-7 md:px-8 md:py-9 flex flex-col"
               >
                 <div className="mb-6 pb-6 border-b border-white/10 text-center md:text-left">
-                  <h3 className="text-sm md:text-[15px] font-semibold tracking-[0.18em] text-white uppercase">
+                  <h3 className="text-sm md:text-[15px] font-semibold tracking-label text-white uppercase">
                     {pkg.title}
                   </h3>
                   {pkg.description ? (
-                    <p className="mt-2 text-[11px] md:text-xs font-light text-white/50 tracking-[0.08em]">
+                    <p className="mt-2 text-caption md:text-xs font-light text-white/50 tracking-[0.08em]">
                       {pkg.description}
                     </p>
                   ) : (
-                    <p className="mt-2 text-[11px] md:text-xs font-light text-transparent tracking-[0.08em] select-none">
+                    <p className="mt-2 text-caption md:text-xs font-light text-transparent tracking-[0.08em] select-none">
                       -
                     </p>
                   )}
                   <p className="mt-4 text-lg md:text-xl font-light text-white tracking-[0.06em]">
                     {pkg.price}
                   </p>
-                  <p className="mt-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#C4CEFF]">
+                  <p className="mt-2 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
                     Client selects {pkg.selectionLimit} photo{pkg.selectionLimit === 1 ? '' : 's'} for editing
                   </p>
                 </div>
 
-                <p className="text-[9px] font-medium tracking-[0.3em] uppercase text-white/35 mb-5 text-center md:text-left">
+                <p className="text-caption font-medium tracking-label uppercase text-white/35 mb-5 text-center md:text-left">
                   Includes
                 </p>
 
@@ -209,10 +209,10 @@ export default function Pricing() {
                       key={item}
                       className="flex items-center gap-4 py-2.5 first:pt-0 last:pb-0"
                     >
-                      <span className="text-[9px] font-light tabular-nums text-white/25 w-4 shrink-0">
+                      <span className="text-caption font-light tabular-nums text-white/25 w-4 shrink-0">
                         {String(i + 1).padStart(2, '0')}
                       </span>
-                      <span className="text-[11px] md:text-xs font-light text-white/70 tracking-[0.02em] leading-relaxed">
+                      <span className="text-caption md:text-xs font-light text-white/70 tracking-[0.02em] leading-relaxed">
                         {item}
                       </span>
                     </li>
@@ -225,7 +225,7 @@ export default function Pricing() {
                     render={<Link href={getBookingUrl(pkg.id)} />}
                     className={cn(
                       buttonVariants({ size: 'lg' }),
-                      'w-full rounded-none bg-[#0500D0] hover:bg-[#03008F] text-white text-[9px] md:text-[10px] font-bold tracking-[0.16em] uppercase h-10',
+                      'w-full rounded-none bg-[#0500D0] hover:bg-[#03008F] text-white text-caption md:text-caption font-semibold tracking-label uppercase h-10',
                     )}
                     style={{ fontFamily: 'var(--font-aileron)' }}
                   >

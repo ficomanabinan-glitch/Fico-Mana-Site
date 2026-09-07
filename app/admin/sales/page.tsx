@@ -224,9 +224,9 @@ export default function SalesManagementPage() {
                 <Icon className="size-4" />
               </div>
               <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">{metric.label}</p>
+                <p className="text-caption font-semibold uppercase tracking-label text-white/35">{metric.label}</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-white">{metric.value}</p>
-                <p className="mt-1 text-[11px] text-white/40">{metric.detail}</p>
+                <p className="mt-1 text-caption text-white/40">{metric.detail}</p>
               </div>
             </div>
           )
@@ -237,7 +237,7 @@ export default function SalesManagementPage() {
         <section className={`xl:col-span-7 ${adminPanel} p-5`}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">Revenue goal</p>
+              <p className="text-caption font-semibold uppercase tracking-label text-white/35">Revenue goal</p>
               <h2 className="mt-1 text-lg font-semibold">{peso(s.bookedSales)} of {peso(s.revenueGoal)}</h2>
             </div>
             <Target className="size-5 text-[#C4CEFF]" />
@@ -263,7 +263,7 @@ export default function SalesManagementPage() {
         <section className={`xl:col-span-5 ${adminPanel} p-5`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">Business expense impact</p>
+              <p className="text-caption font-semibold uppercase tracking-label text-white/35">Business expense impact</p>
               <h2 className="mt-1 text-lg font-semibold">{peso(s.totalExpenses)} total</h2>
             </div>
             <ReceiptText className="size-5 text-[#C4CEFF]" />
@@ -281,7 +281,7 @@ export default function SalesManagementPage() {
 
           <Link
             href="/admin/expenses"
-            className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase text-[#C4CEFF] hover:border-[#C4CEFF]/25"
+            className="mt-5 flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-caption font-semibold uppercase text-[#C4CEFF] hover:border-[#C4CEFF]/25"
           >
             <ReceiptText className="size-3.5" />
             Manage Business Expenses
@@ -294,7 +294,7 @@ export default function SalesManagementPage() {
       <section className={`${adminPanel} p-5`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">Financial targets</p>
+            <p className="text-caption font-semibold uppercase tracking-label text-white/35">Financial targets</p>
             <h2 className="mt-1 text-sm font-semibold">Monthly business planning</h2>
           </div>
           <Calculator className="size-5 text-[#C4CEFF]" />
@@ -351,7 +351,7 @@ function MoneyField({ label, value, onChange }: { label: string; value: string; 
 function Insight({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-white/[0.07] bg-black/10 p-3">
-      <p className="text-[9px] font-bold uppercase tracking-wider text-white/30">{label}</p>
+      <p className="text-caption font-semibold uppercase tracking-wider text-white/30">{label}</p>
       <p className="mt-1 text-sm font-semibold text-white/80">{value}</p>
     </div>
   )
@@ -456,13 +456,13 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
     <section className={`${adminPanel} overflow-hidden`}>
       <div className="flex flex-col gap-4 border-b border-white/[0.08] p-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">Financial trend</p>
+          <p className="text-caption font-semibold uppercase tracking-label text-white/35">Financial trend</p>
           <h2 className="mt-1 text-base font-semibold">Revenue, expenses &amp; net profit</h2>
-          <p className="mt-1 text-[10px] text-white/35">
+          <p className="mt-1 text-caption text-white/35">
             Seven-day record{points.length ? ` · ${points[0].label} — ${points[points.length - 1].label}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-2 text-[10px] text-white/45">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-caption text-white/45">
           {series.map((item) => (
             <span key={item.key} className="flex items-center gap-2">
               <span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
@@ -475,10 +475,10 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
       {activePoint ? (
         <div className="grid gap-px border-b border-white/[0.08] bg-white/[0.06] sm:grid-cols-[1fr_repeat(3,minmax(0,1fr))]">
           <div className="bg-[#222222] p-3">
-            <p className="text-[8px] font-bold uppercase tracking-wider text-white/30">Selected day</p>
+            <p className="text-caption font-semibold uppercase tracking-wider text-white/30">Selected day</p>
             <p className="mt-1 text-sm font-semibold text-white/80">{activePoint.label}</p>
             {pinnedIndex === null ? (
-              <p className="mt-1 text-[8px] uppercase tracking-wider text-white/25">Latest by default · hover to preview</p>
+              <p className="mt-1 text-caption uppercase tracking-wider text-white/25">Latest by default · hover to preview</p>
             ) : (
               <button
                 type="button"
@@ -486,7 +486,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
                   setPinnedIndex(null)
                   setActiveIndex(latestIndex)
                 }}
-                className="mt-1 text-[8px] font-bold uppercase tracking-wider text-[#C4CEFF] hover:text-white"
+                className="mt-1 text-caption font-semibold uppercase tracking-wider text-[#C4CEFF] hover:text-white"
               >
                 Show latest
               </button>
@@ -494,7 +494,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
           </div>
           {series.map((item) => (
             <div key={item.key} className="bg-[#222222] p-3">
-              <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: item.color }}>
+              <p className="text-caption font-semibold uppercase tracking-wider" style={{ color: item.color }}>
                 {item.label}
               </p>
               <p className="mt-1 text-sm font-semibold tabular-nums text-white/80">{peso(activePoint[item.key])}</p>

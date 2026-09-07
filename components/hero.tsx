@@ -65,7 +65,7 @@ export default function Hero() {
         >
           <motion.p
             variants={itemVariants}
-            className="mb-4 max-w-[15rem] text-[12px] font-bold uppercase leading-[1.5] tracking-[0.2em] text-white"
+            className="mb-4 max-w-[15rem] text-[12px] font-bold uppercase leading-[1.5] tracking-label text-white"
             style={{ fontFamily: 'var(--font-sans)' }}
           >
             The Portrait of Success
@@ -77,7 +77,7 @@ export default function Hero() {
               render={<Link href="#booking" />}
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'h-11 w-full justify-center rounded-none bg-white px-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-black shadow-none transition-all duration-300 hover:bg-white/90',
+                'h-11 w-full justify-center rounded-none bg-white px-4 text-caption font-semibold uppercase tracking-label text-black shadow-none transition-all duration-300 hover:bg-white/90',
               )}
               style={{ fontFamily: 'var(--font-sans)' }}
             >
@@ -85,7 +85,7 @@ export default function Hero() {
             </Button>
             <Link
               href="/gallery"
-              className="w-full py-1 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-white transition-colors hover:text-white/75"
+              className="w-full py-1 text-center text-caption font-semibold uppercase tracking-label text-white transition-colors hover:text-white/75"
               style={{ fontFamily: 'var(--font-sans)' }}
             >
               View Gallery
@@ -103,7 +103,7 @@ export default function Hero() {
           <motion.div variants={itemVariants} className="mb-5 flex items-center gap-3 md:mb-6">
             <span className="h-px w-10 bg-gradient-to-r from-white/70 to-white/0 sm:w-14" />
             <span
-              className="text-[9px] font-semibold uppercase tracking-[0.35em] text-white/50 sm:text-[10px]"
+              className="text-caption font-semibold uppercase tracking-label text-white/50 sm:text-caption"
               style={{ fontFamily: 'var(--font-neue)' }}
             >
               Self Portrait Studio
@@ -112,7 +112,7 @@ export default function Hero() {
 
           <motion.p
             variants={itemVariants}
-            className="mb-5 text-lg font-semibold uppercase tracking-[0.22em] text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)] md:text-xl lg:text-2xl"
+            className="mb-5 text-lg font-semibold uppercase tracking-label text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)] md:text-xl lg:text-2xl"
             style={{ fontFamily: 'var(--font-neue)' }}
           >
             <span className="text-white">The Portrait </span>
@@ -133,7 +133,7 @@ export default function Hero() {
               render={<Link href="#booking" />}
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'h-12 w-auto rounded-none bg-white px-8 text-[11px] font-bold uppercase tracking-[0.18em] text-black transition-all duration-300 hover:bg-white/90',
+                'h-12 w-auto rounded-none bg-white px-8 text-caption font-semibold uppercase tracking-label text-black transition-all duration-300 hover:bg-white/90',
               )}
               style={{ fontFamily: 'var(--font-sans)' }}
             >
@@ -145,7 +145,7 @@ export default function Hero() {
               variant="outline"
               className={cn(
                 buttonVariants({ variant: 'outline', size: 'lg' }),
-                'h-12 w-auto rounded-none border-white/40 bg-black/20 px-8 text-[11px] font-bold uppercase tracking-[0.18em] text-white backdrop-blur-sm transition-all duration-300 hover:border-white/70 hover:bg-white/10',
+                'h-12 w-auto rounded-none border-white/40 bg-black/20 px-8 text-caption font-semibold uppercase tracking-label text-white backdrop-blur-sm transition-all duration-300 hover:border-white/70 hover:bg-white/10',
               )}
               style={{ fontFamily: 'var(--font-sans)' }}
             >
@@ -162,7 +162,7 @@ export default function Hero() {
           className="absolute bottom-6 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-white/40 transition-colors duration-300 hover:text-white/70 md:flex"
           aria-label="Scroll to gallery"
         >
-          <span className="text-[9px] uppercase tracking-[0.3em]" style={{ fontFamily: 'var(--font-neue)' }}>
+          <span className="text-caption uppercase tracking-label" style={{ fontFamily: 'var(--font-neue)' }}>
             Explore
           </span>
           <motion.span

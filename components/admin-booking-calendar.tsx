@@ -99,7 +99,7 @@ export default function AdminBookingCalendar({
     <div className={`${adminCard} p-5 ${compact ? 'max-w-[252px]' : 'w-full'} ${className}`}>
       <div className="flex items-center justify-between gap-2 mb-5">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.18em] text-white/35 uppercase">Schedule</p>
+          <p className="text-caption font-semibold tracking-label text-white/35 uppercase">Schedule</p>
           <p className={`font-semibold text-white mt-0.5 ${compact ? 'text-xs' : 'text-base'}`}>{monthLabel}</p>
         </div>
         <div className="flex items-center rounded-lg border border-white/10 overflow-hidden bg-black/20">
@@ -119,7 +119,7 @@ export default function AdminBookingCalendar({
               setViewMonth(t.getMonth())
               onSelectDate(todayKey())
             }}
-            className="px-2.5 py-2 text-[9px] font-bold uppercase tracking-wider text-white/50 hover:text-white border-x border-white/10"
+            className="px-2.5 py-2 text-caption font-semibold uppercase tracking-wider text-white/50 hover:text-white border-x border-white/10"
           >
             Today
           </button>
@@ -138,7 +138,7 @@ export default function AdminBookingCalendar({
         {labels.map((d, i) => (
           <div
             key={`${d}-${i}`}
-            className={`font-semibold text-white/30 text-center ${compact ? 'text-[8px]' : 'text-[10px]'}`}
+            className={`font-semibold text-white/30 text-center ${compact ? 'text-caption' : 'text-caption'}`}
           >
             {d}
           </div>
@@ -186,7 +186,7 @@ export default function AdminBookingCalendar({
                         : 'text-white/35 hover:bg-white/[0.04] hover:text-white/60'
               }`}
             >
-              <span className={`font-medium leading-none tabular-nums ${compact ? 'text-[10px]' : 'text-sm'}`}>
+              <span className={`font-medium leading-none tabular-nums ${compact ? 'text-caption' : 'text-sm'}`}>
                 {cell.day}
               </span>
               {blockedCount > 0 && (
@@ -209,7 +209,7 @@ export default function AdminBookingCalendar({
         })}
       </div>
 
-      <div className="mt-5 pt-4 border-t border-white/[0.06] space-y-2 text-[10px] text-white/40">
+      <div className="mt-5 pt-4 border-t border-white/[0.06] space-y-2 text-caption text-white/40">
         <div className="flex items-center justify-between gap-2">
           <span>
             <span className="text-white/75 font-semibold tabular-nums">{monthTotal}</span> sessions this month
@@ -293,21 +293,21 @@ export function AdminDaySessions({
     <div className={`${adminPanel} flex flex-col`}>
       <div className="p-4 border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.16em] text-white/40 uppercase">Bookings</p>
+          <p className="text-caption font-semibold tracking-label text-white/40 uppercase">Bookings</p>
           <p className="text-sm font-semibold text-white mt-0.5">{label}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => downloadDayBookingsExcel(bookings, date)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white/80 hover:text-white hover:border-white/25 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-caption font-semibold uppercase tracking-wider text-white/80 hover:text-white hover:border-white/25 transition-colors"
           >
             <Download className="w-3 h-3" />
             Export Excel
           </button>
           <Link
             href={`/admin/bookings?date=${date}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-caption font-semibold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
           >
             Open in list <ArrowRight className="w-3 h-3" />
           </Link>
@@ -335,13 +335,13 @@ export function AdminDaySessions({
                   <p className="text-sm font-semibold text-white truncate group-hover:text-primary/90 transition-colors">
                     {b.customerName}
                   </p>
-                  <p className="text-[11px] text-white/40 mt-1">
+                  <p className="text-caption text-white/40 mt-1">
                     {b.bookingTime} · {b.packageName}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  <span className="font-mono text-[10px] text-primary/90">{b.id}</span>
-                  <span className={`px-2 py-0.5 text-[8px] font-bold uppercase ${bookingStatusBadge(b.bookingStatus)}`}>
+                  <span className="font-mono text-caption text-primary/90">{b.id}</span>
+                  <span className={`px-2 py-0.5 text-caption font-semibold uppercase ${bookingStatusBadge(b.bookingStatus)}`}>
                     {b.bookingStatus}
                   </span>
                 </div>
@@ -352,7 +352,7 @@ export function AdminDaySessions({
       </div>
 
       {dayBookings.length > 0 && (
-        <div className="p-3.5 border-t border-white/[0.08] text-[11px] text-white/40 text-center bg-white/[0.02]">
+        <div className="p-3.5 border-t border-white/[0.08] text-caption text-white/40 text-center bg-white/[0.02]">
           {dayBookings.length} session{dayBookings.length === 1 ? '' : 's'} scheduled
         </div>
       )}

@@ -192,7 +192,7 @@ export default function BusinessExpensesPage() {
       <section className={`${adminPanel} p-5`}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">
+            <p className="text-caption font-semibold uppercase tracking-wider text-white/35">
               {draft.id ? 'Edit business expense' : 'Add business expense'}
             </p>
             <h2 className="mt-1 text-sm font-semibold text-white">
@@ -336,7 +336,7 @@ export default function BusinessExpensesPage() {
 
       <section className={`${adminPanel} overflow-hidden`}>
         <div className="border-b border-white/10 p-5">
-          <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Expense ledger</p>
+          <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Expense ledger</p>
           <h2 className="mt-1 text-sm font-semibold">All business expenses</h2>
         </div>
 
@@ -349,27 +349,27 @@ export default function BusinessExpensesPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-white">{item.name}</p>
-                  <span className="rounded bg-white/10 px-2 py-0.5 text-[9px] font-bold uppercase text-white/55">
+                  <span className="rounded bg-white/10 px-2 py-0.5 text-caption font-semibold uppercase text-white/55">
                     {item.expenseType}
                   </span>
                   {item.recurrence === 'monthly' ? (
-                    <span className="rounded bg-[#C4CEFF]/10 px-2 py-0.5 text-[9px] font-bold uppercase text-[#C4CEFF]">
+                    <span className="rounded bg-[#C4CEFF]/10 px-2 py-0.5 text-caption font-semibold uppercase text-[#C4CEFF]">
                       Monthly
                     </span>
                   ) : null}
-                  {!item.isActive ? <span className="text-[9px] font-bold uppercase text-red-300">Inactive</span> : null}
+                  {!item.isActive ? <span className="text-caption font-semibold uppercase text-red-300">Inactive</span> : null}
                 </div>
-                <p className="mt-1 text-[11px] text-white/35">
+                <p className="mt-1 text-caption text-white/35">
                   {item.category}
                   {item.bookingId ? ` · ${item.bookingId}` : ''}
                 </p>
                 {item.recurrence === 'monthly' ? (
-                  <p className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-white/35">
+                  <p className="mt-2 inline-flex items-center gap-1.5 text-caption text-white/35">
                     <CalendarClock className="size-3" />
                     Next billing: {nextMonthlyDate(item.startDate || item.expenseDate)}
                   </p>
                 ) : null}
-                {item.notes ? <p className="mt-2 max-w-2xl text-[10px] leading-relaxed text-white/30">{item.notes}</p> : null}
+                {item.notes ? <p className="mt-2 max-w-2xl text-caption leading-relaxed text-white/30">{item.notes}</p> : null}
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
@@ -390,7 +390,7 @@ export default function BusinessExpensesPage() {
         </div>
       </section>
 
-      <div className="border border-amber-400/15 bg-amber-400/[0.04] p-4 text-[10px] leading-relaxed text-amber-100/60">
+      <div className="border border-amber-400/15 bg-amber-400/[0.04] p-4 text-caption leading-relaxed text-amber-100/60">
         Add storage subscriptions and other running costs here. These expenses are included in your sales and profit reports.
       </div>
     </div>
@@ -410,7 +410,7 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-white/10 bg-white/[0.02] p-5">
       <ReceiptText className="size-4 text-[#C4CEFF]" />
-      <p className="mt-3 text-[9px] font-bold uppercase tracking-wider text-white/35">{label}</p>
+      <p className="mt-3 text-caption font-semibold uppercase tracking-wider text-white/35">{label}</p>
       <p className="mt-1 text-xl font-bold text-white">{value}</p>
     </div>
   )

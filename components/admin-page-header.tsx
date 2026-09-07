@@ -23,7 +23,7 @@ export default function AdminPageHeader({ title, subtitle, onRefresh, refreshing
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 pb-1">
       <div className="space-y-1">
-        <p className="text-[10px] font-bold tracking-[0.2em] text-[#C4CEFF] uppercase">FICO Mana</p>
+        <p className="text-caption font-semibold tracking-label text-[#C4CEFF] uppercase">FICO Mana</p>
         <h1 className={adminTitle}>{title}</h1>
         {subtitle && <p className={adminSubtitle}>{subtitle}</p>}
       </div>

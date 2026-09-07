@@ -55,7 +55,7 @@ export default function ReportsPage() {
           return (
             <div key={card.label} className={`${adminCard} p-5`}>
               <Icon className="size-5 text-[#C4CEFF]" />
-              <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-white/40">
+              <p className="mt-4 text-caption font-semibold uppercase tracking-label text-white/40">
                 {card.label}
               </p>
               <p className="mt-1 text-2xl font-bold text-white">{card.value}</p>

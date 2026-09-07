@@ -55,7 +55,7 @@ export default function Footer() {
                 height={130}
                 className="h-14 w-auto mb-4"
               />
-              <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-white/50 mb-3">
+              <p className="text-caption font-semibold tracking-label uppercase text-white/50 mb-3">
                 Cabuyao Retail Plaza Tenants Association
               </p>
               <p className="text-xs text-white/70 leading-relaxed max-w-xs">
@@ -65,7 +65,7 @@ export default function Footer() {
             </motion.div>
 
             <motion.div variants={itemVariants} className="md:col-span-2">
-              <h4 className="text-[10px] font-semibold tracking-[0.25em] uppercase mb-5 text-white/40">
+              <h4 className="text-caption font-semibold tracking-label uppercase mb-5 text-white/40">
                 Navigate
               </h4>
               <ul className="space-y-3">
@@ -84,7 +84,7 @@ export default function Footer() {
 
             <motion.div variants={itemVariants} className="md:col-span-3 space-y-5">
               <div>
-                <h4 className="text-[10px] font-semibold tracking-[0.25em] uppercase mb-4 text-white/40">
+                <h4 className="text-caption font-semibold tracking-label uppercase mb-4 text-white/40">
                   Find Us
                 </h4>
                 <div className="space-y-3 text-xs text-white/80">
@@ -105,7 +105,7 @@ export default function Footer() {
               </div>
 
               <div>
-                <h4 className="text-[10px] font-semibold tracking-[0.25em] uppercase mb-3 text-white/40">
+                <h4 className="text-caption font-semibold tracking-label uppercase mb-3 text-white/40">
                   Connect
                 </h4>
                 <div className="flex gap-2.5">
@@ -149,7 +149,7 @@ export default function Footer() {
             </motion.div>
 
             <motion.div variants={itemVariants} className="md:col-span-3 space-y-4">
-              <h4 className="text-[10px] font-semibold tracking-[0.25em] uppercase text-white/40">
+              <h4 className="text-caption font-semibold tracking-label uppercase text-white/40">
                 Directions
               </h4>
               <div className="w-full h-[120px] border border-white/10 overflow-hidden">
@@ -165,7 +165,7 @@ export default function Footer() {
                 href="https://maps.google.com/?q=Cabuyao+Retail+Plaza+Laguna"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wider uppercase text-white/80 hover:text-white transition-colors"
+                className="inline-flex items-center gap-1.5 text-caption font-medium tracking-wider uppercase text-white/80 hover:text-white transition-colors"
               >
                 Open in Google Maps <ExternalLink className="w-3 h-3" />
               </a>

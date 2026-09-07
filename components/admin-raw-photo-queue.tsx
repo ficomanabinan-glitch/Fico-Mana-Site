@@ -213,7 +213,7 @@ export default function AdminRawPhotoQueue({
         >
           <Link
             href="/admin/bookings"
-            className="inline-flex items-center gap-1.5 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors"
+            className="inline-flex items-center gap-1.5 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-caption font-semibold uppercase tracking-wider transition-colors"
           >
             <List className="w-3.5 h-3.5" /> All Bookings
           </Link>
@@ -229,7 +229,7 @@ export default function AdminRawPhotoQueue({
             type="button"
             onClick={() => fetchQueue()}
             disabled={refreshing}
-            className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline disabled:opacity-50"
+            className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline disabled:opacity-50"
           >
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
@@ -262,7 +262,7 @@ export default function AdminRawPhotoQueue({
               <span className="flex items-center gap-2">
                 {tab}
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  className={`text-caption px-1.5 py-0.5 rounded-full font-bold ${
                     isActive
                       ? 'bg-primary text-white'
                       : tab === 'Pending Review' && count > 0
@@ -289,7 +289,7 @@ export default function AdminRawPhotoQueue({
             className={`${adminInput} pl-11`}
           />
         </div>
-        <p className="text-[11px] text-white/45 mt-3">
+        <p className="text-caption text-white/45 mt-3">
           Showing <span className="font-semibold text-white/70">{filteredBookings.length}</span> of{' '}
           <span className="font-semibold text-white/70">{countAll}</span> raw photo submissions
         </p>
@@ -324,12 +324,12 @@ export default function AdminRawPhotoQueue({
                       <h3 className="font-semibold text-white truncate">{booking.customerName}</h3>
                       <Link
                         href={`/admin/bookings?search=${encodeURIComponent(booking.id)}`}
-                        className="text-[10px] text-primary font-mono mt-0.5 hover:underline"
+                        className="text-caption text-primary font-mono mt-0.5 hover:underline"
                       >
                         {booking.id}
                       </Link>
                     </div>
-                    <span className="text-[9px] bg-primary/10 text-primary border border-primary/20 font-bold px-2 py-0.5 rounded uppercase max-w-[110px] truncate shrink-0">
+                    <span className="text-caption bg-primary/10 text-primary border border-primary/20 font-bold px-2 py-0.5 rounded uppercase max-w-[110px] truncate shrink-0">
                       {booking.packageName}
                     </span>
                   </div>
@@ -344,7 +344,7 @@ export default function AdminRawPhotoQueue({
                       <span className="font-semibold text-white/80 text-right">{booking.bookingTime}</span>
                     </div>
                     {booking.rawPhotoSubmittedAt && (
-                      <div className="flex justify-between items-center text-[11px] pt-1 text-white/50 gap-2">
+                      <div className="flex justify-between items-center text-caption pt-1 text-white/50 gap-2">
                         <span className="flex items-center gap-1 shrink-0">
                           <Clock className="w-3 h-3" /> Submitted:
                         </span>
@@ -361,14 +361,14 @@ export default function AdminRawPhotoQueue({
                   </div>
 
                   <span
-                    className={`inline-flex items-center gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wider border rounded ${rawPhotoStatusBadgeClass(status)}`}
+                    className={`inline-flex items-center gap-2 px-2 py-1 text-caption font-semibold uppercase tracking-wider border rounded ${rawPhotoStatusBadgeClass(status)}`}
                   >
                     <span className="w-2 h-2 rounded-full bg-current shrink-0" />
                     {status}
                   </span>
 
                   {status === 'Rejected' && booking.rawPhotoNotes && (
-                    <div className="text-[11px] p-2 bg-red-950/20 border border-red-500/10 text-red-200 italic">
+                    <div className="text-caption p-2 bg-red-950/20 border border-red-500/10 text-red-200 italic">
                       &ldquo;{booking.rawPhotoNotes}&rdquo;
                     </div>
                   )}
@@ -390,7 +390,7 @@ export default function AdminRawPhotoQueue({
                         type="button"
                         onClick={() => handleApprove(booking)}
                         disabled={actionLoading}
-                        className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
+                        className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
                       >
                         <Check className="w-3.5 h-3.5" /> Approve
                       </button>
@@ -402,7 +402,7 @@ export default function AdminRawPhotoQueue({
                           setShowRejectModal(true)
                         }}
                         disabled={actionLoading}
-                        className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
+                        className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
                       >
                         <X className="w-3.5 h-3.5" /> Reject
                       </button>
@@ -416,7 +416,7 @@ export default function AdminRawPhotoQueue({
                         setSelectedBooking(booking)
                         setShowDetailModal(true)
                       }}
-                      className="w-full text-center text-white/50 hover:text-white text-[10px] uppercase tracking-wider py-1 font-semibold flex items-center justify-center gap-1 hover:underline"
+                      className="w-full text-center text-white/50 hover:text-white text-caption uppercase tracking-wider py-1 font-semibold flex items-center justify-center gap-1 hover:underline"
                     >
                       View Full Details <ChevronRight className="w-3 h-3" />
                     </button>
@@ -434,7 +434,7 @@ export default function AdminRawPhotoQueue({
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white text-lg">Raw Photo Details</h3>
-                <p className="text-[10px] text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
+                <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
                 type="button"
@@ -520,7 +520,7 @@ export default function AdminRawPhotoQueue({
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white">Reject Raw Photo</h3>
-                <p className="text-[10px] text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
+                <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
                 type="button"
@@ -537,7 +537,7 @@ export default function AdminRawPhotoQueue({
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-semibold tracking-widest text-white/45 uppercase">
+              <label className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 Rejection Reason
               </label>
               <select
@@ -554,7 +554,7 @@ export default function AdminRawPhotoQueue({
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-semibold tracking-widest text-white/45 uppercase">
+              <label className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 {rejectionReason === 'other' ? 'Custom Reason *' : 'Additional Notes (optional)'}
               </label>
               <textarea

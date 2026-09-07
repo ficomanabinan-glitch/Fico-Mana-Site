@@ -47,7 +47,7 @@ for (const theme of ['light', 'dark']) test(`${theme} semantic color pairs meet 
   for (const [text,background] of [['foreground','background'],['card-foreground','card'],['muted-foreground','muted'],['primary-foreground','primary'],['secondary-foreground','secondary'],['accent-foreground','accent'],['destructive-foreground','destructive'],['success','success-foreground'],['warning','warning-foreground'],['info','info-foreground']]) assert.ok(contrast(colors[text],colors[background]) >= 4.5,`${text}/${background}`)
   for (const color of ['border','input','ring','revenue','expenses','profit']) for (const background of ['card','background']) assert.ok(contrast(colors[color],colors[background]) >= 3,`${color}/${background}`)
   for (const [text,background] of [['primary-foreground','primary-hover'],['destructive','error-surface'],['muted-foreground','table-heading'],['foreground','row-hover'],['popover-foreground','popover']]) assert.ok(contrast(colors[text],colors[background]) >= 4.5,`${text}/${background}`)
-  assert.match(css,/--leading-golden: 1.618/)
+  assert.match(css,/--leading-golden: 1\.6;/)
   for (const size of [12,14,16,20,26,42]) assert.match(css,new RegExp(`--text-[a-z]+: ${size}px`))
   assert.match(css,/:focus-visible/)
   assert.match(css,/prefers-reduced-motion/)

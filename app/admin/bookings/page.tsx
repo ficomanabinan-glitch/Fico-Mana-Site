@@ -747,7 +747,7 @@ function BookingsManagement() {
         <button
           type="button"
           onClick={() => setShowWalkIn((v) => !v)}
-          className="bg-primary text-white px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider hover:bg-[#03008F] transition-colors"
+          className="bg-primary text-white px-4 py-2.5 text-caption font-semibold uppercase tracking-wider hover:bg-[#03008F] transition-colors"
         >
           {showWalkIn ? 'Close Walk-in' : '+ Walk-in Booking'}
         </button>
@@ -774,7 +774,7 @@ function BookingsManagement() {
                         setWalkInCategory(category)
                         setWalkInSlotId('')
                       }}
-                      className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+                      className={`px-3 py-2 text-caption font-semibold uppercase tracking-wider border transition-colors ${
                         walkInCategory === category
                           ? 'border-primary bg-primary text-white'
                           : 'border-white/15 text-white/60 hover:border-white/30 hover:text-white'
@@ -853,7 +853,7 @@ function BookingsManagement() {
                       e.preventDefault()
                       setWalkInReceiptFile(null)
                     }}
-                    className="ml-auto text-[10px] font-bold uppercase tracking-wider text-white/45 hover:text-white"
+                    className="ml-auto text-caption font-semibold uppercase tracking-wider text-white/45 hover:text-white"
                   >
                     Clear
                   </button>
@@ -896,7 +896,7 @@ function BookingsManagement() {
         <div className="grid sm:grid-cols-3 gap-4 border-t border-white/10 pt-4 flex-wrap">
           {/* Status */}
           <div className="space-y-1.5">
-            <span className="text-[9px] font-bold tracking-widest text-white/40 uppercase">Booking Status</span>
+            <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Booking Status</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -915,7 +915,7 @@ function BookingsManagement() {
 
           {/* Payment */}
           <div className="space-y-1.5">
-            <span className="text-[9px] font-bold tracking-widest text-white/40 uppercase">Payment Status</span>
+            <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Payment Status</span>
             <select
               value={paymentFilter}
               onChange={(e) => setPaymentFilter(e.target.value)}
@@ -932,7 +932,7 @@ function BookingsManagement() {
 
           {/* Package */}
           <div className="space-y-1.5">
-            <span className="text-[9px] font-bold tracking-widest text-white/40 uppercase">Package Type</span>
+            <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Package Type</span>
             <select
               value={packageFilter}
               onChange={(e) => setPackageFilter(e.target.value)}
@@ -947,7 +947,7 @@ function BookingsManagement() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
-          <p className="text-[11px] text-white/45">
+          <p className="text-caption text-white/45">
             Showing <span className="font-semibold text-white/70">{filteredBookings.length}</span> of{' '}
             <span className="font-semibold text-white/70">{bookings.length}</span> bookings
           </p>
@@ -955,7 +955,7 @@ function BookingsManagement() {
             <button
               type="button"
               onClick={clearFilters}
-              className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline"
+              className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline"
             >
               Clear all filters
             </button>
@@ -967,7 +967,7 @@ function BookingsManagement() {
       <div className="border border-white/10 bg-white/[0.02] overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[1020px]">
           <thead>
-            <tr className="bg-white/[0.03] border-b border-white/10 text-[10px] font-bold tracking-widest text-white/40 uppercase">
+            <tr className="bg-white/[0.03] border-b border-white/10 text-caption font-semibold tracking-label text-white/40 uppercase">
               <th className="p-4 pl-6">Reference</th>
               <th className="p-4">Customer</th>
               <th className="p-4">Package</th>
@@ -992,22 +992,22 @@ function BookingsManagement() {
                   <td className="p-4 pl-6 font-mono font-bold text-primary">{b.id}</td>
                   <td className="p-4">
                     <div className="font-semibold text-white">{b.customerName}</div>
-                    <div className="text-[10px] text-white/45 mt-0.5">{b.customerEmail}</div>
+                    <div className="text-caption text-white/45 mt-0.5">{b.customerEmail}</div>
                   </td>
                   <td className="p-4 font-semibold text-white/90">{b.packageName}</td>
                   <td className="p-4">
                     <div>{b.bookingDate}</div>
-                    <div className="text-[10px] text-white/45 font-mono mt-0.5">{b.bookingTime.split(' - ')[0]}</div>
+                    <div className="text-caption text-white/45 font-mono mt-0.5">{b.bookingTime.split(' - ')[0]}</div>
                   </td>
                   <td className="p-4 text-right font-bold">₱{b.price.toFixed(2)}</td>
                   <td className="p-4 text-right text-white/50">₱{b.depositAmount.toFixed(2)}</td>
                   <td className="p-4">
-                    <span className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${getPaymentBadgeClass(b.paymentStatus)}`}>
+                    <span className={`px-2 py-0.5 text-caption font-semibold uppercase rounded ${getPaymentBadgeClass(b.paymentStatus)}`}>
                       {b.paymentStatus}
                     </span>
                   </td>
                   <td className="p-4">
-                    <span className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${getStatusBadgeClass(b.bookingStatus)}`}>
+                    <span className={`px-2 py-0.5 text-caption font-semibold uppercase rounded ${getStatusBadgeClass(b.bookingStatus)}`}>
                       {b.bookingStatus}
                     </span>
                   </td>
@@ -1043,9 +1043,9 @@ function BookingsManagement() {
             {/* Header */}
             <div className="p-6 border-b border-white/10 flex justify-between items-start bg-white/[0.03]">
               <div>
-                <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Customer Details</span>
+                <span className="text-caption font-semibold text-white/40 uppercase tracking-label">Customer Details</span>
                 <h3 className="text-base font-bold text-white mt-1">{selectedBooking.customerName}</h3>
-                <p className="text-[10px] font-mono text-white/40 mt-0.5">Ref: {selectedBooking.id}</p>
+                <p className="text-caption font-mono text-white/40 mt-0.5">Ref: {selectedBooking.id}</p>
               </div>
               <button
                 onClick={() => setSelectedBooking(null)}
@@ -1060,14 +1060,14 @@ function BookingsManagement() {
               {/* Contact Info Card */}
               <div className="border border-white/10 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-1.5 gap-2">
-                  <h4 className="text-[10px] font-bold tracking-widest text-white/40 uppercase">
+                  <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase">
                     Contact Information
                   </h4>
                   {!editingContact ? (
                     <button
                       type="button"
                       onClick={() => setEditingContact(true)}
-                      className="text-[10px] text-primary font-bold uppercase tracking-wider hover:underline"
+                      className="text-caption text-primary font-bold uppercase tracking-wider hover:underline"
                     >
                       Edit contact
                     </button>
@@ -1088,7 +1088,7 @@ function BookingsManagement() {
                             : selectedBooking.customerPhone,
                         )
                       }}
-                      className="text-[10px] text-red-400 font-bold uppercase tracking-wider hover:underline"
+                      className="text-caption text-red-400 font-bold uppercase tracking-wider hover:underline"
                     >
                       Cancel
                     </button>
@@ -1098,13 +1098,13 @@ function BookingsManagement() {
                 {editingContact ? (
                   <div className="space-y-3">
                     {isPlaceholderCustomerEmail(selectedBooking.customerEmail) && (
-                      <p className="text-[11px] text-amber-300/90 leading-relaxed border border-amber-500/20 bg-amber-500/10 p-2.5">
+                      <p className="text-caption text-amber-300/90 leading-relaxed border border-amber-500/20 bg-amber-500/10 p-2.5">
                         This booking has no real email yet (imported). Add name + email so you can send the
                         raw gallery Drive link to the client.
                       </p>
                     )}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-white/45 uppercase">Full Name</label>
+                      <label className="text-caption font-semibold text-white/45 uppercase">Full Name</label>
                       <input
                         value={editContactName}
                         onChange={(e) => setEditContactName(e.target.value)}
@@ -1112,7 +1112,7 @@ function BookingsManagement() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-white/45 uppercase">Email</label>
+                      <label className="text-caption font-semibold text-white/45 uppercase">Email</label>
                       <input
                         type="email"
                         value={editContactEmail}
@@ -1122,7 +1122,7 @@ function BookingsManagement() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-white/45 uppercase">Phone (optional)</label>
+                      <label className="text-caption font-semibold text-white/45 uppercase">Phone (optional)</label>
                       <input
                         value={editContactPhone}
                         onChange={(e) => setEditContactPhone(e.target.value)}
@@ -1134,7 +1134,7 @@ function BookingsManagement() {
                       type="button"
                       disabled={saveLoading}
                       onClick={handleSaveContact}
-                      className="bg-primary text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 hover:bg-[#03008F] disabled:opacity-50"
+                      className="bg-primary text-white text-caption font-semibold uppercase tracking-wider px-4 py-2.5 hover:bg-[#03008F] disabled:opacity-50"
                     >
                       Save Contact
                     </button>
@@ -1187,14 +1187,14 @@ function BookingsManagement() {
               {/* Booking Info Card */}
               <form onSubmit={handleSaveDetails} className="border border-white/10 p-4 space-y-4">
                 <div className="flex justify-between items-center border-b border-white/10 pb-1.5">
-                  <h4 className="text-[10px] font-bold tracking-widest text-white/40 uppercase">
+                  <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase">
                     Session & Schedule Details
                   </h4>
                   {!isEditing ? (
                     <button
                       type="button"
                       onClick={() => setIsEditing(true)}
-                      className="text-[10px] text-primary font-bold uppercase tracking-wider hover:underline flex items-center gap-1"
+                      className="text-caption text-primary font-bold uppercase tracking-wider hover:underline flex items-center gap-1"
                     >
                       <Edit className="w-3 h-3" /> Reschedule
                     </button>
@@ -1202,7 +1202,7 @@ function BookingsManagement() {
                     <button
                       type="button"
                       onClick={() => setIsEditing(false)}
-                      className="text-[10px] text-red-500 font-bold uppercase tracking-wider hover:underline"
+                      className="text-caption text-red-500 font-bold uppercase tracking-wider hover:underline"
                     >
                       Cancel Edit
                     </button>
@@ -1224,7 +1224,7 @@ function BookingsManagement() {
                   {isEditing ? (
                     <>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-white/45 uppercase">Date</label>
+                        <label className="text-caption font-semibold text-white/45 uppercase">Date</label>
                         <input
                           type="date"
                           required
@@ -1234,7 +1234,7 @@ function BookingsManagement() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-white/45 uppercase">Time Slot</label>
+                        <label className="text-caption font-semibold text-white/45 uppercase">Time Slot</label>
                         <select
                           value={editTime}
                           onChange={(e) => setEditTime(e.target.value)}
@@ -1257,13 +1257,13 @@ function BookingsManagement() {
                           onChange={(e) => setChargeRebookingFee(e.target.checked)}
                           className="w-3.5 h-3.5 text-primary border-white/20 focus:ring-primary"
                         />
-                        <label htmlFor="chargeFee" className="text-[10px] font-semibold text-amber-300 uppercase tracking-wide cursor-pointer select-none">
+                        <label htmlFor="chargeFee" className="text-caption font-semibold text-amber-300 uppercase tracking-wide cursor-pointer select-none">
                           Apply ₱500.00 Rebooking Fee (Reschedule charges)
                         </label>
                       </div>
 
                       <div className="col-span-2 space-y-1.5">
-                        <label htmlFor="editDrive" className="text-[10px] font-bold text-white/45 uppercase">Google Drive Gallery Link</label>
+                        <label htmlFor="editDrive" className="text-caption font-semibold text-white/45 uppercase">Google Drive Gallery Link</label>
                         <input
                           id="editDrive"
                           type="url"
@@ -1296,7 +1296,7 @@ function BookingsManagement() {
                             href={selectedBooking.driveLink} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="text-green-400 font-semibold hover:underline mt-0.5 flex items-center gap-1 text-[11px]"
+                            className="text-green-400 font-semibold hover:underline mt-0.5 flex items-center gap-1 text-caption"
                           >
                             Open Drive Gallery <ArrowUpRight className="w-3.5 h-3.5" />
                           </a>
@@ -1314,7 +1314,7 @@ function BookingsManagement() {
                   {selectedBooking.note && (
                     <div className="col-span-2">
                       <p className="text-white/40 font-medium mb-1">Pre-Shoot Request Note</p>
-                      <p className="bg-white/[0.03] p-2 border border-white/10 rounded leading-relaxed text-[11px] italic">
+                      <p className="bg-white/[0.03] p-2 border border-white/10 rounded leading-relaxed text-caption italic">
                         "{selectedBooking.note}"
                       </p>
                     </div>
@@ -1322,7 +1322,7 @@ function BookingsManagement() {
 
                   {/* Staff Notes input */}
                   <div className="col-span-2 space-y-1.5">
-                    <label htmlFor="staffNotes" className="text-[10px] font-bold text-white/45 uppercase">
+                    <label htmlFor="staffNotes" className="text-caption font-semibold text-white/45 uppercase">
                       Internal Staff Notes
                     </label>
                     <textarea
@@ -1337,7 +1337,7 @@ function BookingsManagement() {
                       type="button"
                       onClick={handleSaveStaffNotes}
                       disabled={saveLoading}
-                      className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline"
+                      className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline"
                     >
                       Save staff notes
                     </button>
@@ -1359,7 +1359,7 @@ function BookingsManagement() {
 
             {/* Payment History Ledger */}
             <div className="border border-white/10 p-4 space-y-3">
-              <h4 className="text-[10px] font-bold tracking-widest text-white/40 uppercase border-b border-white/10 pb-1.5">
+              <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase border-b border-white/10 pb-1.5">
                 Payment History Ledger
               </h4>
               {(selectedBooking.paymentHistory || []).length === 0 ? (
@@ -1370,9 +1370,9 @@ function BookingsManagement() {
                     <div key={pay.id} className="flex justify-between items-start gap-3 bg-white/[0.03] p-2.5 border border-white/10">
                       <div>
                         <p className="font-semibold text-white/90">{pay.type}</p>
-                        <p className="text-[9px] text-white/40 font-mono mt-0.5">{new Date(pay.date).toLocaleDateString()} via {pay.method}</p>
+                        <p className="text-caption text-white/40 font-mono mt-0.5">{new Date(pay.date).toLocaleDateString()} via {pay.method}</p>
                         {pay.transactionRef && (
-                          <p className="text-[9px] text-white/40 font-mono mt-0.5">Ref: {pay.transactionRef}</p>
+                          <p className="text-caption text-white/40 font-mono mt-0.5">Ref: {pay.transactionRef}</p>
                         )}
                       </div>
                       <AdminReceiptActions
@@ -1403,17 +1403,17 @@ function BookingsManagement() {
               
               return (
                 <form onSubmit={handleRecordStudioPayment} className="border border-white/10 p-4 space-y-4">
-                  <h4 className="text-[10px] font-bold tracking-widest text-white/40 uppercase border-b border-white/10 pb-1.5">
+                  <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase border-b border-white/10 pb-1.5">
                     Record Studio Payment
                   </h4>
                   
-                  <div className="bg-amber-500/10 border border-amber-500/30 p-3 text-[11px] text-amber-300">
+                  <div className="bg-amber-500/10 border border-amber-500/30 p-3 text-caption text-amber-300">
                     Outstanding Balance: <strong className="text-sm font-bold text-amber-400">₱{outstanding.toFixed(2)}</strong>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-white/45 uppercase">Payment Method</label>
+                      <label className="text-caption font-semibold text-white/45 uppercase">Payment Method</label>
                       <select
                         value={studioPayMethod}
                         onChange={(e) => setStudioPayMethod(e.target.value as any)}
@@ -1428,7 +1428,7 @@ function BookingsManagement() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-white/45 uppercase">Amount Received</label>
+                      <label className="text-caption font-semibold text-white/45 uppercase">Amount Received</label>
                       <input
                         type="number"
                         required
@@ -1442,7 +1442,7 @@ function BookingsManagement() {
                   </div>
 
                   <div className="space-y-1.5 text-xs">
-                    <label className="text-[10px] font-bold text-white/45 uppercase">Transaction Reference (Optional)</label>
+                    <label className="text-caption font-semibold text-white/45 uppercase">Transaction Reference (Optional)</label>
                     <input
                       type="text"
                       value={studioPayRef}
@@ -1455,7 +1455,7 @@ function BookingsManagement() {
                   <button
                     type="submit"
                     disabled={saveLoading}
-                    className="w-full bg-primary text-white text-[10px] font-bold uppercase tracking-wider py-3 hover:bg-[#03008F]"
+                    className="w-full bg-primary text-white text-caption font-semibold uppercase tracking-wider py-3 hover:bg-[#03008F]"
                   >
                     Record In-Studio Payment
                   </button>
@@ -1466,7 +1466,7 @@ function BookingsManagement() {
             {/* Receipt Preview if exists */}
               {selectedBooking.receiptUrl && (
                 <div className="border border-white/10 p-4 space-y-3">
-                  <h4 className="text-[10px] font-bold tracking-widest text-white/40 uppercase border-b border-white/10 pb-1.5">
+                  <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase border-b border-white/10 pb-1.5">
                     Uploaded GCash Receipt
                   </h4>
                   <div className="flex gap-4 items-center">
@@ -1488,12 +1488,12 @@ function BookingsManagement() {
                     </div>
                     <div className="space-y-1 text-xs">
                       <p className="font-semibold text-white/90">GCash Deposit Verification</p>
-                      <p className="font-mono text-[10px] text-white/45">Ref: {selectedBooking.transactionRef || 'N/A'}</p>
+                      <p className="font-mono text-caption text-white/45">Ref: {selectedBooking.transactionRef || 'N/A'}</p>
                       <a
                         href={receiptAccessUrl(selectedBooking.receiptUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[10px] text-primary font-bold hover:underline"
+                        className="inline-flex items-center gap-1 text-caption text-primary font-bold hover:underline"
                       >
                         View Full Screen <ArrowUpRight className="w-3 h-3" />
                       </a>
@@ -1505,7 +1505,7 @@ function BookingsManagement() {
 
             {/* Quick Actions Panel */}
             <div className="p-6 bg-white/[0.03] border-t border-white/10 space-y-3">
-              <h4 className="text-[10px] font-bold tracking-widest text-white/40 uppercase">
+              <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase">
                 Quick Actions
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
@@ -1568,7 +1568,7 @@ function BookingsManagement() {
                   <Trash2 className="w-3.5 h-3.5" /> Delete booking
                 </button>
               </div>
-              <p className="text-[10px] text-white/35">
+              <p className="text-caption text-white/35">
                 Use <strong className="text-white/55">Send Shoot Reminder</strong> on the morning of the session (email says “today”).
                 Use <strong className="text-white/55">Send Google Drive Link</strong> anytime after payment to email the raw gallery. Cancel keeps the record; Delete permanently removes it.
               </p>
@@ -1585,7 +1585,7 @@ function BookingsManagement() {
                 <h3 className="font-bold text-white text-lg">
                   {completeModalMode === 'gallery' ? 'Send Google Drive Link' : 'Complete Session'}
                 </h3>
-                <p className="text-[10px] text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
+                <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
                 type="button"
@@ -1603,7 +1603,7 @@ function BookingsManagement() {
             </p>
 
             <div className="space-y-2">
-              <label htmlFor="completeName" className="text-[10px] font-bold tracking-widest text-white/45 uppercase">
+              <label htmlFor="completeName" className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 Client Full Name
               </label>
               <input
@@ -1616,7 +1616,7 @@ function BookingsManagement() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="completeEmail" className="text-[10px] font-bold tracking-widest text-white/45 uppercase">
+              <label htmlFor="completeEmail" className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 Client Email
               </label>
               <input
@@ -1627,13 +1627,13 @@ function BookingsManagement() {
                 placeholder="client@email.com"
                 className="w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
-              <p className="text-[10px] text-white/40">
+              <p className="text-caption text-white/40">
                 Required to email the raw gallery. Saved on the booking for filtering / editor later.
               </p>
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="completeDrive" className="text-[10px] font-bold tracking-widest text-white/45 uppercase">
+              <label htmlFor="completeDrive" className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 Google Drive Gallery Link (raw files)
               </label>
               <input
@@ -1644,7 +1644,7 @@ function BookingsManagement() {
                 placeholder="https://drive.google.com/drive/folders/..."
                 className="w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
-              <p className="text-[10px] text-white/40">
+              <p className="text-caption text-white/40">
                 Share the folder as <strong className="text-white/60">Anyone with the link</strong> (Viewer).
               </p>
             </div>
@@ -1657,7 +1657,7 @@ function BookingsManagement() {
                   onChange={(e) => setCompleteSendEmail(e.target.checked)}
                   className="mt-0.5 w-3.5 h-3.5 text-primary border-white/20"
                 />
-                <span className="text-[11px] text-white/70 leading-snug">
+                <span className="text-caption text-white/70 leading-snug">
                   Email gallery link + submit page to the client email above
                 </span>
               </label>
@@ -1685,7 +1685,7 @@ function BookingsManagement() {
                   type="button"
                   disabled={saveLoading}
                   onClick={() => handleConfirmComplete({ sendEmail: false })}
-                  className="w-full border border-white/10 text-white/70 hover:text-white hover:bg-white/[0.04] text-[10px] font-bold uppercase tracking-wider py-2.5 disabled:opacity-50"
+                  className="w-full border border-white/10 text-white/70 hover:text-white hover:bg-white/[0.04] text-caption font-semibold uppercase tracking-wider py-2.5 disabled:opacity-50"
                 >
                   Complete without email
                 </button>
@@ -1693,7 +1693,7 @@ function BookingsManagement() {
               <button
                 type="button"
                 onClick={() => setShowCompleteModal(false)}
-                className="w-full text-white/40 hover:text-white/70 text-[10px] font-bold uppercase tracking-wider py-2"
+                className="w-full text-white/40 hover:text-white/70 text-caption font-semibold uppercase tracking-wider py-2"
               >
                 Cancel
               </button>
@@ -1708,7 +1708,7 @@ function BookingsManagement() {
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white text-lg">Delete booking</h3>
-                <p className="text-[10px] text-white/40 font-mono mt-0.5">{deleteTarget.id}</p>
+                <p className="text-caption text-white/40 font-mono mt-0.5">{deleteTarget.id}</p>
               </div>
               <button
                 type="button"
@@ -1728,7 +1728,7 @@ function BookingsManagement() {
             </p>
 
             <div className="space-y-2">
-              <p className="text-[10px] font-bold tracking-widest text-white/45 uppercase">Reason</p>
+              <p className="text-caption font-semibold tracking-label text-white/45 uppercase">Reason</p>
               <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
@@ -1739,8 +1739,8 @@ function BookingsManagement() {
                       : 'border-white/10 text-white/60 hover:border-white/25'
                   }`}
                 >
-                  <span className="font-bold uppercase tracking-wider text-[10px]">Admin error</span>
-                  <span className="block text-[11px] text-white/45 mt-0.5">Wrong slot, duplicate entry, staff mistake</span>
+                  <span className="font-bold uppercase tracking-wider text-caption">Admin error</span>
+                  <span className="block text-caption text-white/45 mt-0.5">Wrong slot, duplicate entry, staff mistake</span>
                 </button>
                 <button
                   type="button"
@@ -1751,14 +1751,14 @@ function BookingsManagement() {
                       : 'border-white/10 text-white/60 hover:border-white/25'
                   }`}
                 >
-                  <span className="font-bold uppercase tracking-wider text-[10px]">Client error</span>
-                  <span className="block text-[11px] text-white/45 mt-0.5">Wrong details, client asked to remove, spam</span>
+                  <span className="font-bold uppercase tracking-wider text-caption">Client error</span>
+                  <span className="block text-caption text-white/45 mt-0.5">Wrong details, client asked to remove, spam</span>
                 </button>
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold tracking-widest text-white/45 uppercase">
+              <label className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 Notes (optional)
               </label>
               <input
@@ -1774,7 +1774,7 @@ function BookingsManagement() {
                 type="button"
                 disabled={deleteLoading}
                 onClick={handleDeleteBooking}
-                className="w-full bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold uppercase tracking-wider py-3 disabled:opacity-50"
+                className="w-full bg-red-600 hover:bg-red-700 text-white text-caption font-semibold uppercase tracking-wider py-3 disabled:opacity-50"
               >
                 {deleteLoading ? 'Deleting…' : 'Delete permanently'}
               </button>
@@ -1784,7 +1784,7 @@ function BookingsManagement() {
                   setShowDeleteModal(false)
                   setDeleteTarget(null)
                 }}
-                className="w-full text-white/40 hover:text-white/70 text-[10px] font-bold uppercase tracking-wider py-2"
+                className="w-full text-white/40 hover:text-white/70 text-caption font-semibold uppercase tracking-wider py-2"
               >
                 Keep booking
               </button>

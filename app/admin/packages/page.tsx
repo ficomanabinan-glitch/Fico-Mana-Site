@@ -260,7 +260,7 @@ export default function PackageManagerPage() {
           <ImageIcon className="mt-0.5 size-5 shrink-0 text-[#C4CEFF]" />
           <div>
             <p className="text-xs font-semibold text-white">Photo selection follows the package</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+            <p className="mt-1 text-caption leading-relaxed text-white/50">
               A changed photo count applies to new bookings and open client selections. Submitted selections remain locked so approved work is never altered.
             </p>
           </div>
@@ -276,12 +276,12 @@ export default function PackageManagerPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-sm font-semibold text-white">{pkg.title}</p>
-                  <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[8px] font-bold uppercase ${pkg.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-white/15 bg-white/5 text-white/40'}`}>
+                  <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-caption font-semibold uppercase ${pkg.isActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-white/15 bg-white/5 text-white/40'}`}>
                     {pkg.isActive ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
                     {pkg.isActive ? 'Live' : 'Hidden'}
                   </span>
                 </div>
-                <p className="mt-1 font-mono text-[9px] text-white/30">{pkg.id}</p>
+                <p className="mt-1 font-mono text-caption text-white/30">{pkg.id}</p>
               </div>
               <button type="button" onClick={() => startEdit(pkg)} className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-1.5 px-3 py-2`}>
                 <Pencil className="size-3.5" /> Edit
@@ -292,7 +292,7 @@ export default function PackageManagerPage() {
               <PackageFact label="Client Selects" value={`${pkg.selectionLimit} photos`} />
               <PackageFact label="Schedule" value={pkg.slotType === 'makeup' ? 'Timed slots' : 'Anytime'} />
             </div>
-            <p className="mt-4 text-[10px] uppercase tracking-wider text-white/35">
+            <p className="mt-4 text-caption uppercase tracking-wider text-white/35">
               {BOOKING_PACKAGE_CATEGORY_LABELS[pkg.category]} · Order {pkg.sortOrder}
             </p>
           </article>
@@ -310,7 +310,7 @@ export default function PackageManagerPage() {
           <aside className="relative z-10 flex h-full w-full max-w-2xl flex-col overflow-hidden border-l border-white/10 bg-[#222222] shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-[#C4CEFF]">System Management</p>
+                <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">System Management</p>
                 <h2 className="mt-1 text-lg font-semibold">{editingId ? 'Edit Package' : 'Add Package'}</h2>
               </div>
               <button type="button" onClick={closeEditor} className="rounded-lg p-2 text-white/45 hover:bg-white/5 hover:text-white" aria-label="Close editor">
@@ -398,9 +398,9 @@ export default function PackageManagerPage() {
 function SummaryCard({ label, value, detail }: { label: string; value: number; detail: string }) {
   return (
     <div className={`${adminPanel} p-5`}>
-      <p className="text-[9px] font-bold uppercase tracking-widest text-white/35">{label}</p>
+      <p className="text-caption font-semibold uppercase tracking-label text-white/35">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums text-white">{value}</p>
-      <p className="mt-1 text-[11px] text-white/40">{detail}</p>
+      <p className="mt-1 text-caption text-white/40">{detail}</p>
     </div>
   )
 }
@@ -437,7 +437,7 @@ function PackageBodySkeleton() {
 function PackageFact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[8px] font-bold uppercase tracking-wider text-white/30">{label}</p>
+      <p className="text-caption font-semibold uppercase tracking-wider text-white/30">{label}</p>
       <p className="mt-1 text-xs font-semibold text-white/75">{value}</p>
     </div>
   )
@@ -448,7 +448,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <label className="block space-y-2">
       <span className={adminLabel}>{label}</span>
       {children}
-      {hint ? <span className="block text-[10px] leading-relaxed text-white/35">{hint}</span> : null}
+      {hint ? <span className="block text-caption leading-relaxed text-white/35">{hint}</span> : null}
     </label>
   )
 }

@@ -49,7 +49,7 @@ export function DashboardSidebarNavigation({
             mobile ? 'px-1' : ''
           }`}
         >
-          <p className="px-3.5 pb-2 text-[8px] font-bold uppercase tracking-[0.22em] text-white/25">
+          <p className="px-3.5 pb-2 text-caption font-semibold uppercase tracking-label text-white/25">
             {section.label}
           </p>
           <div className="space-y-1">
@@ -70,7 +70,7 @@ export function DashboardSidebarNavigation({
                   onTouchStart={() => prefetchOnIntent(item.href)}
                   aria-current={active ? 'page' : undefined}
                   onClick={() => onNavigate(item.href, mobile)}
-                  className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[11px] font-semibold tracking-wide transition-all ${
+                  className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-caption font-semibold tracking-wide transition-all ${
                     active ? adminNavActive : adminNavIdle
                   }`}
                 >
@@ -79,7 +79,7 @@ export function DashboardSidebarNavigation({
                     {item.label}
                   </span>
                   {item.badge && item.badge > 0 ? (
-                    <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[9px] font-bold text-white">
+                    <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-caption font-semibold text-white">
                       {item.badge}
                     </span>
                   ) : null}
@@ -115,7 +115,7 @@ export function DashboardSidebarProfile({
           </div>
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold">{label}</p>
-            <p className="truncate text-[10px] text-white/35">{detail}</p>
+            <p className="truncate text-caption text-white/35">{detail}</p>
           </div>
         </div>
         <button

@@ -92,7 +92,7 @@ export default function ShootReminderSettings() {
   return <section className={`${adminCard} p-5 sm:p-6`} aria-labelledby="reminder-settings-title" data-testid="shoot-reminder-settings">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[#C4CEFF]"><Bell className="size-4"/>Automation settings</p>
+        <p className="flex items-center gap-2 text-caption font-semibold uppercase tracking-wider text-[#C4CEFF]"><Bell className="size-4"/>Automation settings</p>
         <h2 id="reminder-settings-title" className="mt-2 text-lg font-semibold">Shoot reminders</h2>
         <p className="mt-1 max-w-2xl text-sm text-white/50">Once enabled, reminders stay on until an administrator disables them. Errors are reported without switching reminders off.</p>
       </div>

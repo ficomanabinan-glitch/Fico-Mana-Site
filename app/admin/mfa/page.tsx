@@ -114,7 +114,7 @@ export default function AdminMfaPage() {
         <div className="flex size-12 items-center justify-center rounded-full bg-primary/20 text-[#C4CEFF]">
           <ShieldCheck className="size-6" />
         </div>
-        <p className="mt-5 text-[9px] font-bold uppercase tracking-[0.3em] text-[#C4CEFF]">FICO MANA SECURITY</p>
+        <p className="mt-5 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA SECURITY</p>
         <h1 className="mt-2 font-serif text-3xl font-bold">Two-step verification</h1>
         <p className="mt-3 text-sm leading-relaxed text-white/55">
           Owner and administrator accounts must verify an authenticator code before opening private client, payment, or financial records.
@@ -138,7 +138,7 @@ export default function AdminMfaPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={enrollment.qrCode} alt="Authenticator setup QR code" className="mx-auto size-48 bg-white p-2" />
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-white/40">Manual setup key</p>
+              <p className="text-caption uppercase tracking-wider text-white/40">Manual setup key</p>
               <code className="mt-1 block break-all rounded bg-black/30 p-2 text-xs text-white/75">{enrollment.secret}</code>
             </div>
           </div>
@@ -146,7 +146,7 @@ export default function AdminMfaPage() {
 
         {factorId ? (
           <div className="mt-7 space-y-3">
-            <label htmlFor="mfa-code" className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
+            <label htmlFor="mfa-code" className="block text-caption font-semibold uppercase tracking-wider text-white/45">
               Six-digit authenticator code
             </label>
             <input

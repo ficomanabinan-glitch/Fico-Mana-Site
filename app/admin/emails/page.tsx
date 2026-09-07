@@ -105,12 +105,12 @@ export default function EmailLogsConsole() {
                   <span className="text-white/20">&bull;</span>
                   <span className="font-semibold text-white/80">{log.recipientEmail}</span>
                   <span className="text-white/20">&bull;</span>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 uppercase ${emailStatusBadge(log.status as 'SENT' | 'FAILED')}`}>
+                  <span className={`text-caption font-semibold px-2 py-0.5 uppercase ${emailStatusBadge(log.status as 'SENT' | 'FAILED')}`}>
                     {log.status}
                   </span>
                 </div>
                 <h4 className="font-bold text-white truncate">{log.subject}</h4>
-                <div className="flex items-center gap-1 text-[10px] text-white/40">
+                <div className="flex items-center gap-1 text-caption text-white/40">
                   <Clock className="w-3 h-3" />
                   <span>{new Date(log.sentAt).toLocaleString()}</span>
                 </div>
@@ -132,9 +132,9 @@ export default function EmailLogsConsole() {
           <div className={`${adminModal} max-w-2xl w-full flex flex-col h-[85vh]`}>
             <div className="p-5 border-b border-white/10 flex justify-between items-center">
               <div className="space-y-0.5">
-                <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Email Inspector</span>
+                <span className="text-caption font-semibold text-white/40 uppercase tracking-label">Email Inspector</span>
                 <h3 className="font-bold text-white">{selectedLog.subject}</h3>
-                <p className="text-[10px] text-white/40">
+                <p className="text-caption text-white/40">
                   Sent to: {selectedLog.recipientEmail} on {new Date(selectedLog.sentAt).toLocaleString()}
                 </p>
               </div>

@@ -80,7 +80,7 @@ export default function ReceiptUploadEnhancer() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={previewUrl} alt="Selected payment receipt preview" className="w-full max-h-72 object-contain bg-black/50" />
       <div className="px-3 py-2 border-t border-white/10">
-        <p className="text-[10px] uppercase tracking-wider text-white/40">Receipt preview</p>
+        <p className="text-caption uppercase tracking-wider text-white/40">Receipt preview</p>
         <p className="text-xs text-white/70 truncate mt-0.5">{fileName}</p>
       </div>
     </div>,

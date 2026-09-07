@@ -219,7 +219,7 @@ export default function EditorUploadPhotos({
       />
 
       <div className="border-b border-white/[0.08] pb-5">
-        <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#C4CEFF]">Upload Photos</p>
+        <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Upload Photos</p>
         <h1 className="mt-2 font-serif text-3xl font-bold">Return edited batches to Google Drive</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/40">
           Drop the unzipped batch folder to upload each client’s EDITED photos to Google Drive.
@@ -268,14 +268,14 @@ export default function EditorUploadPhotos({
         <section className={`${adminPanel} overflow-hidden`}>
           <div className="flex flex-col gap-4 border-b border-white/[0.08] p-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-300">Ready to upload</p>
+              <p className="text-caption font-semibold uppercase tracking-wider text-emerald-300">Ready to upload</p>
               <h2 className="mt-1 text-base font-semibold">
                 {detected.length} batch{detected.length === 1 ? '' : 'es'} · {selectedClients} clients
               </h2>
-              <p className="mt-1 text-[10px] text-white/35">{selectedFiles} total folder files inspected</p>
+              <p className="mt-1 text-caption text-white/35">{selectedFiles} total folder files inspected</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 text-[10px] text-white/55">
+              <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 text-caption text-white/55">
                 <input
                   type="checkbox"
                   checked={failedOnly}
@@ -301,10 +301,10 @@ export default function EditorUploadPhotos({
               <div key={batch.manifest.batch_id} className="grid gap-2 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center">
                 <div>
                   <p className="text-sm font-semibold">{batch.manifest.shoot_date}</p>
-                  <p className="mt-1 font-mono text-[9px] text-white/30">{batch.manifest.batch_id}</p>
+                  <p className="mt-1 font-mono text-caption text-white/30">{batch.manifest.batch_id}</p>
                 </div>
-                <span className="text-[10px] text-white/40">{batch.manifest.clients.length} clients</span>
-                <span className="inline-flex items-center gap-1.5 text-[10px] text-emerald-300">
+                <span className="text-caption text-white/40">{batch.manifest.clients.length} clients</span>
+                <span className="inline-flex items-center gap-1.5 text-caption text-emerald-300">
                   <FileCheck2 className="size-3.5" />Manifest verified
                 </span>
               </div>
@@ -317,11 +317,11 @@ export default function EditorUploadPhotos({
         <section className={`${adminPanel} p-5`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Upload progress</p>
+              <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Upload progress</p>
               <h2 className="mt-1 text-base font-semibold">
                 {uploading ? progress?.clientName || 'Preparing the batch…' : 'Latest upload result'}
               </h2>
-              <p className="mt-1 text-[10px] text-white/35">
+              <p className="mt-1 text-caption text-white/35">
                 {progress?.batchId || detected[0]?.manifest.batch_id}
                 {progress?.currentFile ? ` · ${progress.currentFile}` : ''}
               </p>
@@ -345,19 +345,19 @@ export default function EditorUploadPhotos({
                 <div key={`${result.bookingId}-${index}`} className="flex flex-col gap-2 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-semibold">{result.customerName || result.bookingId}</p>
-                    <p className="mt-1 font-mono text-[9px] text-white/30">{result.bookingId}</p>
+                    <p className="mt-1 font-mono text-caption text-white/30">{result.bookingId}</p>
                   </div>
                   <div className="sm:text-right">
                     <p className={result.status === 'DELIVERED' ? 'text-emerald-300' : 'text-red-300'}>
                       {result.status === 'DELIVERED' ? 'Uploaded' : 'Upload failed'}
                     </p>
-                    <p className="mt-1 text-[10px] text-white/35">Folder files {result.expected} · Registered {result.uploaded}</p>
-                    {result.error ? <p className="mt-1 max-w-lg text-[10px] text-red-300/70">{result.error}</p> : null}
+                    <p className="mt-1 text-caption text-white/35">Folder files {result.expected} · Registered {result.uploaded}</p>
+                    {result.error ? <p className="mt-1 max-w-lg text-caption text-red-300/70">{result.error}</p> : null}
                   </div>
                 </div>
               ))}
               {runErrors.map((error) => (
-                <div key={error} className="flex items-start gap-2 p-3 text-[10px] text-red-300">
+                <div key={error} className="flex items-start gap-2 p-3 text-caption text-red-300">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{error}
                 </div>
               ))}
@@ -369,9 +369,9 @@ export default function EditorUploadPhotos({
       <section className={`${adminPanel} overflow-hidden`}>
         <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] p-5">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">Upload report</p>
+            <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Upload report</p>
             <h2 className="mt-1 text-base font-semibold">Folders and clients already uploaded</h2>
-            <p className="mt-1 text-[10px] text-white/35">
+            <p className="mt-1 text-caption text-white/35">
               {latestReport ? `Latest: ${formatDateTime(latestReport.completedAt || latestReport.createdAt)}` : 'No uploads recorded yet'}
               {failedReports ? ` · ${failedReports} failed client${failedReports === 1 ? '' : 's'} in recent runs` : ''}
             </p>
@@ -396,11 +396,11 @@ export default function EditorUploadPhotos({
                 <summary className="grid cursor-pointer list-none gap-3 p-4 hover:bg-white/[0.025] sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
                   <div>
                     <p className="text-sm font-semibold">{report.shootDate || 'Batch upload'}</p>
-                    <p className="mt-1 font-mono text-[9px] text-white/30">{report.batchId}</p>
+                    <p className="mt-1 font-mono text-caption text-white/30">{report.batchId}</p>
                   </div>
-                  <span className="text-[10px] text-white/40">{formatDateTime(report.completedAt || report.createdAt)}</span>
-                  <span className="text-[10px] text-white/40">{report.photosUploaded} photos</span>
-                  <span className={`text-[9px] font-bold uppercase ${reportTone(report.status)}`}>{report.status.replace(/_/g, ' ')}</span>
+                  <span className="text-caption text-white/40">{formatDateTime(report.completedAt || report.createdAt)}</span>
+                  <span className="text-caption text-white/40">{report.photosUploaded} photos</span>
+                  <span className={`text-caption font-semibold uppercase ${reportTone(report.status)}`}>{report.status.replace(/_/g, ' ')}</span>
                 </summary>
                 <div className="divide-y divide-white/[0.05] border-t border-white/[0.06] bg-black/10">
                   {report.clients.map((client) => (
@@ -408,12 +408,12 @@ export default function EditorUploadPhotos({
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-xs font-semibold">{client.customerName}</p>
-                          <span className={`text-[8px] font-bold uppercase ${reportTone(client.status)}`}>{client.status}</span>
+                          <span className={`text-caption font-semibold uppercase ${reportTone(client.status)}`}>{client.status}</span>
                         </div>
-                        <p className="mt-1 text-[9px] text-white/30">{client.packageName} · {client.bookingId}</p>
-                        {client.lastError ? <p className="mt-1 text-[10px] text-red-300/70">{client.lastError}</p> : null}
+                        <p className="mt-1 text-caption text-white/30">{client.packageName} · {client.bookingId}</p>
+                        {client.lastError ? <p className="mt-1 text-caption text-red-300/70">{client.lastError}</p> : null}
                       </div>
-                      <span className="text-[10px] text-white/40">{client.uploadedFiles} / {client.expectedFiles} photos</span>
+                      <span className="text-caption text-white/40">{client.uploadedFiles} / {client.expectedFiles} photos</span>
                       <div className="flex flex-wrap gap-2">
                         {client.editedFolderUrl ? (
                           <a href={client.editedFolderUrl} target="_blank" rel="noopener noreferrer" className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}>
@@ -441,7 +441,7 @@ export default function EditorUploadPhotos({
 function ProgressCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-white/[0.07] bg-black/10 p-3">
-      <p className="text-[8px] font-bold uppercase tracking-wider text-white/25">{label}</p>
+      <p className="text-caption font-semibold uppercase tracking-wider text-white/25">{label}</p>
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>
   )

@@ -56,7 +56,7 @@ export default function SchoolPortfolio() {
         <div className="max-w-2xl mb-16 space-y-4">
           <div className="flex items-center gap-3">
             <span className="h-px w-8 bg-primary" />
-            <span className="text-primary text-[10px] font-bold tracking-[0.25em] uppercase">
+            <span className="text-primary text-caption font-semibold tracking-label uppercase">
               Institutional Partners
             </span>
           </div>
@@ -84,10 +84,10 @@ export default function SchoolPortfolio() {
             >
               <div className="space-y-4">
                 <div className="flex justify-between items-start">
-                  <span className="text-[9px] font-bold tracking-widest text-primary uppercase bg-primary/5 px-2.5 py-1 border border-primary/10">
+                  <span className="text-caption font-semibold tracking-label text-primary uppercase bg-primary/5 px-2.5 py-1 border border-primary/10">
                     {school.tag}
                   </span>
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 font-semibold">
+                  <div className="flex items-center gap-1.5 text-caption font-mono text-slate-400 font-semibold">
                     <Calendar className="w-3.5 h-3.5" />
                     <span>{school.contractYear}</span>
                   </div>
@@ -105,7 +105,7 @@ export default function SchoolPortfolio() {
                 </p>
               </div>
 
-              <div className="border-t border-slate-200/50 pt-4 mt-6 flex items-center justify-between text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+              <div className="border-t border-slate-200/50 pt-4 mt-6 flex items-center justify-between text-caption font-semibold tracking-wider text-slate-400 uppercase">
                 <span className="flex items-center gap-1">
                   <GraduationCap className="w-4 h-4 text-primary" /> Yearbook contract
                 </span>
@@ -119,7 +119,7 @@ export default function SchoolPortfolio() {
 
         {/* Dynamic institution logo strip */}
         <div className="mt-20 border-t border-slate-100 pt-12 text-center space-y-6">
-          <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+          <p className="text-caption font-semibold tracking-label text-slate-400 uppercase">
             Trusted by Graduating Classes & Student Bodies
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 opacity-40 hover:opacity-60 transition-opacity duration-300">

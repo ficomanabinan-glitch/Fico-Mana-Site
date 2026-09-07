@@ -191,7 +191,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider rounded-lg transition-all whitespace-nowrap flex items-center gap-2 ${
+              className={`px-3.5 py-2.5 text-caption font-semibold uppercase tracking-wider rounded-lg transition-all whitespace-nowrap flex items-center gap-2 ${
                 isActive
                   ? 'bg-primary text-white shadow-[0_0_20px_rgba(5,0,208,0.25)]'
                   : 'text-white/50 hover:text-white hover:bg-white/[0.04]'
@@ -201,7 +201,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
               {tab.label}
               {typeof tab.count === 'number' && tab.count > 0 && (
                 <span
-                  className={`min-w-[1.25rem] text-center text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
+                  className={`min-w-[1.25rem] text-center text-caption px-1.5 py-0.5 rounded-md font-bold ${
                     isActive
                       ? 'bg-white/20 text-white'
                       : tab.id === 'queue'
@@ -338,10 +338,10 @@ function OverviewTab({
               <div className={`absolute left-0 top-0 bottom-0 w-1 ${hot ? 'bg-primary' : 'bg-white/15'}`} />
               <div className="flex items-start justify-between gap-3 pl-1">
                 <div>
-                  <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">{kpi.label}</p>
+                  <p className="text-caption font-semibold tracking-label text-white/40 uppercase">{kpi.label}</p>
                   <p className="text-3xl font-bold text-white mt-2 tabular-nums tracking-tight">{kpi.value}</p>
-                  <p className="text-[11px] text-white/45 mt-1.5 leading-snug">{kpi.desc}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary/80 mt-3 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
+                  <p className="text-caption text-white/45 mt-1.5 leading-snug">{kpi.desc}</p>
+                  <p className="text-caption font-semibold uppercase tracking-wider text-primary/80 mt-3 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1">
                     Open <ArrowRight className="w-3 h-3" />
                   </p>
                 </div>
@@ -358,7 +358,7 @@ function OverviewTab({
         <div className={`${adminPanel} p-5`}>
           <div className="flex items-center justify-between gap-3 mb-5">
             <div>
-              <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">Pipeline</p>
+              <p className="text-caption font-semibold tracking-label text-white/40 uppercase">Pipeline</p>
               <p className="text-sm font-semibold text-white mt-0.5">
                 {relevant.length} active · {submitted} submitted
               </p>
@@ -366,7 +366,7 @@ function OverviewTab({
             <button
               type="button"
               onClick={() => onOpenTab('queue')}
-              className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline inline-flex items-center gap-1"
+              className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline inline-flex items-center gap-1"
             >
               Open queue <ArrowRight className="w-3 h-3" />
             </button>
@@ -377,7 +377,7 @@ function OverviewTab({
               return (
                 <div key={status} className="space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
-                    <span className={`px-2 py-0.5 text-[9px] font-bold uppercase border ${rawPhotoStatusBadge(status)}`}>
+                    <span className={`px-2 py-0.5 text-caption font-semibold uppercase border ${rawPhotoStatusBadge(status)}`}>
                       {rawPhotoWorkflowLabel(status)}
                     </span>
                     <span className="text-sm font-semibold text-white tabular-nums">{counts[status]}</span>
@@ -397,13 +397,13 @@ function OverviewTab({
         <div className={`${adminPanel} flex flex-col`}>
           <div className="p-4 border-b border-white/[0.08] flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">Needs review</p>
+              <p className="text-caption font-semibold tracking-label text-white/40 uppercase">Needs review</p>
               <p className="text-sm font-semibold text-white mt-0.5">Latest 5-pick submissions</p>
             </div>
             <button
               type="button"
               onClick={() => onOpenTab('queue')}
-              className="text-[10px] font-bold uppercase tracking-wider text-primary hover:underline"
+              className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline"
             >
               View all
             </button>
@@ -412,7 +412,7 @@ function OverviewTab({
             <div className={`${adminEmptyState} m-5 border-none bg-transparent flex-1`}>
               <CheckCircle className="w-8 h-8 text-green-400/50" />
               <p className="text-sm text-white/60">Queue is clear</p>
-              <p className="text-[11px] text-white/35">New client submissions will show up here.</p>
+              <p className="text-caption text-white/35">New client submissions will show up here.</p>
             </div>
           ) : (
             <div className="divide-y divide-white/[0.06]">
@@ -425,13 +425,13 @@ function OverviewTab({
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{b.customerName}</p>
-                    <p className="text-[11px] text-white/40 mt-1">
+                    <p className="text-caption text-white/40 mt-1">
                       {b.bookingDate} · {b.packageName}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className="font-mono text-[10px] text-primary">{b.id}</span>
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-amber-300/80">Review</span>
+                    <span className="font-mono text-caption text-primary">{b.id}</span>
+                    <span className="text-caption font-semibold uppercase tracking-wider text-amber-300/80">Review</span>
                   </div>
                 </button>
               ))}
@@ -483,12 +483,12 @@ function FilteringDaySessions({
     <div className={`${adminPanel} flex flex-col`}>
       <div className="p-4 border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.16em] text-white/40 uppercase">Filtering by day</p>
+          <p className="text-caption font-semibold tracking-label text-white/40 uppercase">Filtering by day</p>
           <p className="text-sm font-semibold text-white mt-0.5">{label}</p>
         </div>
         <Link
           href={`/admin/bookings?date=${date}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-caption font-semibold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
         >
           Open bookings <ArrowRight className="w-3 h-3" />
         </Link>
@@ -515,19 +515,19 @@ function FilteringDaySessions({
                       />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{b.customerName}</p>
-                        <p className="text-[11px] text-white/40 mt-1">
+                        <p className="text-caption text-white/40 mt-1">
                           {b.bookingTime} · {b.packageName}
                         </p>
                         <Link
                           href={`/admin/bookings?search=${encodeURIComponent(b.id)}`}
-                          className="font-mono text-[10px] text-primary hover:underline mt-1 inline-block"
+                          className="font-mono text-caption text-primary hover:underline mt-1 inline-block"
                         >
                           {b.id}
                         </Link>
                       </div>
                     </div>
                     {workflow && (
-                      <span className={`px-2 py-0.5 text-[8px] font-bold uppercase border shrink-0 ${rawPhotoStatusBadge(workflow)}`}>
+                      <span className={`px-2 py-0.5 text-caption font-semibold uppercase border shrink-0 ${rawPhotoStatusBadge(workflow)}`}>
                         {rawPhotoWorkflowLabel(workflow)}
                       </span>
                     )}
@@ -535,7 +535,7 @@ function FilteringDaySessions({
                   <div className="flex flex-wrap gap-2">
                     <Link
                       href={`/admin/bookings?search=${encodeURIComponent(b.id)}`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-white/10 bg-white/5 hover:bg-white/10 text-[9px] font-bold uppercase tracking-wider text-white/70"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-white/10 bg-white/5 hover:bg-white/10 text-caption font-semibold uppercase tracking-wider text-white/70"
                     >
                       Booking
                     </Link>
@@ -544,7 +544,7 @@ function FilteringDaySessions({
                         href={b.driveLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-white/10 bg-white/5 hover:bg-white/10 text-[9px] font-bold uppercase tracking-wider text-white/70"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-white/10 bg-white/5 hover:bg-white/10 text-caption font-semibold uppercase tracking-wider text-white/70"
                       >
                         Gallery <ExternalLink className="w-3 h-3" />
                       </a>
@@ -555,7 +555,7 @@ function FilteringDaySessions({
                           href={b.rawPhotoLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-primary/30 bg-primary/10 hover:bg-primary/20 text-[9px] font-bold uppercase tracking-wider text-primary"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-primary/30 bg-primary/10 hover:bg-primary/20 text-caption font-semibold uppercase tracking-wider text-primary"
                         >
                           5 picks <ExternalLink className="w-3 h-3" />
                         </a>
@@ -563,7 +563,7 @@ function FilteringDaySessions({
                           <button
                             type="button"
                             onClick={() => onReview(b.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-[9px] font-bold uppercase tracking-wider text-amber-300"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-caption font-semibold uppercase tracking-wider text-amber-300"
                           >
                             Review
                           </button>
@@ -579,7 +579,7 @@ function FilteringDaySessions({
       </div>
 
       {bookings.length > 0 && (
-        <div className="p-3.5 border-t border-white/[0.08] text-[11px] text-white/40 text-center bg-white/[0.02]">
+        <div className="p-3.5 border-t border-white/[0.08] text-caption text-white/40 text-center bg-white/[0.02]">
           {bookings.length} session{bookings.length === 1 ? '' : 's'} · filtering status by booking
         </div>
       )}

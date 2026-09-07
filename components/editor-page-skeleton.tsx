@@ -28,7 +28,7 @@ function DashboardSkeleton() {
           </div>
         ))}
       </div>
-      <div className={`${adminPanel} space-y-5 p-5`}>
+      <div className={`${adminPanel} space-y-4 p-card`}>
         <SkeletonBar className="h-4 w-40" />
         <div className="grid gap-px overflow-hidden bg-white/[0.06] sm:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -85,15 +85,15 @@ function OnsiteSkeleton() {
     <div className="space-y-5 animate-pulse" aria-label="Loading onsite upload">
       <div className={`${adminPanel} space-y-5 p-5`}>
         <div className="flex flex-col justify-between gap-4 sm:flex-row">
-          <div className="space-y-3"><SkeletonBar className="h-3 w-28" /><SkeletonBar className="h-7 w-96 max-w-[75vw]" /><SkeletonBar className="h-4 w-[min(38rem,80vw)]" /></div>
+          <div className="min-w-0 space-y-3"><SkeletonBar className="h-[18px] w-28" /><SkeletonBar className="h-16 w-96 max-w-full sm:h-10" /><SkeletonBar className="h-4 w-[min(38rem,100%)]" /></div>
           <SkeletonBar className="h-14 w-52" />
         </div>
-        <SkeletonBar className="h-10 w-full" />
+        <SkeletonBar className="h-11 w-full" />
       </div>
       {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className={`${adminPanel} flex flex-col justify-between gap-5 p-5 sm:flex-row`}>
-          <div className="space-y-3"><SkeletonBar className="h-5 w-48" /><SkeletonBar className="h-3 w-72 max-w-[70vw]" /><SkeletonBar className="h-3 w-40" /><SkeletonBar className="h-4 w-80 max-w-[70vw]" /></div>
-          <div className="flex items-start gap-2"><SkeletonBar className="h-9 w-36" /><SkeletonBar className="h-9 w-32" /></div>
+        <div key={index} className={`${adminPanel} grid gap-4 p-card 2xl:grid-cols-2 2xl:items-center`}>
+          <div className="min-w-0 space-y-3"><SkeletonBar className="h-6 w-48 max-w-full" /><SkeletonBar className="h-[18px] w-72 max-w-full" /><SkeletonBar className="h-[18px] w-40" /><SkeletonBar className="h-[18px] w-80 max-w-full" /></div>
+          <div className="flex flex-wrap items-start gap-2"><SkeletonBar className="h-11 w-36" /><SkeletonBar className="h-11 w-24" /><SkeletonBar className="h-11 w-32" /><SkeletonBar className="h-11 w-28" /></div>
         </div>
       ))}
     </div>

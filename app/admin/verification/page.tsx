@@ -268,7 +268,7 @@ export default function PaymentVerificationQueue() {
                 className={`${adminInput} pl-11`}
               />
             </div>
-            <p className="text-[11px] text-white/45 mt-3">
+            <p className="text-caption text-white/45 mt-3">
               Showing <span className="font-semibold text-white/70">{visibleBookings.length}</span> of{' '}
               <span className="font-semibold text-white/70">{bookings.length}</span> in queue
             </p>
@@ -292,7 +292,7 @@ export default function PaymentVerificationQueue() {
                       }}
                     >
                       <ReceiptPreview receiptUrl={display.receiptUrl} fill className="h-48" />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold uppercase tracking-widest pointer-events-none">
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold uppercase tracking-label pointer-events-none">
                         View Large Receipt
                       </div>
                     </div>
@@ -301,25 +301,25 @@ export default function PaymentVerificationQueue() {
                       <div className="flex justify-between items-start border-b border-white/10 pb-3">
                         <div>
                           <h3 className="font-semibold text-white">{booking.customerName}</h3>
-                          <p className="text-[10px] text-white/40 font-mono mt-0.5">{booking.id}</p>
+                          <p className="text-caption text-white/40 font-mono mt-0.5">{booking.id}</p>
                         </div>
-                        <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase">
+                        <span className="text-caption bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase">
                           {booking.packageName}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-y-2 text-xs">
                         <div>
-                          <p className="text-white/40 font-medium text-[9px] uppercase tracking-wider">Date & Time</p>
+                          <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Date & Time</p>
                           <p className="font-semibold text-white/90">{booking.bookingDate}</p>
-                          <p className="text-white/50 text-[10px] mt-0.5">{booking.bookingTime}</p>
+                          <p className="text-white/50 text-caption mt-0.5">{booking.bookingTime}</p>
                         </div>
                         <div>
-                          <p className="text-white/40 font-medium text-[9px] uppercase tracking-wider">GCash Transaction Ref</p>
+                          <p className="text-white/40 font-medium text-caption uppercase tracking-wider">GCash Transaction Ref</p>
                           <p className="font-mono font-bold text-white/90">{display.transactionRef || 'Not provided'}</p>
                         </div>
                         <div className="col-span-2 border-t border-white/10 pt-3">
-                          <div className="flex justify-between items-center text-[11px]">
+                          <div className="flex justify-between items-center text-caption">
                             <span className="text-white/40 font-medium">Deposit Amount:</span>
                             <span className="font-bold text-[#8FA0FF]">₱{booking.depositAmount.toFixed(2)}</span>
                           </div>
@@ -333,7 +333,7 @@ export default function PaymentVerificationQueue() {
                           type="button"
                           onClick={() => handleRejectForged(display)}
                           disabled={actionLoading}
-                          className="btn-reject-fx w-full bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
+                          className="btn-reject-fx w-full bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
                         >
                           <AlertCircle className="w-3.5 h-3.5" /> Reject — Forged / Not a receipt
                         </button>
@@ -342,7 +342,7 @@ export default function PaymentVerificationQueue() {
                         <button
                           onClick={() => handleApprove(display)}
                           disabled={actionLoading}
-                          className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
+                          className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
                         >
                           <Check className="w-3.5 h-3.5" /> Approve
                         </button>
@@ -353,7 +353,7 @@ export default function PaymentVerificationQueue() {
                             setShowRejectModal(true)
                           }}
                           disabled={actionLoading}
-                          className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
+                          className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
                         >
                           <X className="w-3.5 h-3.5" /> Reject
                         </button>
@@ -393,7 +393,7 @@ export default function PaymentVerificationQueue() {
               <div className="space-y-6">
                 <div className="flex justify-between items-start border-b border-white/10 pb-4">
                   <div>
-                    <span className="text-[9px] text-white/40 font-bold uppercase tracking-widest">Verification Details</span>
+                    <span className="text-caption text-white/40 font-bold uppercase tracking-label">Verification Details</span>
                     <h2 className="text-lg font-bold text-white mt-1">{selectedBooking.customerName}</h2>
                     <p className="text-xs font-mono text-white/40 mt-0.5">Reference: {selectedBooking.id}</p>
                   </div>
@@ -410,19 +410,19 @@ export default function PaymentVerificationQueue() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4 text-xs">
                   <div className="min-w-0">
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Email</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Email</p>
                     <p className="font-semibold text-white/90 break-all">{selectedBooking.customerEmail}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Phone</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Phone</p>
                     <p className="font-semibold text-white/90 break-words">{selectedBooking.customerPhone}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Facebook Name</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Facebook Name</p>
                     <p className="font-semibold text-white/90 break-words">{selectedBooking.customerFbName || 'N/A'}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Facebook Link</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Facebook Link</p>
                     {selectedBooking.customerFbLink ? (
                       <a
                         href={selectedBooking.customerFbLink}
@@ -437,33 +437,33 @@ export default function PaymentVerificationQueue() {
                     )}
                   </div>
                   <div>
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Package / Session</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Package / Session</p>
                     <p className="font-semibold text-[#C4CEFF]">{selectedBooking.packageName}</p>
                   </div>
                   <div>
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Date & Time</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Date & Time</p>
                     <p className="font-semibold text-white/90">{selectedBooking.bookingDate} at {selectedBooking.bookingTime}</p>
                   </div>
                   <div>
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">GCash Transaction Ref</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">GCash Transaction Ref</p>
                     <p className="font-mono font-bold text-white/90 bg-black/40 border border-white/10 px-2 py-0.5 inline-block">{receiptModalBooking.transactionRef || 'Not provided'}</p>
                   </div>
                   <div>
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Total Package Price</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Total Package Price</p>
                     <p className="font-bold text-white/90">₱{selectedBooking.price.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Required Deposit</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Required Deposit</p>
                     <p className="font-bold text-green-400">₱{selectedBooking.depositAmount.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider">Remaining Balance</p>
+                    <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Remaining Balance</p>
                     <p className="font-bold text-red-500">₱{(selectedBooking.price - selectedBooking.depositAmount).toFixed(2)}</p>
                   </div>
                   <GraduationSessionDetails booking={selectedBooking} />
                   {selectedBooking.note && (
                     <div className="col-span-2 border-t border-white/10 pt-3">
-                      <p className="text-white/40 font-medium text-[8px] uppercase tracking-wider mb-1">Pre-shoot Request Note</p>
+                      <p className="text-white/40 font-medium text-caption uppercase tracking-wider mb-1">Pre-shoot Request Note</p>
                       <p className="bg-white/[0.03] p-3 border border-white/10 rounded text-white/70 leading-relaxed italic">
                         "{selectedBooking.note}"
                       </p>
@@ -545,7 +545,7 @@ export default function PaymentVerificationQueue() {
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white">Reject Payment Receipt</h3>
-                <p className="text-[10px] text-white/40 font-mono mt-0.5">Booking ID: {selectedBooking.id}</p>
+                <p className="text-caption text-white/40 font-mono mt-0.5">Booking ID: {selectedBooking.id}</p>
               </div>
               <button
                 type="button"
@@ -565,7 +565,7 @@ export default function PaymentVerificationQueue() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+                <label className="text-caption font-semibold tracking-label text-muted-foreground uppercase">
                   Rejection Reason
                 </label>
                 <select
@@ -580,7 +580,7 @@ export default function PaymentVerificationQueue() {
                   ))}
                 </select>
                 {rejectionReason !== 'other' && (
-                  <p className="text-[10px] text-white/40 leading-relaxed mt-2">
+                  <p className="text-caption text-white/40 leading-relaxed mt-2">
                     Customer will see: &ldquo;{resolveRejectionMessage(rejectionReason)}&rdquo;
                   </p>
                 )}
@@ -588,7 +588,7 @@ export default function PaymentVerificationQueue() {
 
               {rejectionReason === 'other' && (
                 <div className="space-y-2">
-                  <label htmlFor="customReason" className="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+                  <label htmlFor="customReason" className="text-caption font-semibold tracking-label text-muted-foreground uppercase">
                     Custom Reason Details
                   </label>
                   <textarea

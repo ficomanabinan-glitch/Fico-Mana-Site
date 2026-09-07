@@ -2,25 +2,25 @@ import type { Booking } from '@/lib/data-store'
 import type { RawPhotoWorkflowStatus } from '@/lib/booking-display'
 
 export const adminPage = 'w-full min-w-0 space-y-6 font-sans'
-export const adminTitle = 'text-2xl font-bold tracking-tight text-white'
-export const adminSubtitle = 'text-sm text-white/50 mt-1.5 max-w-2xl leading-relaxed'
+export const adminTitle = 'text-page-title font-semibold tracking-heading text-white text-balance'
+export const adminSubtitle = 'text-small text-white/50 mt-2 max-w-2xl leading-relaxed'
 export const adminCard =
-  'rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]'
+  'rounded-card border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]'
 export const adminPanel =
-  'rounded-xl border border-white/10 bg-[#222222] shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
+  'rounded-card border border-white/10 bg-[#222222] shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
 export const adminInput =
-  'w-full rounded-lg bg-white/[0.06] border border-white/20 text-white placeholder:text-white/35 px-3 py-2.5 text-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors'
+  'w-full min-w-0 min-h-11 rounded-control bg-white/[0.06] border border-white/20 text-white placeholder:text-white/35 px-3 py-2 text-body sm:text-small focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors'
 export const adminSelect =
-  'admin-select w-full rounded-lg bg-[#222222] border border-white/10 text-white p-3.5 text-xs font-semibold focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20 [color-scheme:dark] transition-colors'
-export const adminLabel = 'text-[10px] font-bold tracking-widest text-[#C4CEFF] uppercase'
-export const adminSectionLabel = 'text-[10px] font-bold tracking-widest text-white/55 uppercase'
+  'admin-select w-full min-w-0 min-h-11 rounded-control bg-[#222222] border border-white/10 text-white px-3 py-2 text-body sm:text-small font-medium focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20 [color-scheme:dark] transition-colors'
+export const adminLabel = 'text-caption font-semibold tracking-label text-[#C4CEFF] uppercase'
+export const adminSectionLabel = 'text-caption font-semibold tracking-label text-white/55 uppercase'
 export const adminBtnPrimary =
-  'rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-[#1a14e8] active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none'
+  'min-h-11 cursor-pointer rounded-control bg-primary text-primary-foreground text-small font-semibold hover:bg-[#1a14e8] active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none'
 export const adminBtnGhost =
-  'rounded-lg border border-white/10 text-white/70 hover:border-white/25 hover:bg-white/[0.04] hover:text-white text-[10px] font-bold uppercase tracking-wider transition-all active:scale-[0.98]'
-export const adminTableWrap = `${adminPanel} overflow-x-auto`
+  'min-h-11 cursor-pointer rounded-control border border-white/10 text-white/70 hover:border-white/25 hover:bg-white/[0.04] hover:text-white text-caption font-semibold uppercase tracking-label transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none'
+export const adminTableWrap = `${adminPanel} fico-table overflow-x-auto`
 export const adminTableHead =
-  'bg-white/[0.03] border-b border-white/10 text-[10px] font-bold tracking-widest text-white/40 uppercase'
+  'bg-white/[0.03] border-b border-white/10 text-caption font-semibold tracking-label text-white/40 uppercase'
 export const adminTableRow = 'hover:bg-white/[0.03] transition-colors'
 export const adminSpinnerWrap = 'min-h-[400px] w-full py-1'
 export const adminSpinner =

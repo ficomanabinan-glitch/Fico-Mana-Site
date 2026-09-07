@@ -26,7 +26,7 @@ export default function ReceiptPreview({ receiptUrl, alt = 'Payment receipt', cl
     return (
       <div className={`flex flex-col items-center justify-center text-white/50 gap-2 ${className}`}>
         <FileText className="w-12 h-12 text-primary/60" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider">PDF Receipt</span>
+        <span className="text-caption font-semibold uppercase tracking-wider">PDF Receipt</span>
       </div>
     )
   }
@@ -40,7 +40,7 @@ export default function ReceiptPreview({ receiptUrl, alt = 'Payment receipt', cl
         className={fill ? 'absolute inset-0 w-full h-full object-contain bg-black/40' : `w-full h-full object-contain bg-black/40 ${className}`}
       />
       {invalid && (
-        <div className="absolute inset-x-0 bottom-0 bg-red-600/90 text-white text-[9px] uppercase tracking-wider font-bold px-2 py-1.5 flex items-center gap-1 justify-center">
+        <div className="absolute inset-x-0 bottom-0 bg-red-600/90 text-white text-caption uppercase tracking-wider font-bold px-2 py-1.5 flex items-center gap-1 justify-center">
           <AlertCircle className="w-3 h-3 shrink-0" />
           Not a GCash/BPI screenshot
         </div>

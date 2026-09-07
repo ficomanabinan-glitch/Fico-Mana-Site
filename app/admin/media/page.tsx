@@ -406,7 +406,7 @@ export default function WebsiteMediaPage() {
           <Upload className="mt-0.5 size-5 shrink-0 text-[#C4CEFF]" />
           <div>
             <p className="text-xs font-semibold text-white">Changes publish after each upload finishes</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+            <p className="mt-1 text-caption leading-relaxed text-white/50">
               Photos: JPG, PNG, WebP, or AVIF up to 40 MB. Photos are cropped to 4:5, resized, and converted to WebP before upload. Video: MP4 or WebM up to 250 MB.
             </p>
           </div>
@@ -416,7 +416,7 @@ export default function WebsiteMediaPage() {
       {loadError ? (
         <section className="rounded-xl border border-red-500/30 bg-red-500/10 p-4" role="alert">
           <p className="text-xs font-semibold text-red-200">Website media partially unavailable</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-red-100/65">{loadError}</p>
+          <p className="mt-1 text-caption leading-relaxed text-red-100/65">{loadError}</p>
           <button type="button" onClick={() => void load({ refresh: true })} className={`${adminBtnGhost} mt-3 inline-flex items-center gap-2 px-3 py-2`}>
             <RefreshCw className="size-3.5" /> Try Again
           </button>
@@ -555,12 +555,12 @@ function MediaCard({
         ) : slot.kind === 'image' ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 bg-white/[0.025] text-white/30">
             <ImageIcon className="size-10" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Choose a photo to publish</span>
+            <span className="text-caption font-semibold uppercase tracking-wider">Choose a photo to publish</span>
           </div>
         ) : (
           <video key={displayUrl} src={displayUrl} controls playsInline preload="metadata" className="h-full w-full object-cover" aria-label={slot.altText} />
         )}
-        <span className={`absolute left-3 top-3 rounded-md border px-2 py-1 text-[8px] font-bold uppercase tracking-wider backdrop-blur ${slot.isCustom ? 'border-emerald-500/30 bg-emerald-950/75 text-emerald-200' : 'border-white/15 bg-black/65 text-white/60'}`}>
+        <span className={`absolute left-3 top-3 rounded-md border px-2 py-1 text-caption font-semibold uppercase tracking-wider backdrop-blur ${slot.isCustom ? 'border-emerald-500/30 bg-emerald-950/75 text-emerald-200' : 'border-white/15 bg-black/65 text-white/60'}`}>
           {selectedFile ? 'Optimized preview · Not live' : slot.isPlaceholder ? 'New slot · Not live' : slot.isCustom ? 'Custom · Live' : 'Bundled fallback · Live'}
         </span>
       </div>
@@ -569,10 +569,10 @@ function MediaCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white">{slot.label}</p>
-            <p className="mt-1 truncate text-[10px] text-white/35">{selectedFile?.name || slot.fileName} · {formatBytes(selectedFile?.size ?? slot.fileSize)}</p>
+            <p className="mt-1 truncate text-caption text-white/35">{selectedFile?.name || slot.fileName} · {formatBytes(selectedFile?.size ?? slot.fileSize)}</p>
           </div>
           {onRemove && (slot.isPlaceholder || slot.isCustom) ? (
-            <button type="button" onClick={onRemove} disabled={Boolean(busy) || removing} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-400/20 px-2.5 py-2 text-[9px] font-bold uppercase text-red-200/75 transition hover:border-red-300/40 hover:bg-red-400/[0.07] hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-40">
+            <button type="button" onClick={onRemove} disabled={Boolean(busy) || removing} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-400/20 px-2.5 py-2 text-caption font-semibold uppercase text-red-200/75 transition hover:border-red-300/40 hover:bg-red-400/[0.07] hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-40">
               <Trash2 className="size-3" /> {removing ? 'Removing…' : removeLabel}
             </button>
           ) : null}
@@ -613,7 +613,7 @@ function MediaCard({
           {selectedFile ? (
             <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
               <p className="truncate text-xs font-medium text-white/75">{selectedFile.name}</p>
-              <p className="mt-1 text-[10px] text-white/35">{formatBytes(selectedFile.size)}</p>
+              <p className="mt-1 text-caption text-white/35">{formatBytes(selectedFile.size)}</p>
               {!busy ? (
                 <button type="button" onClick={onPublish} className={`${adminBtnPrimary} mt-3 flex w-full items-center justify-center gap-2 px-4 py-3`}>
                   <Upload className="size-3.5" /> {upload?.status === 'failed' ? 'Retry Publish' : 'Publish Replacement'}
@@ -625,7 +625,7 @@ function MediaCard({
 
         {upload ? (
           <div className={`rounded-lg border p-3 ${upload.status === 'failed' ? 'border-red-500/30 bg-red-500/10' : 'border-[#C4CEFF]/20 bg-[#0500D0]/10'}`} role="status">
-            <div className="flex items-center justify-between gap-3 text-[10px]">
+            <div className="flex items-center justify-between gap-3 text-caption">
               <span className={upload.status === 'failed' ? 'text-red-200' : 'text-[#C4CEFF]'}>{upload.message}</span>
               {upload.status === 'uploading' ? <span className="tabular-nums text-white/55">{upload.percent}%</span> : null}
             </div>
@@ -635,7 +635,7 @@ function MediaCard({
               </div>
             ) : null}
             {busy ? (
-              <button type="button" onClick={onCancel} className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-semibold text-white/45 hover:text-white">
+              <button type="button" onClick={onCancel} className="mt-3 inline-flex items-center gap-1.5 text-caption font-semibold text-white/45 hover:text-white">
                 <X className="size-3" /> Cancel upload
               </button>
             ) : null}

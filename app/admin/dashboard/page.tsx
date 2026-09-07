@@ -216,7 +216,7 @@ export default function DashboardOverview() {
                 <Icon className="w-5 h-5" />
               </div>
               <div className="space-y-1 min-w-0">
-                <p className="text-[10px] font-bold tracking-widest text-white/40 uppercase">{kpi.label}</p>
+                <p className="text-caption font-semibold tracking-label text-white/40 uppercase">{kpi.label}</p>
                 <h3 className="text-2xl font-bold text-white tabular-nums">{kpi.value}</h3>
                 <p className="text-xs text-white/45 leading-relaxed">{kpi.desc}</p>
               </div>
@@ -239,14 +239,14 @@ export default function DashboardOverview() {
           <div className="flex flex-wrap justify-between items-center gap-3 border-b border-white/[0.08] pb-3">
             <div className="flex items-center gap-3">
               <h4 className="text-sm font-semibold text-white/85">Today&apos;s Session Schedule</h4>
-              <span className="text-[10px] bg-primary/15 text-primary font-bold px-2.5 py-1 rounded-full uppercase">
+              <span className="text-caption bg-primary/15 text-primary font-bold px-2.5 py-1 rounded-full uppercase">
                 {todaysList.length} Active
               </span>
             </div>
             <button
               type="button"
               onClick={() => downloadDayBookingsExcel(bookings, todayStr)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white/80 hover:text-white hover:border-white/25 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-caption font-semibold uppercase tracking-wider text-white/80 hover:text-white hover:border-white/25 transition-colors"
             >
               <Download className="w-3 h-3" />
               Export Excel
@@ -270,13 +270,13 @@ export default function DashboardOverview() {
                     />
                     <div className="space-y-1 min-w-0">
                       <p className="font-semibold text-white truncate">{b.customerName}</p>
-                      <p className="text-white/40 font-mono text-[10px]">Time: {b.bookingTime}</p>
+                      <p className="text-white/40 font-mono text-caption">Time: {b.bookingTime}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="font-semibold text-primary">{b.packageName}</span>
                     <span
-                      className={`px-2 py-0.5 text-[9px] font-bold uppercase ${
+                      className={`px-2 py-0.5 text-caption font-semibold uppercase ${
                         b.bookingStatus === 'Confirmed'
                           ? 'bg-green-500/15 text-green-400'
                           : b.bookingStatus === 'Pending Verification'
@@ -306,12 +306,12 @@ export default function DashboardOverview() {
                   style={bar.style}
                   title={`₱${bar.revenue.toLocaleString()}`}
                 />
-                <span className="text-[10px] font-medium text-white/40">{bar.day}</span>
+                <span className="text-caption font-medium text-white/40">{bar.day}</span>
               </div>
             ))}
           </div>
 
-          <div className="flex justify-between items-center text-[11px] text-white/50 pt-1">
+          <div className="flex justify-between items-center text-caption text-white/50 pt-1">
             <span>
               {peakDay.revenue > 0 ? `Peak: ${peakDay.day} · ₱${peakDay.revenue.toLocaleString()}` : 'No payments this week'}
             </span>

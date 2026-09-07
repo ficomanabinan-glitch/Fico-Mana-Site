@@ -266,7 +266,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="shrink-0 border-b border-white/[0.08] p-6">
               <Link href="/admin/dashboard" prefetch onClick={() => setPendingHref('/admin/dashboard')}>
                 <h1 className="font-serif text-xl font-bold">FICO MANA</h1>
-                <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-[#C4CEFF]">
+                <p className="mt-1 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
                   Studio Console
                 </p>
               </Link>
@@ -296,9 +296,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </button>
                 <div>
                   <p className="text-xs font-semibold text-white/55">{pageTitle}</p>
-                  <p className="hidden text-[8px] uppercase tracking-[0.18em] text-amber-300/65 sm:block">
-                    Secure production workspace
-                  </p>
                 </div>
               </div>
 
@@ -315,7 +312,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   >
                     <Bell className="size-[18px]" />
                     {unreadCount > 0 ? (
-                      <span className="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                      <span className="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-caption font-semibold text-white">
                         {unreadCount}
                       </span>
                     ) : null}
@@ -331,7 +328,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-white/10 bg-[#222222] shadow-2xl">
                         <div className="flex items-center justify-between border-b border-white/10 p-4">
                           <span className="text-xs font-semibold">Notifications</span>
-                          <span className="text-[10px] text-white/35">{unreadCount} unread</span>
+                          <span className="text-caption text-white/35">{unreadCount} unread</span>
                         </div>
                         <div className="max-h-[340px] divide-y divide-white/5 overflow-y-auto">
                           {notifications.length === 0 ? (
@@ -345,18 +342,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                 }`}
                               >
                                 <p
-                                  className={`text-[9px] font-bold uppercase tracking-wider ${notificationTypeBadge(
+                                  className={`text-caption font-semibold uppercase tracking-wider ${notificationTypeBadge(
                                     notification.type,
                                   )}`}
                                 >
                                   {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?'Shoot reminder':notification.type.replace(/_/g, ' ')}
                                 </p>
                                 <p className="mt-1.5 text-white/70">{notification.message}</p>
-                                {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?<Link href="/admin/shoot-reminders" onClick={()=>setShowNotifDrawer(false)} className="mt-2 mr-3 inline-block cursor-pointer text-[10px] font-semibold text-[#C4CEFF] hover:underline">Review shoot reminders</Link>:null}
+                                {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?<Link href="/admin/shoot-reminders" onClick={()=>setShowNotifDrawer(false)} className="mt-2 mr-3 inline-block cursor-pointer text-caption font-semibold text-[#C4CEFF] hover:underline">Review shoot reminders</Link>:null}
                                 {!notification.isRead ? (
                                   <button
                                     onClick={() => void handleMarkRead(notification.id)}
-                                    className="mt-2 text-[10px] font-semibold text-[#C4CEFF] hover:underline"
+                                    className="mt-2 text-caption font-semibold text-[#C4CEFF] hover:underline"
                                   >
                                     Mark read
                                   </button>

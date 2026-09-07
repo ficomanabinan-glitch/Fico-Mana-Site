@@ -32,7 +32,7 @@ export default function About() {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-primary/40 via-transparent to-transparent" />
             <div className="absolute bottom-6 left-6 right-6">
-              <p className="text-white/90 text-xs tracking-[0.25em] uppercase font-medium">
+              <p className="text-white/90 text-xs tracking-label uppercase font-medium">
                 Est. Fico Mana Studio
               </p>
             </div>

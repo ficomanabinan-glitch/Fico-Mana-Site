@@ -14,7 +14,7 @@ type PortalQrCodeProps = {
 }
 
 const qrAction =
-  'inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 px-3 py-2.5 text-[9px] font-bold uppercase tracking-wider text-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.07] hover:text-white active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70'
+  'inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 px-3 py-2.5 text-caption font-semibold uppercase tracking-wider text-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.07] hover:text-white active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70'
 
 function safeFilePart(value: string) {
   return value.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'client'
@@ -54,14 +54,14 @@ export default function PortalQrCode({
 
   return (
     <section
-      className={cn('border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.05] p-5', className)}
+      className={cn('fico-card border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.05]', className)}
       data-testid="portal-qr-code"
     >
       <div className="flex items-center gap-2 text-[#C4CEFF]">
         <QrCode className="size-4" />
-        <h2 className="text-[9px] font-bold uppercase tracking-[0.16em]">{heading}</h2>
+        <h2 className="text-caption font-semibold uppercase tracking-label">{heading}</h2>
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/45">
+      <p className="mt-2 text-caption leading-relaxed text-white/45">
         Open a phone camera and point it at this code to open {customerName}&apos;s private portal.
       </p>
       <div className="mt-4 flex justify-center rounded-xl bg-white p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)]">
@@ -77,7 +77,7 @@ export default function PortalQrCode({
           style={{ width: '100%', height: 'auto', maxWidth: '288px' }}
         />
       </div>
-      <p className="mt-3 text-center font-mono text-[9px] text-white/35">{bookingId}</p>
+      <p className="mt-3 text-center font-mono text-caption text-white/35">{bookingId}</p>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => void copyLink()} className={qrAction}>
           {message === 'Private link copied.' ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
@@ -88,8 +88,8 @@ export default function PortalQrCode({
           Download QR
         </button>
       </div>
-      {message ? <p className="mt-3 text-center text-[10px] text-white/50" role="status">{message}</p> : null}
-      <p className="mt-4 border-t border-white/[0.08] pt-3 text-[10px] leading-relaxed text-amber-100/65">
+      {message ? <p className="mt-3 text-center text-caption text-white/50" role="status">{message}</p> : null}
+      <p className="mt-4 border-t border-white/[0.08] pt-3 text-caption leading-relaxed text-amber-100/65">
         Keep this code private. Anyone who has the QR can open this client portal while it is active.
       </p>
     </section>

@@ -17,7 +17,7 @@ import BpiQrDisplay from '@/components/bpi-qr-display'
 const inputClass =
   'w-full border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30'
 
-const labelClass = 'text-[10px] font-bold tracking-[0.12em] uppercase text-white'
+const labelClass = 'text-caption font-semibold tracking-[0.12em] uppercase text-white'
 
 const cardClass = 'border border-white/10 bg-white/[0.02] backdrop-blur-sm'
 
@@ -176,7 +176,7 @@ function BookingResubmitForm() {
                       : 'border-red-500/60'
                   }`}
                 >
-                  <p className="font-semibold uppercase tracking-wider text-[9px] text-white mb-1">
+                  <p className="font-semibold uppercase tracking-wider text-caption text-white mb-1">
                     {isForgedRejection('', booking.rejectionReason)
                       ? 'Forged / invalid receipt'
                       : 'Rejection reason'}
@@ -185,7 +185,7 @@ function BookingResubmitForm() {
                     {booking.rejectionReason}
                   </p>
                   {isForgedRejection('', booking.rejectionReason) && (
-                    <p className="text-[10px] text-white/70 mt-2 leading-relaxed">
+                    <p className="text-caption text-white/70 mt-2 leading-relaxed">
                       Upload a genuine BPI payment screenshot from your transaction history — not a studio photo or sample image.
                     </p>
                   )}
@@ -219,7 +219,7 @@ function BookingResubmitForm() {
                     ? 'Upload genuine BPI payment screenshot *'
                     : 'Click to upload new receipt *')}
               </p>
-              <p className="text-[10px] text-white/40 mt-1">JPG, PNG, or PDF · Max 5 MB</p>
+              <p className="text-caption text-white/40 mt-1">JPG, PNG, or PDF · Max 5 MB</p>
               <input
                 ref={fileInputRef}
                 type="file"

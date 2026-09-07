@@ -112,7 +112,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
   return (
     <div className={`${adminPanel} overflow-hidden`}>
       <div className="p-5 border-b border-white/10 bg-white/[0.03]">
-        <p className="text-[10px] font-bold tracking-[0.16em] text-white/40 uppercase">Manage day</p>
+        <p className="text-caption font-semibold tracking-label text-white/40 uppercase">Manage day</p>
         <p className="text-lg font-semibold text-white mt-1">{label}</p>
         <p className="text-xs text-white/50 mt-1">
           Reduce FICO spots or block MANA slots — the studio can stay open either way.
@@ -138,7 +138,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
             )}
           >
             <span className="block text-xs font-semibold">{item.label}</span>
-            <span className="block text-[10px] text-white/40 mt-0.5">{item.hint}</span>
+            <span className="block text-caption text-white/40 mt-0.5">{item.hint}</span>
           </button>
         ))}
       </div>
@@ -208,7 +208,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
                     type="button"
                     onClick={() => setFicoSpotsDraft(n)}
                     className={cn(
-                      'px-3 py-1.5 rounded-md text-[11px] font-medium border transition-colors',
+                      'px-3 py-1.5 rounded-md text-caption font-medium border transition-colors',
                       ficoSpotsDraft === n
                         ? 'border-primary/50 bg-primary/15 text-white'
                         : 'border-white/10 text-white/55 hover:border-white/20 hover:text-white',
@@ -231,7 +231,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
               <button
                 type="button"
                 onClick={() => setShowFicoReason(true)}
-                className="text-[11px] text-white/40 hover:text-white/70 transition-colors"
+                className="text-caption text-white/40 hover:text-white/70 transition-colors"
               >
                 + Add a note
               </button>
@@ -267,7 +267,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
 
             {MANA_SESSION_BLOCKS.map((block) => (
               <div key={block.sessionId}>
-                <p className="text-[11px] font-semibold text-white/70 mb-2">{block.timeLabel}</p>
+                <p className="text-caption font-semibold text-white/70 mb-2">{block.timeLabel}</p>
                 <div className="rounded-xl border border-white/10 overflow-hidden divide-y divide-white/[0.06]">
                   {block.slots.map((slot) => {
                     const blocked = getBlockedSlot(blockedSlots, date, slot.id)
@@ -290,7 +290,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
                       >
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-white">{slot.slotLabel}</p>
-                          <p className="text-[11px] text-white/45 mt-0.5">
+                          <p className="text-caption text-white/45 mt-0.5">
                             {booked > 0 ? 'Client booked' : 'Available'}
                             {blocked?.reason && blocked.reason !== 'Slot unavailable'
                               ? ` · ${blocked.reason}`
@@ -300,7 +300,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
                         <div className="flex items-center gap-2 shrink-0">
                           <span
                             className={cn(
-                              'text-[10px] font-semibold uppercase px-2 py-0.5 rounded',
+                              'text-caption font-semibold uppercase px-2 py-0.5 rounded',
                               blocked
                                 ? 'bg-amber-500/20 text-amber-300'
                                 : full
@@ -317,7 +317,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
                               type="button"
                               onClick={() => handleUnblock(slot.id)}
                               disabled={saving}
-                              className={cn('px-3 py-2 text-[10px]', adminBtnGhost)}
+                              className={cn('px-3 py-2 text-caption', adminBtnGhost)}
                             >
                               {saving ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -333,7 +333,7 @@ export default function AdminDayOperations({ date, bookings, blockedSlots, ficoS
                               type="button"
                               onClick={() => handleBlock(slot.id)}
                               disabled={saving || full}
-                              className="px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-[10px] font-bold uppercase tracking-wider text-amber-200 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                              className="px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-caption font-semibold uppercase tracking-wider text-amber-200 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
                             >
                               {saving ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />

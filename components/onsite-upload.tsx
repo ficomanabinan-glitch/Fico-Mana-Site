@@ -198,19 +198,19 @@ export default function OnsiteUpload({
         onChange={(event) => void picked(event.target.files)}
       />
 
-      <div className={`${adminPanel} space-y-4 p-5`}>
+      <div className={`${adminPanel} space-y-4 p-card`}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#C4CEFF]">
+            <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
               Onsite Upload
             </p>
-            <h1 className="mt-1 text-xl font-semibold">Send every shoot to its assigned Drive folder</h1>
+            <h1 className="mt-2 text-h2 font-semibold tracking-heading text-balance">Send every shoot to its assigned Drive folder</h1>
             <p className="mt-2 max-w-2xl text-xs leading-relaxed text-white/40">
               Choose a date and client, then upload their shoot photos.
             </p>
           </div>
           <label className="space-y-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-white/35">Shoot date</span>
+            <span className="text-caption font-semibold uppercase tracking-wider text-white/35">Shoot date</span>
             <div className="relative">
               <CalendarDays className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/35" />
               <input
@@ -249,7 +249,7 @@ export default function OnsiteUpload({
           <button
             type="button"
             onClick={() => setSearch('')}
-            className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[#C4CEFF] hover:text-white"
+            className="mt-3 text-caption font-semibold uppercase tracking-wider text-[#C4CEFF] hover:text-white"
           >
             Clear search
           </button>
@@ -277,18 +277,18 @@ export default function OnsiteUpload({
                   : 'text-red-300'
 
             return (
-              <article key={job.bookingId} className={`${adminPanel} p-5`}>
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+              <article key={job.bookingId} className={`${adminPanel} p-card`}>
+                <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] 2xl:items-center">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold">{job.customerName}</h2>
-                      <span className={`text-[9px] font-bold uppercase ${driveTone}`}>{driveStatus}</span>
+                      <h2 className="text-card-title font-semibold tracking-heading">{job.customerName}</h2>
+                      <span className={`text-caption font-semibold uppercase ${driveTone}`}>{driveStatus}</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-white/40">
+                    <p className="mt-1 text-caption text-white/40">
                       {date} · {job.bookingTime} · {job.packageName}
                     </p>
-                    <p className="mt-1 font-mono text-[9px] text-white/25">{job.bookingId}</p>
-                    <div className="mt-3 flex flex-wrap gap-4 text-[10px] text-white/40">
+                    <p className="mt-1 font-mono text-caption text-white/25">{job.bookingId}</p>
+                    <div className="mt-3 flex flex-wrap gap-4 text-caption text-white/40">
                       <span>
                         Uploaded files: <strong className="text-white/70">{job.galleryCount}</strong>
                       </span>
@@ -309,7 +309,7 @@ export default function OnsiteUpload({
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-white/55">
+                            <p className="text-caption font-semibold uppercase tracking-wider text-white/55">
                               {state.status === 'complete'
                                 ? 'Upload complete'
                                 : state.status === 'partial'
@@ -318,7 +318,7 @@ export default function OnsiteUpload({
                                     ? 'Verifying uploaded photos'
                                     : 'Uploading RAW photos'}
                             </p>
-                            <p className="mt-1 max-w-sm truncate text-[10px] text-white/35">
+                            <p className="mt-1 max-w-sm truncate text-caption text-white/35">
                               {state.status === 'uploading'
                                 ? `${state.activeFiles.length} active · Up to 3 parallel uploads`
                                 : `${state.uploaded} file${state.uploaded === 1 ? '' : 's'} uploaded`}
@@ -343,7 +343,7 @@ export default function OnsiteUpload({
                             style={{ width: `${overallPercent}%` }}
                           />
                         </div>
-                        <div className="mt-2 flex flex-wrap justify-between gap-2 text-[9px] text-white/35">
+                        <div className="mt-2 flex flex-wrap justify-between gap-2 text-caption text-white/35">
                           <span>
                             {state.uploaded} uploaded · {state.failed.length} failed · {state.total} total
                           </span>
@@ -354,7 +354,7 @@ export default function OnsiteUpload({
                         {state.activeFiles.map(file => {
                           const percent = Math.min(100, Math.round(file.loaded / Math.max(1, file.total) * 100))
                           return <div key={file.index} className="mt-3">
-                            <div className="flex justify-between gap-2 text-[9px] text-white/35">
+                            <div className="flex justify-between gap-2 text-caption text-white/35">
                               <span className="truncate">{file.name}</span>
                               <span className="shrink-0 tabular-nums">{file.verifying ? 'Verifying' : `${percent}%`}</span>
                             </div>
@@ -374,7 +374,7 @@ export default function OnsiteUpload({
                           </div>
                         })}
                         {state.failed.length ? (
-                          <div className="mt-3 text-[9px] leading-relaxed text-amber-200/70">
+                          <div className="mt-3 text-caption leading-relaxed text-amber-200/70">
                             <p>Failed: {state.failed.map((file) => file.name).join(', ')}</p>
                             {state.lastError ? <p className="mt-1">{state.lastError}</p> : null}
                           </div>
@@ -383,7 +383,7 @@ export default function OnsiteUpload({
                     ) : null}
 
                     {job.lastError ? (
-                      <p className="mt-3 inline-flex items-center gap-1.5 text-[10px] text-red-300">
+                      <p className="mt-3 inline-flex items-center gap-1.5 text-caption text-red-300">
                         <AlertTriangle className="size-3" />
                         {job.lastError}
                       </p>
@@ -442,7 +442,7 @@ export default function OnsiteUpload({
                         type="button"
                         disabled={isBusy}
                         onClick={() => void uploadFiles(job.bookingId, state.failed)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[10px] font-bold uppercase text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20 disabled:opacity-35"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-caption font-semibold uppercase text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20 disabled:opacity-35"
                       >
                         <RefreshCw className="size-3.5" />
                         Retry {state.failed.length} Failed

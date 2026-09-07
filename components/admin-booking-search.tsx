@@ -51,7 +51,7 @@ export default function AdminBookingSearch({ bookings }: Props) {
             </p>
           ) : (
             <>
-              <p className="text-[11px] text-white/45">
+              <p className="text-caption text-white/45">
                 {results.length} match{results.length === 1 ? '' : 'es'}
                 {results.length === 12 ? ' (showing first 12)' : ''}
               </p>
@@ -72,7 +72,7 @@ export default function AdminBookingSearch({ bookings }: Props) {
                         {b.transactionRef || 'Not provided'}
                       </span>
                     </p>
-                    <span className={`inline-block mt-1 px-2 py-0.5 text-[9px] font-bold uppercase ${bookingStatusBadge(b.bookingStatus)}`}>
+                    <span className={`inline-block mt-1 px-2 py-0.5 text-caption font-semibold uppercase ${bookingStatusBadge(b.bookingStatus)}`}>
                       {b.bookingStatus}
                     </span>
                   </div>
@@ -80,14 +80,14 @@ export default function AdminBookingSearch({ bookings }: Props) {
                     {b.bookingStatus === 'Pending Verification' && (
                       <Link
                         href="/admin/verification"
-                        className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30 px-3 py-2 hover:bg-amber-500/25"
+                        className="inline-flex items-center gap-1 text-caption font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30 px-3 py-2 hover:bg-amber-500/25"
                       >
                         Verify <ArrowRight className="w-3 h-3" />
                       </Link>
                     )}
                     <Link
                       href={`/admin/bookings?search=${encodeURIComponent(b.id)}`}
-                      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider border border-white/15 text-white/80 px-3 py-2 hover:border-white/30"
+                      className="inline-flex items-center gap-1 text-caption font-semibold uppercase tracking-wider border border-white/15 text-white/80 px-3 py-2 hover:border-white/30"
                     >
                       Open record <ExternalLink className="w-3 h-3" />
                     </Link>

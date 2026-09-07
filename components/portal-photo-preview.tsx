@@ -49,7 +49,7 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
       <h3 id="portal-preview-title" className="min-w-0 truncate text-xs font-semibold">{file.fileName}</h3>
       <div className="flex shrink-0 items-center gap-2">
         <button type="button" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom(value => Math.max(1, value - 1))} className="rounded-lg border border-white/15 p-2 hover:bg-white/10 disabled:opacity-30"><ZoomOut className="size-4"/></button>
-        <span className="w-10 text-center text-[10px]">{zoom * 100}%</span>
+        <span className="w-10 text-center text-caption">{zoom * 100}%</span>
         <button type="button" aria-label="Zoom in" disabled={zoom >= 3} onClick={() => setZoom(value => Math.min(3, value + 1))} className="rounded-lg border border-white/15 p-2 hover:bg-white/10 disabled:opacity-30"><ZoomIn className="size-4"/></button>
         <button type="button" autoFocus aria-label="Close photo preview" onClick={onClose} className="rounded-lg border border-white/15 p-2 hover:bg-white/10"><X className="size-4"/></button>
       </div>
@@ -62,6 +62,6 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
           className="block object-contain" style={{ width: `${zoom * 100}%`, maxWidth: 'none', maxHeight: zoom === 1 ? '75dvh' : undefined }}/>
       }
     </div>
-    <p className="p-3 text-center text-[10px] text-white/40">{zoom > 1 ? 'Scroll to inspect the photo. Use − to fit it back on screen.' : 'Full preview · Use + to inspect details.'}</p>
+    <p className="p-3 text-center text-caption text-white/40">{zoom > 1 ? 'Scroll to inspect the photo. Use − to fit it back on screen.' : 'Full preview · Use + to inspect details.'}</p>
   </dialog>
 }
