@@ -1028,8 +1028,9 @@ async function portalRecord(publicId: string) {
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Portal not found.')
+  if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) throw new Error('Portal expired.')
+  if (data.status === 'expired') throw new Error('Portal expired.')
   if (data.status !== 'active') throw new Error('Portal disabled.')
-  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) throw new Error('Portal expired.')
   return { admin, portal: data }
 }
 
@@ -1128,6 +1129,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       amountPaid: (paymentsResult.data || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
     },
     portalId: String(portal.public_id),
+    shareUrl: portalUrl(publicId),
     warnings: [...new Set(warnings)],
     selection: selectionResult.data
       ? {

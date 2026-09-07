@@ -32,12 +32,15 @@ export async function POST(request: Request) {
       .eq('public_id', publicId)
       .maybeSingle()
 
-    if (!portal || portal.status !== 'active') {
-      return NextResponse.json({ error: 'Portal access is disabled.' }, { status: 403 })
-    }
-    if (portal.expires_at && new Date(portal.expires_at).getTime() <= Date.now()) {
+    if (portal?.expires_at && new Date(portal.expires_at).getTime() <= Date.now()) {
       await admin.from('client_portals').update({ status: 'expired' }).eq('public_id', publicId)
       return NextResponse.json({ error: 'Portal access has expired.' }, { status: 403 })
+    }
+    if (!portal || portal.status === 'expired') {
+      return NextResponse.json({ error: 'Portal access has expired.' }, { status: 403 })
+    }
+    if (portal.status !== 'active') {
+      return NextResponse.json({ error: 'Portal access is disabled.' }, { status: 403 })
     }
 
     const response = NextResponse.json({ ok: true })

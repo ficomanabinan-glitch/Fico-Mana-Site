@@ -35,6 +35,8 @@ export async function GET() {
     const items = (bookings || []).map((booking) => {
       const state = stateMap.get(String(booking.id))
       const portal = portalMap.get(String(booking.id))
+      const portalExpiresAt = portal?.expires_at ? Date.parse(String(portal.expires_at)) : Number.NaN
+      const portalExpired = Number.isFinite(portalExpiresAt) && portalExpiresAt <= Date.now()
       return {
         bookingId: String(booking.id),
         customerName: String(booking.customer_name),
@@ -56,7 +58,7 @@ export async function GET() {
           ? {
               id: portal.id,
               publicId: portal.public_id,
-              status: portal.status,
+              status: portalExpired ? 'expired' : portal.status,
               expiresAt: portal.expires_at,
               createdAt: portal.created_at,
               lastAccessedAt: portal.last_accessed_at,

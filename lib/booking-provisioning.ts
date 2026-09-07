@@ -29,6 +29,12 @@ export type ProvisioningSnapshot = {
 
 type Actor = { type?: 'system' | 'staff' | 'webhook'; id?: string | null }
 
+function portalExpiryPassed(value: unknown) {
+  if (typeof value !== 'string' || !value) return false
+  const expiresAt = Date.parse(value)
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now()
+}
+
 async function audit(
   admin: SupabaseClient,
   bookingId: string,
@@ -150,6 +156,8 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
     .select('id,public_id,status,expires_at')
     .eq('booking_id', bookingId)
     .maybeSingle()
+  const portalExpired = portalExpiryPassed(portal?.expires_at)
+  const portalActive = portal?.status === 'active' && !portalExpired
 
   return {
     bookingId,
@@ -161,8 +169,8 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
     driveClientFolderUrl: row.drive_client_folder_url || undefined,
     clientPortalId: portal?.id ? String(portal.id) : undefined,
     clientPortalPublicId: portal?.public_id ? String(portal.public_id) : undefined,
-    clientPortalStatus: portal?.status || undefined,
-    clientPortalUrl: portal?.public_id ? portalUrl(String(portal.public_id)) : undefined,
+    clientPortalStatus: portalExpired ? 'expired' : portal?.status || undefined,
+    clientPortalUrl: portal?.public_id && portalActive ? portalUrl(String(portal.public_id)) : undefined,
     provisionedAt: row.provisioned_at || undefined,
     lastError: row.last_error || undefined,
     lastRetryAt: row.last_retry_at || undefined,
@@ -303,13 +311,35 @@ export async function disableClientPortal(bookingId: string, actor: Actor = {}) 
 export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const admin = getSupabaseAdmin()
   if (!admin) throw new Error('Database admin client unavailable.')
+  const now = new Date()
+  const { data: portal, error: portalError } = await admin
+    .from('client_portals')
+    .select('id,status,expires_at')
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (portalError) throw new Error(portalError.message)
+  if (!portal) throw new Error('Client Portal not found.')
+  const patch: Record<string, unknown> = { status: 'active', updated_at: now.toISOString() }
+  if (portal.status === 'expired' || portalExpiryPassed(portal.expires_at)) {
+    const { data: settings } = await admin
+      .from('google_drive_settings')
+      .select('portal_expiry_days')
+      .eq('id', 1)
+      .maybeSingle()
+    const days = Math.max(1, Number(settings?.portal_expiry_days || 30))
+    const renewedUntil = new Date(now)
+    renewedUntil.setUTCDate(renewedUntil.getUTCDate() + days)
+    patch.expires_at = renewedUntil.toISOString()
+  }
   const { data, error } = await admin
     .from('client_portals')
-    .update({ status: 'active', updated_at: new Date().toISOString() })
+    .update(patch)
     .eq('booking_id', bookingId)
     .select('id')
   if (error) throw new Error(error.message)
-  if (data?.length) await audit(admin, bookingId, 'portal_enabled', actor)
+  if (data?.length) await audit(admin, bookingId, 'portal_enabled', actor, {
+    metadata: { expiresAt: typeof patch.expires_at === 'string' ? patch.expires_at : portal.expires_at },
+  })
 }
 
 export async function setPortalExpiryFromDelivery(bookingId: string, deliveredAt: string) {
