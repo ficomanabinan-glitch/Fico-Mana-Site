@@ -1,9 +1,10 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   getBookings,
+  deleteBooking,
   getBookingPackages,
   addNotification,
   uploadReceipt,
@@ -32,7 +33,6 @@ import { enrichBookingDisplay, filterBookings } from '@/lib/booking-display'
 import { buildDayPriorityMap, getDayPriorityCount } from '@/lib/booking-priority'
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import AdminReceiptActions from '@/components/admin-receipt-actions'
-import { signalSalesDataChanged } from '@/lib/sales-read-cache'
 import BookingPrioritySelect from '@/components/booking-priority-select'
 import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
 import { 
@@ -144,10 +144,10 @@ function BookingsManagement() {
   const packageSlotTypeFor = (packageId: string) => allPackages.find((pkg) => pkg.id === packageId)?.slotType
   const walkInNeedsSlot = usesMakeupSlots(walkInPackage, selectedWalkInPackage?.slotType)
 
-  const fetchBookings = async (silent = false) => {
+  const fetchBookings = useCallback(async (silent = false, force = !silent) => {
     if (!silent) setRefreshing(true)
     try {
-      const data = await getBookings()
+      const data = await getBookings({ force })
       setBookings(data)
       setFilteredBookings(data)
     } catch (err) {
@@ -157,7 +157,7 @@ function BookingsManagement() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     setSearchTerm(searchParams.get('search')?.trim() ?? '')
@@ -165,7 +165,7 @@ function BookingsManagement() {
   }, [searchParams])
 
   useEffect(() => {
-    fetchBookings(true)
+    fetchBookings(true, true)
     getBookingPackages().then((pkgs) => {
       setAllPackages(pkgs)
       const eligible = pkgs.filter(isWalkInEligiblePackage)
@@ -185,6 +185,14 @@ function BookingsManagement() {
   }, [walkInCategory, walkInPackagesInCategory, walkInPackage])
 
   useOnAdminDbSync(() => fetchBookings(true))
+
+  useEffect(() => {
+    const refreshVisibleList = () => {
+      if (document.visibilityState === 'visible') void fetchBookings(true, true)
+    }
+    document.addEventListener('visibilitychange', refreshVisibleList)
+    return () => document.removeEventListener('visibilitychange', refreshVisibleList)
+  }, [fetchBookings])
 
   const handleWalkInSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -491,23 +499,19 @@ function BookingsManagement() {
     if (!deleteTarget) return
     setDeleteLoading(true)
     try {
-      const res = await fetch(`/api/bookings/${encodeURIComponent(deleteTarget.id)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: deleteReason, notes: deleteNotes.trim() || undefined }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error((data as { error?: string }).error || 'Failed to delete booking.')
-      signalSalesDataChanged()
+      const { alreadyDeleted } = await deleteBooking(deleteTarget.id, deleteReason, deleteNotes)
+      setBookings(current => current.filter(booking => booking.id !== deleteTarget.id))
+      setFilteredBookings(current => current.filter(booking => booking.id !== deleteTarget.id))
 
       if (selectedBooking?.id === deleteTarget.id) setSelectedBooking(null)
       setShowDeleteModal(false)
       setDeleteTarget(null)
-      fetchBookings(true)
+      void fetchBookings(true, true)
       toast.success(
-        'Booking deleted',
-        `${deleteTarget.id} removed (${deleteReason === 'admin_error' ? 'Admin error' : 'Client error'}).`,
+        alreadyDeleted ? 'Booking list updated' : 'Booking deleted',
+        alreadyDeleted
+          ? `${deleteTarget.id} was already deleted. The old copy has been removed from this list.`
+          : `${deleteTarget.id} removed (${deleteReason === 'admin_error' ? 'Admin error' : 'Client error'}).`,
       )
     } catch (err) {
       console.error(err)

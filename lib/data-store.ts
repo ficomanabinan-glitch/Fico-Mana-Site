@@ -99,6 +99,7 @@ const NOTIFS_AT_KEY = 'ficomana_notifications_cached_at'
 const ADMIN_CACHE_TTL_MS = 90_000
 
 let bookingsInFlight: Promise<Booking[]> | null = null
+let bookingsGeneration = 0
 let notificationsInFlight: Promise<Notification[]> | null = null
 let blockedSlotsMemory: { data: BlockedSlot[]; at: number } | null = null
 let blockedSlotsInFlight: Promise<BlockedSlot[]> | null = null
@@ -117,6 +118,8 @@ function cachedAt(key: string) {
 }
 
 function invalidateAdminReadCaches() {
+  bookingsGeneration += 1
+  bookingsInFlight = null
   if (typeof window !== 'undefined') {
     localStorage.setItem(BOOKINGS_AT_KEY, '0')
     localStorage.setItem(NOTIFS_AT_KEY, '0')
@@ -187,11 +190,14 @@ export async function getBookingPackages(category?: string): Promise<BookingPack
 
 async function fetchBookingsFresh(signalUpdate = false): Promise<Booking[]> {
   if (bookingsInFlight) return bookingsInFlight
-  bookingsInFlight = (async () => {
+  const generation = bookingsGeneration
+  const work = (async () => {
     try {
       const res = await fetch('/api/bookings', { cache: 'no-store', credentials: 'include' })
       if (res.ok) {
         const data = (await res.json()) as Booking[]
+        // A read started before a mutation must never restore an old row.
+        if (generation !== bookingsGeneration) return getCachedBookings()
         cacheBookings(data)
         if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
         return data
@@ -206,22 +212,64 @@ async function fetchBookingsFresh(signalUpdate = false): Promise<Booking[]> {
     }
     return getCachedBookings()
   })()
+  bookingsInFlight = work
   try {
-    return await bookingsInFlight
+    return await work
   } finally {
-    bookingsInFlight = null
+    if (bookingsInFlight === work) bookingsInFlight = null
   }
 }
 
 /** Staff: all bookings from API. Recent cached data renders immediately while stale data refreshes quietly. */
-export async function getBookings(): Promise<Booking[]> {
+export async function getBookings(options: { force?: boolean } = {}): Promise<Booking[]> {
+  if (options.force) return fetchBookingsFresh(false)
   const cached = getCachedBookings()
-  if (cached.length > 0 && cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
+  // An authoritative empty list is cached too (including after the last deletion).
+  if (cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
   if (cached.length > 0) {
     void fetchBookingsFresh(true)
     return cached
   }
   return fetchBookingsFresh(false)
+}
+
+/** Drop only a server-confirmed missing/deleted booking, then notify mounted views. */
+function forgetBooking(id: string) {
+  invalidateAdminReadCaches()
+  cacheBookings(getCachedBookings().filter(booking => booking.id !== id))
+  signalSalesDataChanged()
+  signalAdminCacheUpdated()
+}
+
+/** Same-origin tabs share localStorage, but not in-flight requests or React state. */
+export function receiveBookingCacheChange(event: StorageEvent) {
+  if (event.storageArea !== localStorage || (event.key !== BOOKINGS_KEY && event.key !== null)) return
+  bookingsGeneration += 1
+  bookingsInFlight = null
+  // Do not write storage here: that would create a cross-tab refresh loop.
+  signalSalesDataChanged()
+  signalAdminCacheUpdated()
+}
+
+export async function deleteBooking(
+  id: string,
+  reason: 'admin_error' | 'client_error',
+  notes?: string,
+): Promise<{ alreadyDeleted: boolean }> {
+  const res = await fetch(`/api/bookings/${encodeURIComponent(id)}`, {
+    method: 'DELETE', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason, notes: notes?.trim() || undefined }),
+  })
+  const data = await res.json().catch(() => ({})) as { error?: string }
+  // Only the authenticated route's exact not-found response is a safe no-op.
+  // Network failures, login failures, other 404s and server errors retain the row.
+  const alreadyDeleted = res.status === 404 && data.error === 'Booking not found.'
+  if (!res.ok && !alreadyDeleted) {
+    throw new Error(data.error || 'Could not delete the booking. Try: refresh the list and try again.')
+  }
+  forgetBooking(id)
+  return { alreadyDeleted }
 }
 
 /** Public availability for booking calendar (no PII). */
@@ -403,6 +451,13 @@ export async function getBooking(id: string): Promise<Booking | null> {
       credentials: 'include',
     })
     if (res.ok) return (await res.json()) as Booking
+    if (res.status === 404) {
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (data.error === 'Not found') {
+        forgetBooking(id)
+        return null
+      }
+    }
   } catch (error) {
     console.error(`getBooking failed for ${id}:`, error)
   }
@@ -523,6 +578,9 @@ export async function saveBooking(booking: Booking): Promise<{ booking: Booking;
 
   const data = (await res.json()) as Booking & { emailErrors?: string[] }
   const { emailErrors = [], ...saved } = data
+  // Do not let a list fetched before this save overwrite the saved record.
+  bookingsGeneration += 1
+  bookingsInFlight = null
   const cached = getCachedBookings()
   const idx = cached.findIndex((b) => b.id === saved.id)
   if (idx >= 0) cached[idx] = saved

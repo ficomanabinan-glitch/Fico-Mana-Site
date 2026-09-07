@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { syncAdminDatabase } from '@/lib/data-store'
+import { receiveBookingCacheChange, syncAdminDatabase } from '@/lib/data-store'
 import { signalSalesDataChanged } from '@/lib/sales-read-cache'
 
 /** Default poll — 3 min keeps Free Fluid CPU low when Filtering/admin stays open. */
@@ -89,9 +89,11 @@ export function AdminAutoSyncProvider({
     syncNow()
     arm()
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('storage', receiveBookingCacheChange)
     return () => {
       clear()
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('storage', receiveBookingCacheChange)
     }
   }, [enabled, syncNow, intervalMs])
 

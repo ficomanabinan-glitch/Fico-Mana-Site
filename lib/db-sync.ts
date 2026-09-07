@@ -59,5 +59,7 @@ export async function loadSyncedBookings(client?: SupabaseClient | null): Promis
     throw new Error('Booking records are temporarily unavailable.')
   }
 
-  return (await listBookingsFromDb(db)) ?? []
+  const bookings = await listBookingsFromDb(db)
+  if (!bookings) throw new Error('Booking records are temporarily unavailable.')
+  return bookings
 }

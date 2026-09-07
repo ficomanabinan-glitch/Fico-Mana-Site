@@ -130,7 +130,7 @@ export async function DELETE(
     const booking = isSupabaseConfigured()
       ? await (async () => {
           const admin = getSupabaseAdmin()
-          if (!admin) return null
+          if (!admin) throw new Error('Booking records are temporarily unavailable.')
           return getBookingFromDb(admin, id)
         })()
       : await getBookingById(id)

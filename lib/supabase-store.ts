@@ -23,7 +23,8 @@ export async function listBookingsFromDb(client: SupabaseClient): Promise<Bookin
 export async function getBookingFromDb(client: SupabaseClient, id: string): Promise<Booking | null> {
   if (!isSupabaseConfigured()) return null
   const { data, error } = await client.from('bookings').select('*').eq('id', id).maybeSingle()
-  if (error || !data) return null
+  if (error) throw new Error('Booking records are temporarily unavailable. Try: refresh the page and try again.')
+  if (!data) return null
   return mapDbBookingToModel(data)
 }
 export async function deleteBookingFromDb(client: SupabaseClient, id: string): Promise<boolean> {
