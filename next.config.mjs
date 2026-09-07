@@ -89,6 +89,17 @@ const nextConfig = {
         headers: securityHeaders,
       },
       {
+        // Versioned, committed social cards are plain files, not image functions.
+        // Publish a new filename when the artwork changes; never overwrite it.
+        source: '/social/:file*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
         source: '/breanna-reel.mp4',
         headers: [
           {

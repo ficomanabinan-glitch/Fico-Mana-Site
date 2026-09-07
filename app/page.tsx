@@ -11,6 +11,9 @@ import FAQ from '@/components/faq'
 import Contact from '@/components/contact'
 import DeferredBooking from '@/components/deferred-booking'
 import Footer from '@/components/footer'
+import { homepageMetadata } from '@/lib/site-metadata'
+
+export const metadata = homepageMetadata
 
 export default function Home() {
   return (
