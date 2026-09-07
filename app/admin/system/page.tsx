@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Cloud, Database, ExternalLink, Mail, PackageOpen, ShieldCheck } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import ShootReminderSettings from '@/components/shoot-reminder-settings'
+import EmailTestSettings from '@/components/email-test-settings'
 import { adminBtnGhost, adminPage, adminPanel } from '@/lib/admin-ui'
 
 type DriveHealth = {
@@ -16,7 +17,7 @@ type DriveHealth = {
 
 type EmailHealth = {
   ok: boolean
-  fromEmail?: string | null
+  fromAddress?: string | null
   error?: string
 }
 
@@ -90,9 +91,11 @@ export default function SystemPage() {
           title="Email"
           value={loading ? 'Checking…' : email?.ok ? 'Configured' : 'Action needed'}
           tone={email?.ok ? 'good' : 'warning'}
-          detail={email?.ok ? `Transactional delivery emails are enabled${email.fromEmail ? ` from ${email.fromEmail}` : ''}.` : 'Configure Resend on the production deployment to send delivery notifications.'}
+          detail={email?.ok ? `API key is present${email.fromAddress ? ` for ${email.fromAddress}` : ''}. Use the test below to verify delivery.` : 'Configure Resend on the production deployment to send delivery notifications.'}
         />
       </div>
+
+      <EmailTestSettings configured={!loading && !!email?.ok} fromAddress={email?.fromAddress} />
 
       <ShootReminderSettings />
 

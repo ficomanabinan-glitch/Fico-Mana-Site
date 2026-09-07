@@ -21,7 +21,7 @@ export function getResendFromAddress(): string {
     return 'FICO MANA Studio <onboarding@resend.dev>'
   }
 
-  return 'FICO MANA Studio <bookings@ficomana.studio>'
+  return 'FICO MANA Studio <bookings@updates.ficomana.com>'
 }
 
 /** Safe prefix for diagnostics (never log full key). */
@@ -55,7 +55,7 @@ export function getResendDiagnostics(): ResendDiagnostics {
   const fromAddress = getResendFromAddress()
   const domain = fromAddress.match(/<([^>]+)>/)?.[1] ?? fromAddress
 
-  let hint = 'Ready to send.'
+  let hint = 'API key is present. Send a test email to verify acceptance and delivery.'
   if (!configured) {
     hint = 'RESEND_API_KEY is missing or invalid at runtime — emails are not sent to Resend.'
   } else if (!domain.includes('resend.dev') && !process.env.RESEND_FROM_EMAIL) {

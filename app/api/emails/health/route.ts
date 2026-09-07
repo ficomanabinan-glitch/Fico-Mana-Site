@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
-import { getResendDiagnostics, isResendConfigured } from '@/lib/resend-config'
-import { sendEmail } from '@/lib/email'
+import { getResendClient, getResendDiagnostics, getResendFromAddress } from '@/lib/resend-config'
+import { buildEmailHealthCheck, emailHealthRequest, sendEmailHealthCheck } from '@/lib/email-health'
+import { enforceApiRateLimit } from '@/lib/security/api-rate-limit'
+import { privateNoStoreHeaders } from '@/lib/security/request-security'
 
-/** Staff-only: verify Resend env + optionally send a test email. */
+/** Configuration alone is not evidence of acceptance or inbox delivery. */
 export async function GET() {
+  const headers = privateNoStoreHeaders()
   try {
     const { user, error: authError } = await requireStaffAuth()
     if (authError) return authError
@@ -14,61 +17,43 @@ export async function GET() {
       ok: diagnostics.configured,
       staffEmail: user?.email ?? null,
       ...diagnostics,
-    })
-  } catch (error) {
-    console.error('GET /api/emails/health', error)
-    return NextResponse.json({ ok: false, error: 'Health check failed' }, { status: 500 })
+    }, { headers })
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Health check failed. Try: refresh the page and check your admin session.' }, { status: 500, headers })
   }
 }
 
 export async function POST(request: Request) {
+  const headers = privateNoStoreHeaders()
   try {
     const { user, error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
-    if (!isResendConfigured()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'RESEND_API_KEY is not available at runtime. Set it on Vercel and redeploy.',
-          diagnostics: getResendDiagnostics(),
-        },
-        { status: 503 },
-      )
-    }
+    if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers })
 
-    const body = (await request.json().catch(() => ({}))) as { to?: string }
-    const to = body.to?.trim() || user?.email
-    if (!to) {
-      return NextResponse.json({ success: false, error: 'No recipient email' }, { status: 400 })
-    }
+    const raw = await request.text()
+    if (raw.length > 1024) return NextResponse.json({ success: false, error: 'Request is too large.' }, { status: 413, headers })
+    let body: unknown
+    try { body = JSON.parse(raw) } catch { body = null }
+    const input = emailHealthRequest.safeParse(body)
+    if (!input.success) return NextResponse.json({ success: false, error: 'Invalid test request. Try: enter one valid email address and refresh the page.' }, { status: 400, headers })
 
-    const result = await sendEmail({
-      bookingId: 'FM-HEALTHCHECK',
-      to,
-      subject: 'FICO MANA — Resend production test',
-      html: `
-        <p>This is a test email from your FICO MANA production deployment.</p>
-        <p>If you received this, <strong>Resend is working</strong>.</p>
-        <p style="font-size:12px;color:#666;">Sent at ${new Date().toISOString()}</p>
-      `,
-    })
+    const limited = await enforceApiRateLimit(request, {
+      name: 'email-health-test', limit: 5, windowSeconds: 3600, failClosed: true,
+    }, [user.id])
+    if (limited) return limited
 
-    if (!result.success) {
-      return NextResponse.json(
-        { success: false, error: result.error, diagnostics: getResendDiagnostics() },
-        { status: 502 },
-      )
-    }
+    const resend = getResendClient()
+    if (!resend) return NextResponse.json({ success: false, error: 'Email service is not configured. Try: set RESEND_API_KEY in Vercel and redeploy.' }, { status: 503, headers })
 
-    return NextResponse.json({
-      success: true,
-      resendId: result.resendId,
-      to,
-      diagnostics: getResendDiagnostics(),
-    })
+    const message = buildEmailHealthCheck(getResendFromAddress(), user.id, input.data)
+    const result = await sendEmailHealthCheck(message, (payload, options) => resend.emails.send(payload, options))
+    return NextResponse.json(result, { headers })
   } catch (error) {
-    console.error('POST /api/emails/health', error)
-    return NextResponse.json({ success: false, error: 'Test send failed' }, { status: 500 })
+    // Never expose SDK/transport details or report an accepted message as a booking-log failure.
+    const message = error instanceof Error && error.message.startsWith('Resend did not confirm acceptance.')
+      ? error.message
+      : 'Email result could not be confirmed. Try: check Resend email logs, then retry this same request.'
+    return NextResponse.json({ success: false, error: message }, { status: 502, headers })
   }
 }
