@@ -51,3 +51,15 @@ test('report and system labels describe business records and keep truthful email
   assert.doesNotMatch(booking, /(?:save|delete) booking (?:to|from) database/)
   assert.doesNotMatch(googleConnection, /throw new Error\('(?:OAuth|Google did not return an offline refresh token)/)
 })
+
+test('admin pages no longer render the storage subscription Ops Note', async () => {
+  for (const file of [...await uiFiles('app'), ...await uiFiles('components')]) {
+    const source = await readFile(file, 'utf8')
+    assert.doesNotMatch(source, /AdminOpsNotes|admin-ops-notes|Ops Note|Monthly storage subscription \(email\)/, file)
+  }
+  const skeleton = await readFile('components/admin-page-skeleton.tsx', 'utf8')
+  const dashboard = skeleton.split('function DashboardSkeleton()')[1].split('function BookingsSkeleton()')[0]
+  assert.doesNotMatch(dashboard, /h-4 w-72 max-w-full/)
+  assert.match(dashboard, /h-11 w-full/)
+  assert.match(dashboard, /length: 6/)
+})

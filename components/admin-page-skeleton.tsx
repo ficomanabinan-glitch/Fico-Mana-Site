@@ -25,14 +25,6 @@ function DashboardSkeleton() {
     <div className="space-y-6 animate-pulse" aria-label="Loading dashboard">
       <HeaderSkeleton />
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4 flex items-center justify-between gap-4">
-        <div className="space-y-2 flex-1">
-          <Bar className="h-3 w-28" />
-          <Bar className="h-4 w-72 max-w-full" />
-        </div>
-        <Bar className="h-9 w-24" />
-      </div>
-
       <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
         <Bar className="h-11 w-full" />
       </div>
