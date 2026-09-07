@@ -7,6 +7,7 @@ function shouldDisableCaching(request: NextRequest) {
   if (pathname.startsWith('/api/')) return true
   return (
     pathname.startsWith('/admin') ||
+    pathname.startsWith('/newadmin') ||
     pathname.startsWith('/editor') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/portal/') ||

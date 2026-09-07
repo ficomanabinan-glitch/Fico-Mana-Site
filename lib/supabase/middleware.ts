@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isAdminHost, isAdminUser, isEditorHost } from '@/lib/auth/admin'
 import { getSupabaseUrl, getSupabaseKey } from '@/lib/supabase/env'
+import { isNewAdminHost, newAdminAlias } from '@/lib/new-admin/routing'
 
 const INQUIRY_LIMIT = 20
 const INQUIRY_WINDOW_SECONDS = 24 * 60 * 60
@@ -34,6 +35,7 @@ function isStaticAsset(pathname: string) {
 function isAdminHostPassThrough(pathname: string) {
   return (
     pathname.startsWith('/admin') ||
+    pathname === '/newadmin' || pathname.startsWith('/newadmin/') ||
     pathname.startsWith('/api/') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next/') ||
@@ -54,6 +56,8 @@ function adminSubdomainAlias(request: NextRequest) {
 function maybeEnforceAdminSubdomain(request: NextRequest) {
   if (process.env.ADMIN_ENFORCE_SUBDOMAIN !== 'true') return null
   if (isAdminHost(request.headers.get('host'))) return null
+  // The new console reuses the existing host-local sign-in and MFA pages.
+  if (isNewAdminHost(request.headers.get('host')) && ['/admin', '/admin/mfa'].includes(request.nextUrl.pathname)) return null
   if (!request.nextUrl.pathname.startsWith('/admin')) return null
 
   const url = request.nextUrl.clone()
@@ -158,6 +162,12 @@ async function enforceInquiryRateLimit(request: NextRequest) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const newAlias = newAdminAlias(request.headers.get('host'), request.nextUrl.pathname)
+  if (newAlias) {
+    const url = request.nextUrl.clone()
+    url.pathname = newAlias
+    return NextResponse.redirect(url)
+  }
   const editorAlias = editorSubdomainAlias(request)
   if (editorAlias) return editorAlias
 
@@ -172,7 +182,7 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl
   const isAdminLogin = pathname === '/admin'
-  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/newadmin' || pathname.startsWith('/newadmin/')
   const isEditorLogin = pathname === '/editor/login'
   const isEditorRoute = pathname === '/editor' || pathname.startsWith('/editor/')
   const isFilteringRoute = pathname === '/filtering' || pathname.startsWith('/filtering/')

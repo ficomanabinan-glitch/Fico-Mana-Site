@@ -4,6 +4,7 @@ const DEFAULT_PRODUCTION_ORIGINS = [
   'https://www.ficomana.com',
   'https://admin.ficomana.com',
   'https://editor.ficomana.com',
+  'https://newadmin.ficomana.com',
 ]
 
 function normalizedOrigin(value: string | null | undefined) {
