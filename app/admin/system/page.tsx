@@ -6,6 +6,7 @@ import { Cloud, Database, ExternalLink, Mail, ShieldCheck } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import ShootReminderSettings from '@/components/shoot-reminder-settings'
 import EmailTestSettings from '@/components/email-test-settings'
+import ShootStorageCleanup from '@/components/shoot-storage-cleanup'
 import { adminBtnGhost, adminPage, adminPanel } from '@/lib/admin-ui'
 
 type DriveHealth = {
@@ -105,9 +106,12 @@ export default function SystemPage() {
           <h2 className="mt-1 text-sm font-semibold">Google Drive folder and portal settings</h2>
           <p className="mt-1 text-xs text-white/40">Connect the account, choose the root folder, and manage live client portals.</p>
         </div>
-        <Link href="/admin/provisioning" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
-          Manage Google Drive <ExternalLink className="size-3.5" />
-        </Link>
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <ShootStorageCleanup />
+          <Link href="/admin/provisioning" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
+            Manage Google Drive <ExternalLink className="size-3.5" />
+          </Link>
+        </div>
       </section>
 
       <section className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>

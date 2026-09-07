@@ -130,10 +130,43 @@ export type DriveFile = {
   webContentLink?: string
   webViewLink?: string
   appProperties?: Record<string, string>
+  trashed?: boolean
+  modifiedTime?: string
 }
 
 const DRIVE_FILE_FIELDS =
   'id,name,mimeType,size,md5Checksum,parents,thumbnailLink,webContentLink,webViewLink,appProperties'
+const DRIVE_CLEANUP_FIELDS = `${DRIVE_FILE_FIELDS},trashed,modifiedTime`
+
+export async function getDriveCleanupFile(fileId: string): Promise<DriveFile> {
+  return driveFetch<DriveFile>(
+    `/files/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(DRIVE_CLEANUP_FIELDS)}&supportsAllDrives=true`,
+    { signal: AbortSignal.timeout(15_000) },
+  )
+}
+
+/** Bounded, read-only listing for storage cleanup, including nested folders. */
+export async function listDriveCleanupChildren(parentId: string, pageToken = '') {
+  const params = new URLSearchParams({
+    q: `'${escapeDriveQuery(parentId)}' in parents and trashed = false`,
+    fields: `nextPageToken,files(${DRIVE_CLEANUP_FIELDS})`, pageSize: '1000', spaces: 'drive',
+    supportsAllDrives: 'true', includeItemsFromAllDrives: 'true',
+    ...(pageToken ? { pageToken } : {}),
+  })
+  return driveFetch<{ files?: DriveFile[]; nextPageToken?: string }>(`/files?${params}`, {
+    signal: AbortSignal.timeout(15_000),
+  })
+}
+
+/** Recoverable only. Never use the permanent files.delete endpoint for cleanup. */
+export async function trashDriveFile(fileId: string) {
+  const result = await driveFetch<{ id: string; trashed: boolean }>(
+    `/files/${encodeURIComponent(fileId)}?fields=id,trashed&supportsAllDrives=true`, {
+      method: 'PATCH', body: JSON.stringify({ trashed: true }), signal: AbortSignal.timeout(15_000),
+    },
+  )
+  if (result.id !== fileId || !result.trashed) throw new Error('Drive did not confirm Trash.')
+}
 
 export async function listDriveFiles(parentId: string): Promise<DriveFile[]> {
   const files: DriveFile[] = []

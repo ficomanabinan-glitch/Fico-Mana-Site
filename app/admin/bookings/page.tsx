@@ -964,8 +964,7 @@ function BookingsManagement() {
         <table className="w-full text-left border-collapse min-w-[1020px]">
           <thead>
             <tr className="bg-white/[0.03] border-b border-white/10 text-[10px] font-bold tracking-widest text-white/40 uppercase">
-              <th className="p-4 pl-6">Client</th>
-              <th className="p-4">Reference</th>
+              <th className="p-4 pl-6">Reference</th>
               <th className="p-4">Customer</th>
               <th className="p-4">Package</th>
               <th className="p-4">Date & Time</th>
@@ -986,13 +985,7 @@ function BookingsManagement() {
             ) : (
               filteredBookings.map((b) => (
                 <tr key={b.id} className="hover:bg-white/[0.03]/50 transition-colors">
-                  <td className="p-4 pl-6">
-                    <BookingPrioritySelect
-                      priority={dayPriorityMap.get(b.id) ?? null}
-                      maxPriority={getDayPriorityCount(bookings, b.bookingDate)}
-                    />
-                  </td>
-                  <td className="p-4 font-mono font-bold text-primary">{b.id}</td>
+                  <td className="p-4 pl-6 font-mono font-bold text-primary">{b.id}</td>
                   <td className="p-4">
                     <div className="font-semibold text-white">{b.customerName}</div>
                     <div className="text-[10px] text-white/45 mt-0.5">{b.customerEmail}</div>

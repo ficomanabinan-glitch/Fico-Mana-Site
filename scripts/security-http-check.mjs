@@ -76,6 +76,17 @@ try {
   assert.equal(hostileAdminMutation.status, 403)
   assertPrivateResponse(hostileAdminMutation, 'hostile admin mutation')
 
+  const hostileStorageCleanup = await fetch(`${baseUrl}/api/admin/shoot-storage`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://attacker.example' },
+    body: JSON.stringify({ token: 'not-a-review', confirmation: 'DELETE SHOOT FILES' }),
+  })
+  assert.equal(hostileStorageCleanup.status, 403)
+  assertPrivateResponse(hostileStorageCleanup, 'hostile storage cleanup')
+
+  const anonymousStorageReview = await fetch(`${baseUrl}/api/admin/shoot-storage?range=all`)
+  assert.equal(anonymousStorageReview.status, 401)
+  assertPrivateResponse(anonymousStorageReview, 'anonymous storage review')
+
   console.log('Production HTTP security checks passed.')
 } finally {
   child.kill()
