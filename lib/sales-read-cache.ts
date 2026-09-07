@@ -118,7 +118,7 @@ export async function fetchSales(
   try {
     return await request
   } finally {
-    salesRequests.delete(key)
+    if (salesRequests.get(key) === request) salesRequests.delete(key)
   }
 }
 

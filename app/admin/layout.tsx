@@ -364,7 +364,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             ) : null}
 
-            <main ref={mainRef} className="relative min-h-0 flex-1 overflow-y-auto p-5 md:p-8">{children}</main>
+            <main ref={mainRef} className="relative min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">{children}</main>
           </div>
         </div>
       </AdminAutoSyncProvider>

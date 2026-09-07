@@ -1,7 +1,7 @@
 import type { Booking } from '@/lib/data-store'
 import type { RawPhotoWorkflowStatus } from '@/lib/booking-display'
 
-export const adminPage = 'space-y-6 font-sans max-w-7xl'
+export const adminPage = 'w-full min-w-0 space-y-6 font-sans'
 export const adminTitle = 'text-2xl font-bold tracking-tight text-white'
 export const adminSubtitle = 'text-sm text-white/50 mt-1.5 max-w-2xl leading-relaxed'
 export const adminCard =

@@ -111,8 +111,8 @@ export async function fetchEditorBatches({
   try {
     return await request
   } finally {
-    if (synchronize) synchronizedBatchRequest = null
-    else batchRequest = null
+    if (synchronize && synchronizedBatchRequest === request) synchronizedBatchRequest = null
+    if (!synchronize && batchRequest === request) batchRequest = null
   }
 }
 

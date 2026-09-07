@@ -234,7 +234,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
               </div>
             ) : null}
 
-            <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto p-5 md:p-8">
+            <main ref={mainRef} className="min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">
               {children}
             </main>
           </div>

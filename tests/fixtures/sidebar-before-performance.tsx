@@ -1,8 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useRef } from 'react'
 import { LogOut, type LucideIcon } from 'lucide-react'
 import { adminNavActive, adminNavIdle } from '@/lib/admin-ui'
 
@@ -30,16 +28,6 @@ export function DashboardSidebarNavigation({
   mobile?: boolean
   onNavigate: (href: string, mobile: boolean) => void
 }) {
-  const router = useRouter()
-  const prefetchedAt = useRef(new Map<string, number>())
-  const prefetchOnIntent = (href: string) => {
-    if (!href.startsWith('/') || href.startsWith('//') || href === activePath) return
-    const previous = prefetchedAt.current.get(href)
-    if (previous !== undefined && Date.now() - previous < 30_000) return
-    prefetchedAt.current.set(href, Date.now())
-    router.prefetch(href)
-  }
-
   return (
     <nav className={mobile ? 'space-y-0' : 'min-h-0 flex-1 overflow-y-auto px-3 pb-4'}>
       {sections.map((section, sectionIndex) => (
@@ -64,10 +52,7 @@ export function DashboardSidebarNavigation({
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
-                  onMouseEnter={() => prefetchOnIntent(item.href)}
-                  onFocus={() => prefetchOnIntent(item.href)}
-                  onTouchStart={() => prefetchOnIntent(item.href)}
+                  prefetch={internal ? true : undefined}
                   aria-current={active ? 'page' : undefined}
                   onClick={() => onNavigate(item.href, mobile)}
                   className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[11px] font-semibold tracking-wide transition-all ${
