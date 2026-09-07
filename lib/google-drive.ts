@@ -133,11 +133,12 @@ export type DriveFile = {
   appProperties?: Record<string, string>
   trashed?: boolean
   modifiedTime?: string
+  capabilities?: { canTrash?: boolean }
 }
 
 const DRIVE_FILE_FIELDS =
   'id,name,mimeType,size,md5Checksum,parents,thumbnailLink,webContentLink,webViewLink,appProperties'
-const DRIVE_CLEANUP_FIELDS = `${DRIVE_FILE_FIELDS},trashed,modifiedTime`
+const DRIVE_CLEANUP_FIELDS = `${DRIVE_FILE_FIELDS},trashed,modifiedTime,capabilities(canTrash)`
 
 export async function getDriveCleanupFile(fileId: string): Promise<DriveFile> {
   return driveFetch<DriveFile>(

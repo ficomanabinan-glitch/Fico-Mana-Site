@@ -4,6 +4,10 @@ import {
   CLEANUP_CHUNK_SIZE, cleanupDateRange, cleanupFingerprint, runCleanupChunk, signCleanupGrant, validateCleanupFile,
   type CleanupCategory, type CleanupFile, type CleanupGrant, type CleanupRange,
 } from '@/lib/shoot-storage-cleanup'
+import {
+  folderTreeFingerprint, runCleanupFolder, signCleanupFolderGrant, validateCleanupFolder,
+  type CleanupFolderGrant,
+} from '@/lib/shoot-folder-cleanup'
 
 const FOLDER = 'application/vnd.google-apps.folder'
 const SHORTCUT = 'application/vnd.google-apps.shortcut'
@@ -32,7 +36,7 @@ export async function listCleanupShoots(admin: SupabaseClient, workspaceId: stri
   return { shoots, nextCursor: shoots.length === 100 ? shoots.at(-1)!.id : null, dates }
 }
 
-async function shootContext(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+async function shootContext(admin: SupabaseClient, workspaceId: string, bookingId: string, resolveCategories = true) {
   const [rootId, booking, provisioning, folders, uploading] = await Promise.all([
     configuredRoot(admin, workspaceId),
     admin.from('bookings').select('id,booking_date,customer_name').eq('workspace_id', workspaceId).eq('id', bookingId).single(),
@@ -55,7 +59,7 @@ async function shootContext(admin: SupabaseClient, workspaceId: string, bookingI
   // known category names directly below their registered client folder, without writes.
   const resolvedFolders = [...(folders.data || [])]
   const missing = ['RAW', 'SELECTED', 'EDITED', 'DELIVERABLES'].filter(type => !resolvedFolders.some(folder => folder.folder_type === type))
-  if (missing.length) {
+  if (resolveCategories && missing.length) {
     const names: Record<string, RegExp> = { RAW: /^RAW$/, SELECTED: /^\d+ SELECTED PHOTOS$/, EDITED: /^EDITED PHOTOS$/, DELIVERABLES: /^DELIVERABLES$/ }
     const children = await listDriveCleanupChildren(chain[0])
     if (children.nextPageToken) throw new Error('Client folder is too large to resolve safely.')
@@ -68,6 +72,108 @@ async function shootContext(admin: SupabaseClient, workspaceId: string, bookingI
     }
   }
   return { rootId, booking: booking.data, folders: resolvedFolders, chain }
+}
+
+/** Review all contents, including non-photo files and shortcut objects; never follow shortcuts. */
+async function reviewShootFolderTree(admin: SupabaseClient, context: Awaited<ReturnType<typeof shootContext>>, allowTrashed = false) {
+  const read = verifiedMetadata()
+  await verifyParents(context.chain.slice(1), read)
+  const folder = await read(context.chain[0])
+  if (folder.mimeType !== FOLDER || folder.parents?.length !== 1 || folder.parents[0] !== context.chain[1]) {
+    throw new Error('Shoot folder moved or became unavailable.')
+  }
+  if (folder.trashed && !allowTrashed) throw new Error('Shoot folder is already in Trash.')
+  if (!folder.trashed && folder.capabilities?.canTrash !== true) throw new Error('Drive does not allow this shoot folder to be trashed.')
+  const entries: DriveFile[] = [folder]
+  const folderIds = [folder.id]
+  const visited = new Set(context.chain)
+  const deadline = Date.now() + 40_000
+  let fileCount = 0, shortcutCount = 0
+  const walk = async (parentId: string, depth: number) => {
+    let pageToken = ''
+    const pages = new Set<string>()
+    do {
+      if (Date.now() > deadline || depth > 12 || pages.has(pageToken)) throw new Error('Shoot folder is too large to review safely.')
+      pages.add(pageToken)
+      const page = await listDriveCleanupChildren(parentId, pageToken)
+      for (const file of page.files || []) {
+        if (file.trashed || file.parents?.length !== 1 || file.parents[0] !== parentId || visited.has(file.id)) {
+          throw new Error('Shoot folder contents changed or are ambiguous.')
+        }
+        visited.add(file.id); entries.push(file)
+        if (file.mimeType === FOLDER) {
+          folderIds.push(file.id)
+          if (folderIds.length > 200) throw new Error('Too many subfolders for one safe review.')
+          await walk(file.id, depth + 1)
+        } else {
+          if (file.mimeType === SHORTCUT) shortcutCount++
+          else fileCount++
+          if (fileCount + shortcutCount > 5000) throw new Error('Too many files for one safe folder review.')
+        }
+      }
+      pageToken = page.nextPageToken || ''
+    } while (pageToken)
+  }
+  if (!folder.trashed) await walk(folder.id, 0)
+  // Protect other bookings even if somebody moved their registered client folder
+  // below this one or two provisioning records point at the same Drive folder.
+  const otherBookings = await admin.from('booking_provisioning').select('booking_id')
+    .in('drive_client_folder_id', folderIds).neq('booking_id', String(context.booking.id)).limit(1)
+  if (otherBookings.error || otherBookings.data?.length) throw new Error('Folder is shared with another shoot. Review its folder records first.')
+  return { folder, fileCount, shortcutCount, subfolderCount: folderIds.length - 1, treeFingerprint: folderTreeFingerprint(entries) }
+}
+
+export async function previewCleanupShootFolder(admin: SupabaseClient, workspaceId: string, actorId: string, bookingId: string, range: CleanupRange) {
+  const context = await shootContext(admin, workspaceId, bookingId, false)
+  const dates = cleanupDateRange(range), shootDate = String(context.booking.booking_date)
+  if (dates.from && dates.to && (shootDate < dates.from || shootDate > dates.to)) throw new Error('Shoot date changed. Review again.')
+  const tree = await reviewShootFolderTree(admin, context)
+  const expiresAt = Date.now() + 30 * 60 * 1000
+  const grant: CleanupFolderGrant = {
+    version: 1, kind: 'shoot_folder', workspaceId, actorId, bookingId, rootId: context.rootId, shootDate, expiresAt,
+    folder: { id: tree.folder.id, name: tree.folder.name, parents: context.chain.slice(1) as [string, string, string], fingerprint: cleanupFingerprint(tree.folder) },
+    treeFingerprint: tree.treeFingerprint, fileCount: tree.fileCount, subfolderCount: tree.subfolderCount, shortcutCount: tree.shortcutCount,
+  }
+  return { bookingId, name: String(context.booking.customer_name), date: shootDate, expiresAt,
+    chunks: [{ token: signCleanupFolderGrant(grant), files: [] }], skippedShortcuts: 0,
+    folder: { id: tree.folder.id, name: tree.folder.name, fileCount: tree.fileCount, subfolderCount: tree.subfolderCount, shortcutCount: tree.shortcutCount },
+  }
+}
+
+export async function executeCleanupShootFolder(admin: SupabaseClient, grant: CleanupFolderGrant) {
+  const validate = async () => {
+    const context = await shootContext(admin, grant.workspaceId, grant.bookingId, false)
+    if (context.rootId !== grant.rootId || String(context.booking.booking_date) !== grant.shootDate
+      || context.chain.join('/') !== [grant.folder.id, ...grant.folder.parents].join('/')) {
+      throw new Error('The registered shoot folder changed. Review again.')
+    }
+    const tree = await reviewShootFolderTree(admin, context, true)
+    const state = validateCleanupFolder(grant, tree.folder)
+    if (state !== 'trashed' && (tree.treeFingerprint !== grant.treeFingerprint || tree.fileCount !== grant.fileCount
+      || tree.subfolderCount !== grant.subfolderCount || tree.shortcutCount !== grant.shortcutCount)) {
+      throw new Error('Folder contents changed since review. Review again.')
+    }
+    return state
+  }
+  const audit = async (action: string, metadata: Record<string, unknown>) => {
+    const result = await admin.from('workflow_audit_logs').insert({ workspace_id: grant.workspaceId, actor_type: 'staff',
+      actor_id: grant.actorId, booking_id: grant.bookingId, action, metadata })
+    if (result.error) throw new Error('Could not record folder cleanup.')
+  }
+  return runCleanupFolder(grant, {
+    validate,
+    auditStart: () => audit('SHOOT_FOLDER_CLEANUP_STARTED', { folderId: grant.folder.id, fileCount: grant.fileCount,
+      subfolderCount: grant.subfolderCount, shortcutCount: grant.shortcutCount, treeFingerprint: grant.treeFingerprint }),
+    disablePortal: async () => {
+      const result = await admin.from('client_portals').update({ status: 'disabled', updated_at: new Date().toISOString() })
+        .eq('workspace_id', grant.workspaceId).eq('booking_id', grant.bookingId).eq('status', 'active')
+      if (result.error) throw new Error('Could not disable the portal; the folder was not moved.')
+    },
+    // Recheck the entire reviewed tree just before the one folder mutation. No
+    // cross-app transaction is possible; uploads/external edits must stay stopped.
+    trash: async () => { if (await validate() !== 'trashed') await trashDriveFile(grant.folder.id) },
+    auditResult: results => audit('SHOOT_FOLDER_CLEANUP_FINISHED', { folderId: grant.folder.id, results, portalDisabled: true }),
+  })
 }
 
 function verifiedMetadata() {

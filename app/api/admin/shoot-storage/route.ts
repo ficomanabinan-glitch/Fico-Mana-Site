@@ -7,16 +7,18 @@ import { enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
 import { readBoundedResponse } from '@/lib/security/outbound-url'
 import { CLEANUP_CONFIRMATION, cleanupCategoriesSchema, cleanupRangeSchema, verifyCleanupGrant } from '@/lib/shoot-storage-cleanup'
-import { executeCleanupShoot, listCleanupShoots, previewCleanupShoot } from '@/lib/shoot-storage-cleanup-server'
+import { FOLDER_CLEANUP_CONFIRMATION, verifyCleanupFolderGrant } from '@/lib/shoot-folder-cleanup'
+import { executeCleanupShoot, executeCleanupShootFolder, listCleanupShoots, previewCleanupShoot, previewCleanupShootFolder } from '@/lib/shoot-storage-cleanup-server'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 120
 
 const querySchema = z.object({
   range: cleanupRangeSchema, cursor: z.string().max(160).default(''),
   bookingId: z.string().min(1).max(160).optional(), categories: cleanupCategoriesSchema.optional(),
+  scope: z.enum(['files', 'folder']).default('files'),
 })
-const bodySchema = z.object({ token: z.string().min(1).max(40_000), confirmation: z.literal(CLEANUP_CONFIRMATION) }).strict()
+const bodySchema = z.object({ token: z.string().min(1).max(40_000), confirmation: z.enum([CLEANUP_CONFIRMATION, FOLDER_CLEANUP_CONFIRMATION]) }).strict()
 
 async function handle(request: Request, execute: boolean) {
   const headers = privateNoStoreHeaders()
@@ -43,24 +45,31 @@ async function handle(request: Request, execute: boolean) {
       let body: unknown
       try { body = JSON.parse(text) } catch { body = null }
       const parsed = bodySchema.safeParse(body)
-      if (!parsed.success) return NextResponse.json({ error: 'Review the files and type DELETE SHOOT FILES to confirm.' }, { status: 400, headers })
+      if (!parsed.success) return NextResponse.json({ error: 'Review your selection and type the exact confirmation shown in the dialog.' }, { status: 400, headers })
+      if (parsed.data.confirmation === FOLDER_CLEANUP_CONFIRMATION) {
+        const grant = verifyCleanupFolderGrant(parsed.data.token, access.workspaceId, user!.id)
+        return NextResponse.json({ results: await executeCleanupShootFolder(admin, grant) }, { headers })
+      }
       const grant = verifyCleanupGrant(parsed.data.token, access.workspaceId, user!.id)
       return NextResponse.json({ results: await executeCleanupShoot(admin, grant) }, { headers })
     }
     const params = new URL(request.url).searchParams
     const parsed = querySchema.safeParse({ range: params.get('range'), cursor: params.get('cursor') || '',
+      scope: params.get('scope') || 'files',
       bookingId: params.get('bookingId') || undefined, categories: params.has('categories') ? params.get('categories')!.split(',') : undefined })
     if (!parsed.success) return NextResponse.json({ error: 'Choose a time range and at least one file category.' }, { status: 400, headers })
-    const { range, cursor, bookingId, categories } = parsed.data
-    if (bookingId && !categories) return NextResponse.json({ error: 'Choose at least one file category.' }, { status: 400, headers })
+    const { range, cursor, bookingId, categories, scope } = parsed.data
+    if (scope === 'folder' && categories) return NextResponse.json({ error: 'Entire shoot folder includes all file types. Try: remove the category filter and review again.' }, { status: 400, headers })
+    if (bookingId && scope === 'files' && !categories) return NextResponse.json({ error: 'Choose at least one file category.' }, { status: 400, headers })
     const result = bookingId
-      ? await previewCleanupShoot(admin, access.workspaceId, user!.id, bookingId, range, categories!)
+      ? scope === 'folder' ? await previewCleanupShootFolder(admin, access.workspaceId, user!.id, bookingId, range)
+        : await previewCleanupShoot(admin, access.workspaceId, user!.id, bookingId, range, categories!)
       : await listCleanupShoots(admin, access.workspaceId, range, cursor)
     return NextResponse.json(result, { headers })
   } catch {
     return NextResponse.json({ error: execute
-      ? 'Cleanup was not fully confirmed. The portal may be disabled and some files may already be in Trash. Try: check Google Drive Trash and review the files again; moved, changed, or expired targets need a new review.'
-      : 'The shoot files could not be reviewed. No files were deleted. Try: check the Drive connection and folder settings in Client Portals, then review again.' }, { status: 409, headers })
+      ? 'Cleanup was not fully confirmed. The portal may be disabled and selected files or folders may already be in Trash. Try: check Google Drive Trash and review again; moved, changed, or expired targets need a new review.'
+      : 'The shoot storage could not be reviewed. Nothing was deleted. Try: check Drive access, finish any uploads, and check the folder settings in Client Portals. Already-trashed or changed folders need a fresh review.' }, { status: 409, headers })
   }
 }
 

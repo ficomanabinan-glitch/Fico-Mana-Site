@@ -1,33 +1,43 @@
 # Shoot storage cleanup
 
 Location: original Admin → System Settings → Production storage → Delete shoots.
-This is a Drive-file cleanup, not a database reset or booking deletion.
+This is a Google Drive cleanup, not a database reset or booking deletion.
 
 ## Administrator flow
 
-1. Choose Last 7 days, Last month (30 days), or All time. Recent ranges use the
+1. Choose **Selected photo files** (the default) or **Entire shoot folder**. Then
+   choose Last 7 days, Last month (30 days), or All time. Recent ranges use the
    scheduled shoot date in GMT+8, include today, and exclude future dates. All time
    includes future shoots too.
-2. Check RAW, selected copies, edited photos, and/or deliverables. Nothing is
-   selected by default.
+2. For photo files, check RAW, selected copies, edited photos, and/or deliverables.
+   Nothing is selected by default. Entire shoot folder does not use category
+   filters: all contents are included, including non-photo files and subfolders.
 3. Review files. This lists matching clients, dates, file counts by category and
    sample filenames. Individual shoots can be unchecked. Review performs no
-   business-record or Drive-file writes.
-4. Acknowledge the effect on portals and type `DELETE SHOOT FILES`.
+   business-record or Drive-file writes. In folder mode, a client with zero files
+   is still selectable because the folder itself is the target. In file mode,
+   an empty row explains why it cannot be selected and points to folder mode.
+4. Acknowledge the effect on portals and type `DELETE SHOOT FILES` for photo files
+   or `DELETE SHOOT FOLDERS` for complete client folders.
 5. Move the reviewed files to Trash. Keep the page open. Progress and a per-client
    report show confirmed and unconfirmed results. Stop ends after the current
    request; it does not undo completed chunks. Failures halt further chunks.
 
 ## Preserved data and recovery
 
-- Root, month, day, client, category and nested folders are not trashed.
+- In photo-file mode, root, month, day, client, category and nested folders stay.
+- In entire-folder mode, only the selected registered client folder is explicitly
+  moved to Trash; its contents inherit the trashed state. Main storage root,
+  month/day folders and other clients are protected. Shortcut objects inside the
+  folder are included, but their external targets are never traversed or modified.
 - Bookings, payments, receipts, accounts, selections, print allocations, database
   image indexes/thumbnails and activity history are not deleted or reset. Stored
   photo counts remain historical counts, not a live count of files in Drive.
 - Active portals for affected shoots are disabled before their first file is
   moved. Existing portal and QR sessions are checked against that status by the
   existing server authorization. Expired portals are not reactivated.
-- Restore the files in Google Drive Trash before manually reactivating a portal.
+- Restore the files (or the entire shoot folder, when folder mode was used) in
+  Google Drive Trash before manually reactivating a portal.
   Cleanup does not auto-reactivate or rebuild/rewrite historical selections.
 - Direct Drive permissions are unchanged. This is not a privacy-erasure tool.
 - Trash still consumes Drive storage; Google normally permanently removes these
@@ -48,8 +58,18 @@ The additive endpoint is `/api/admin/shoot-storage`:
 - Every file's current parent chain is verified back to the configured root. The
   file is re-read immediately before its PATCH. Moved/replaced files require a new
   review. New files uploaded after review are not swept into the cleanup.
-- Folder and shortcut targets are rejected. Legacy shoots resolve only canonical
-  category names under their registered client folder, without creating folders.
+- Photo-file tokens still reject folders/shortcuts. Entire-folder mode uses a
+  separate signature domain, strict folder token and distinct typed confirmation;
+  a file token cannot authorize a folder and vice versa. Folder mode validates
+  the registered client/day/month/root chain and Drive's `canTrash` capability.
+- Folder previews include a fingerprint of every visible, untrashed entry in the
+  bounded tree. The full tree, booking date/root and active upload state are
+  checked again before audit/portal changes and immediately before the one folder
+  Trash request. Added, renamed, replaced, removed or moved entries require a new
+  review. Registered folders belonging to any other booking, including other
+  workspaces, block cleanup even when nested below the selected folder.
+- Legacy photo-file reviews resolve only canonical category names under their
+  registered client folder, without creating folders.
 - An active indexed editing upload blocks review/execution for that shoot. Staff
   must finish all uploads and avoid concurrent external file changes; Drive and
   the database do not support a shared atomic transaction or cross-app lock.
@@ -62,7 +82,10 @@ The additive endpoint is `/api/admin/shoot-storage`:
 
 Work is bounded: 100 shoots per listing page; 5,000 shoots per UI review; 5,000
 files, 200 folders and eight nested category levels per shoot; ten files per
-execution request. Oversized, ambiguous or stale reviews fail closed. Large
+execution request. Folder cleanup handles one client folder per request, up to
+200 folders and 5,000 files/shortcut objects; each tree pass has a 40-second bound
+and the route has a 120-second execution budget for both checks. Oversized,
+ambiguous or stale reviews fail closed. Large
 cleanups may require reviewing the remaining files again after token expiry.
 
 ## Verification
