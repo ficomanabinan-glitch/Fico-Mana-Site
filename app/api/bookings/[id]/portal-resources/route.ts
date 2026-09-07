@@ -22,7 +22,7 @@ export async function GET(
   if (authError) return authError
   const { id } = await params
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   const { data, error } = await admin
     .from('client_portal_resources')
     .select('*')
@@ -51,7 +51,7 @@ export async function POST(
     if (url && !/^https:\/\//i.test(url)) return NextResponse.json({ error: 'Resource URL must use HTTPS.' }, { status: 400 })
 
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
     const { data: booking } = await admin.from('bookings').select('id').eq('id', id).maybeSingle()
     if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
@@ -95,7 +95,7 @@ export async function DELETE(
     const resourceId = body.resourceId?.trim()
     if (!resourceId) return NextResponse.json({ error: 'Resource ID is required.' }, { status: 400 })
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
     const { data, error } = await admin
       .from('client_portal_resources')
       .delete()

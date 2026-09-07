@@ -56,5 +56,5 @@ test('test route keeps staff MFA, origin validation, rate limits and private res
   const ui = await readFile('components/email-test-settings.tsx', 'utf8')
   assert.match(ui, /inFlight.current/)
   assert.match(ui, /JSON.stringify\(attempt.current\)/)
-  assert.match(ui, /Resend accepted/)
+  assert.match(ui, /The email service accepted/)
 })

@@ -139,7 +139,7 @@ export default function EditorUploadPhotos({
     try {
       const batches = await detectBatchFolders(files)
       if (!batches.length) {
-        throw new Error('No trusted Fico Mana manifest was found. Use an extracted folder downloaded from the Editing Queue.')
+        throw new Error('This folder could not be matched to a batch. Try: use an unzipped folder downloaded from the Editing Queue.')
       }
       const selected = initialBatchId
         ? batches.filter((batch) => batch.manifest.batch_id === initialBatchId)
@@ -251,7 +251,7 @@ export default function EditorUploadPhotos({
         </div>
         <h2 className="mt-4 text-lg font-semibold">Drag and drop the downloaded batch folder</h2>
         <p className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-white/40">
-          You can also select a day, week, or month folder. Multiple batch manifests are detected automatically.
+          You can also select a day, week, or month folder. The included batches are found automatically.
         </p>
         <button
           type="button"

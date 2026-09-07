@@ -83,7 +83,7 @@ export default function WebsiteMediaPage() {
       setAltDrafts(Object.fromEntries(nextMedia.map((slot) => [slot.slotKey, slot.altText])))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Website media could not be loaded.'
-      setLoadError(`${message} Try: refresh this page; if it continues, apply the website media database migration.`)
+      setLoadError(`${message} Try: refresh this page; if it continues, ask your administrator to check the photo and video settings.`)
     } finally {
       setLoading(false)
       setRefreshing(false)

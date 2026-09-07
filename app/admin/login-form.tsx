@@ -40,7 +40,7 @@ export default function AdminLogin() {
         <div className="space-y-2"><label htmlFor="password" className="text-[10px] font-semibold uppercase tracking-widest text-[#C4CEFF]">Password</label><div className="relative"><Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" aria-hidden="true"/><Input id="password" name="password" type="password" autoComplete="current-password" maxLength={1024} required disabled={pending||locked} placeholder="Enter your password" className={`${adminInput} pl-11`}/></div></div>
         <Button type="submit" disabled={pending||locked} className={`flex h-auto w-full items-center justify-center gap-2 py-4 ${adminBtnPrimary}`}>{pending?<><RefreshCw className="size-4 animate-spin" aria-hidden="true"/>Authenticating…</>:locked?`Try again in ${remainingMinutes} ${remainingMinutes===1?'minute':'minutes'}`:'Login to Console'}</Button>
       </form>
-      <p className="mt-8 text-center text-[10px] leading-relaxed text-white/30">Protected by server-validated Supabase authentication and rate limiting.</p>
+      <p className="mt-8 text-center text-[10px] leading-relaxed text-white/30">For authorized staff only. Your account is protected against repeated sign-in attempts.</p>
     </div>
   </div>
 }

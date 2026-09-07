@@ -64,7 +64,7 @@ export default function PaymentVerificationQueue() {
       setBookings(queue)
     } catch (err) {
       console.error(err)
-      toast.error('Sync failed', 'Could not load bookings from database.')
+      toast.error('Sync failed', 'Could not load bookings. Try: refresh the page.')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -116,7 +116,7 @@ export default function PaymentVerificationQueue() {
 
       const emailMsg = formatEmailResult(emailErrors)
       if (emailMsg) {
-        toast.warning(`${booking.id} confirmed in database`, emailMsg)
+        toast.warning(`${booking.id} confirmed`, emailMsg)
       } else {
         toast.success('Payment approved', `${booking.id} confirmed — 1 email sent to customer.`)
       }
@@ -124,7 +124,7 @@ export default function PaymentVerificationQueue() {
       fetchQueue(true)
     } catch (err) {
       console.error(err)
-      toast.error('Approval failed', err instanceof Error ? err.message : 'Could not save to database.')
+      toast.error('Approval failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
     } finally {
       setActionLoading(false)
     }
@@ -201,7 +201,7 @@ export default function PaymentVerificationQueue() {
       await submitRejection(selectedBooking, rejectionReason, customReason)
     } catch (err) {
       console.error(err)
-      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not update database.')
+      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
     } finally {
       setActionLoading(false)
     }
@@ -221,7 +221,7 @@ export default function PaymentVerificationQueue() {
       await submitRejection(booking, 'forged')
     } catch (err) {
       console.error(err)
-      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not update database.')
+      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
     } finally {
       setActionLoading(false)
     }

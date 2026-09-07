@@ -13,7 +13,7 @@ export async function GET() {
 
   try {
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
     const [{ data: bookings, error: bookingsError }, { data: states }, { data: portals }, { data: settings }] = await Promise.all([
       admin

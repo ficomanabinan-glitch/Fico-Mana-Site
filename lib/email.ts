@@ -246,7 +246,7 @@ export async function sendEmail({
 
   if (!resend) {
     const errorMsg =
-      'RESEND_API_KEY is not set at runtime. Add it in Vercel → Project → Settings → Environment Variables (Production + Preview), then redeploy.'
+      'Email setup is incomplete. Try: ask your administrator to check the email settings.'
     console.error('[Resend] skipped — no API key', getResendDiagnostics())
     await persistEmailLog({
       bookingId,
@@ -289,7 +289,7 @@ export async function sendEmail({
     }
 
     if (!result.data?.id) {
-      const errorMsg = 'Resend returned no email id'
+      const errorMsg = 'The email service did not confirm that the message was accepted.'
       console.error('[Resend] unexpected response', { bookingId, result })
       await persistEmailLog({
         bookingId,
@@ -311,7 +311,7 @@ export async function sendEmail({
 
     return { success: true, resendId: result.data.id }
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown Resend error'
+    const errorMsg = err instanceof Error ? err.message : 'The email could not be sent. Try: check the recipient address and email settings.'
     console.error('[Resend] exception', { bookingId, to: recipient, from, error: errorMsg })
     await persistEmailLog({
       bookingId,

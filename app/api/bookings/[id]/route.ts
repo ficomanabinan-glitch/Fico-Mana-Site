@@ -26,7 +26,7 @@ export async function GET(
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+      if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
       const booking = await getBookingFromDb(admin, id)
       if (booking) {
         return NextResponse.json(booking)
@@ -62,7 +62,7 @@ export async function PUT(
     let saved: Booking
     if (admin) {
       const dbSaved = await saveBookingToDb(admin, booking)
-      if (!dbSaved) return NextResponse.json({ error: 'Failed to save booking to database.' }, { status: 500 })
+      if (!dbSaved) return NextResponse.json({ error: 'Your booking could not be saved. Try: refresh the page and try again.' }, { status: 500 })
       saved = dbSaved
       await upsertBooking(saved)
     } else {
@@ -139,9 +139,9 @@ export async function DELETE(
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+      if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
       const ok = await deleteBookingFromDb(admin, id)
-      if (!ok) return NextResponse.json({ error: 'Failed to delete booking from database.' }, { status: 500 })
+      if (!ok) return NextResponse.json({ error: 'The booking could not be deleted. Try: refresh the page and try again.' }, { status: 500 })
     }
 
     await deleteBookingFromStore(id)

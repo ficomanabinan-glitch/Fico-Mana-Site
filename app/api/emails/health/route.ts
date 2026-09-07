@@ -44,16 +44,16 @@ export async function POST(request: Request) {
     if (limited) return limited
 
     const resend = getResendClient()
-    if (!resend) return NextResponse.json({ success: false, error: 'Email service is not configured. Try: set RESEND_API_KEY in Vercel and redeploy.' }, { status: 503, headers })
+    if (!resend) return NextResponse.json({ success: false, error: 'Email setup is incomplete. Try: ask your administrator to check the email settings.' }, { status: 503, headers })
 
     const message = buildEmailHealthCheck(getResendFromAddress(), user.id, input.data)
     const result = await sendEmailHealthCheck(message, (payload, options) => resend.emails.send(payload, options))
     return NextResponse.json(result, { headers })
   } catch (error) {
     // Never expose SDK/transport details or report an accepted message as a booking-log failure.
-    const message = error instanceof Error && error.message.startsWith('Resend did not confirm acceptance.')
+    const message = error instanceof Error && error.message.startsWith('The email service did not confirm acceptance.')
       ? error.message
-      : 'Email result could not be confirmed. Try: check Resend email logs, then retry this same request.'
+      : 'Email result could not be confirmed. Try: review the email history, then retry this same request.'
     return NextResponse.json({ success: false, error: message }, { status: 502, headers })
   }
 }

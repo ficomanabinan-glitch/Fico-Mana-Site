@@ -36,7 +36,7 @@ export default function EmailLogsConsole() {
       setFilteredLogs(data)
     } catch (err) {
       console.error(err)
-      if (!silent) toast.error('Sync failed', 'Could not load email logs from database.')
+      if (!silent) toast.error('Sync failed', 'Could not load email history. Try: refresh the page.')
     } finally {
       setLoading(false)
       setRefreshing(false)

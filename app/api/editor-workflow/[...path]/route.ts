@@ -342,14 +342,14 @@ async function handle(request: NextRequest, path: string[]) {
         const denied = requireCapability('edit')
         if (denied) return denied
         const parsed = editorBatchUploadStartSchema.safeParse(await request.json().catch(() => null))
-        if (!parsed.success) return json({ error: 'A valid batch upload manifest is required.' }, 400)
+        if (!parsed.success) return json({ error: 'The batch details are incomplete. Try: select the downloaded batch folder again.' }, 400)
         return json(await createBatchUploadRun(workspaceId, batchId, parsed.data.clients, actorId))
       }
       if (path[2] === 'upload-session' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
         const parsed = editorUploadSessionSchema.safeParse(await request.json().catch(() => null))
-        if (!parsed.success) return json({ error: 'Valid edited-photo upload metadata is required.' }, 400)
+        if (!parsed.success) return json({ error: 'The photo details are incomplete. Try: select the edited photos again.' }, 400)
         const body = parsed.data
         return json(
           await createDeliverableUploadSession(workspaceId, batchId, body.uploadJobId, {
@@ -366,7 +366,7 @@ async function handle(request: NextRequest, path: string[]) {
         const denied = requireCapability('edit')
         if (denied) return denied
         const parsed = editorUploadCompleteSchema.safeParse(await request.json().catch(() => null))
-        if (!parsed.success) return json({ error: 'Valid upload completion metadata is required.' }, 400)
+        if (!parsed.success) return json({ error: 'The upload could not be checked. Try: refresh the upload report.' }, 400)
         const body = parsed.data
         return json(
           await completeDeliverableUpload(
@@ -382,7 +382,7 @@ async function handle(request: NextRequest, path: string[]) {
         const denied = requireCapability('edit')
         if (denied) return denied
         const parsed = editorUploadFailureSchema.safeParse(await request.json().catch(() => null))
-        if (!parsed.success) return json({ error: 'Valid upload failure metadata is required.' }, 400)
+        if (!parsed.success) return json({ error: 'The failed upload could not be recorded. Try: refresh the upload report.' }, 400)
         const body = parsed.data
         await failDeliverableUpload(workspaceId, body.uploadJobId, body.uploadFileId, body.error)
         return json({ success: true })
@@ -391,7 +391,7 @@ async function handle(request: NextRequest, path: string[]) {
         const denied = requireCapability('edit')
         if (denied) return denied
         const parsed = editorClientUploadFinalizeSchema.safeParse(await request.json().catch(() => null))
-        if (!parsed.success) return json({ error: 'Valid client upload metadata is required.' }, 400)
+        if (!parsed.success) return json({ error: 'The client upload details are incomplete. Try: select the client folder again.' }, 400)
         const body = parsed.data
         return json(
           await finalizeClientUpload(
@@ -407,7 +407,7 @@ async function handle(request: NextRequest, path: string[]) {
         const denied = requireCapability('edit')
         if (denied) return denied
         const parsed = editorBatchUploadFinalizeSchema.safeParse(await request.json().catch(() => null))
-        if (!parsed.success) return json({ error: 'Valid batch upload metadata is required.' }, 400)
+        if (!parsed.success) return json({ error: 'The batch upload details are incomplete. Try: select the batch folder again.' }, 400)
         return json(await finalizeBatchUpload(workspaceId, batchId, parsed.data.uploadJobId))
       }
     }

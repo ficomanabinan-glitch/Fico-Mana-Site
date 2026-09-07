@@ -76,7 +76,7 @@ export default function ReportsPage() {
             <p className="mt-2 text-xl font-bold">{Math.max(0, report.bookings - report.completed)}</p>
           </div>
           <div className="border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.05] p-4 text-[#C4CEFF]">
-            Figures are calculated from the current Supabase booking and payment records.
+            Figures are based on your bookings and payments.
           </div>
         </div>
       </section>

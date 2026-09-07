@@ -46,7 +46,7 @@ export async function GET() {
   const { error: authError } = await requireStaffAuth()
   if (authError) return authError
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     return NextResponse.json(await listSalesExpenses(admin))
   } catch (error) {
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     const payload = cleanExpense(await request.json())
     const { data, error } = await admin.from('sales_expenses').insert({ ...payload, created_by: user?.id ?? null }).select('*').single()
@@ -73,7 +73,7 @@ export async function PATCH(request: Request) {
   const { error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     const body = await request.json()
     const id = String(body.id ?? '').trim()
@@ -91,7 +91,7 @@ export async function DELETE(request: Request) {
   const { error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   const id = new URL(request.url).searchParams.get('id')?.trim()
   if (!id) return NextResponse.json({ error: 'Expense ID is required.' }, { status: 400 })
   const { error } = await admin.from('sales_expenses').delete().eq('id', id)

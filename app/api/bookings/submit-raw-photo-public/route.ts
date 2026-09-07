@@ -169,7 +169,7 @@ export async function POST(request: Request) {
         id: saved.id,
         customerName: saved.customerName,
         rawPhotoStatus: saved.rawPhotoStatus,
-        message: 'Submitted to the database — our editors will review your folder shortly.',
+        message: 'Photos submitted. Our editors will review your folder shortly.',
       })
     }
 
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
       id: saved.id,
       customerName: saved.customerName,
       rawPhotoStatus: saved.rawPhotoStatus,
-      message: 'Submitted to the database — our editors will review your folder shortly.',
+      message: 'Photos submitted. Our editors will review your folder shortly.',
     })
   } catch (error) {
     console.error('POST /api/bookings/submit-raw-photo-public', error)

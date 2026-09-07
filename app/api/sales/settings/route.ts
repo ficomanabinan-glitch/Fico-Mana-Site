@@ -13,7 +13,7 @@ export async function GET() {
   const { error: authError } = await requireStaffAuth()
   if (authError) return authError
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     return NextResponse.json(await getSalesSettings(admin))
   } catch (error) {
@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
   const { user, error: authError } = await requireStaffAuth(request)
   if (authError) return authError
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
   try {
     const body = await request.json()

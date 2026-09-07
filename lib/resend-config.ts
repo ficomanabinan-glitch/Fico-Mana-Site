@@ -55,11 +55,11 @@ export function getResendDiagnostics(): ResendDiagnostics {
   const fromAddress = getResendFromAddress()
   const domain = fromAddress.match(/<([^>]+)>/)?.[1] ?? fromAddress
 
-  let hint = 'API key is present. Send a test email to verify acceptance and delivery.'
+  let hint = 'Email setup is available. Send a test email to check delivery.'
   if (!configured) {
-    hint = 'RESEND_API_KEY is missing or invalid at runtime — emails are not sent to Resend.'
+    hint = 'Email setup is incomplete. Messages cannot be sent yet.'
   } else if (!domain.includes('resend.dev') && !process.env.RESEND_FROM_EMAIL) {
-    hint = `Verify ${domain} in Resend Domains, then set RESEND_FROM_EMAIL on Vercel.`
+    hint = `Ask your administrator to verify ${domain} as the sender address.`
   }
 
   return {

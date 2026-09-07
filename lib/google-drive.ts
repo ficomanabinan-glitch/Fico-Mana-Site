@@ -69,7 +69,7 @@ export async function getGoogleDriveAccessToken(): Promise<string> {
     error_description?: string
   }
   if (!response.ok || !data.access_token) {
-    throw new Error(data.error_description || 'Google OAuth token refresh failed. Reconnect Google Drive from Provisioning.')
+    throw new Error(data.error_description || 'The Google Drive connection expired. Try: reconnect it from Client Portals.')
   }
   cachedAccessToken = {
     value: data.access_token,

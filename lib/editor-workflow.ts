@@ -69,7 +69,7 @@ const PRINT_CATEGORY_LABELS = {
 
 function adminClient() {
   const admin = getSupabaseAdmin()
-  if (!admin) throw new Error('Database admin client unavailable.')
+  if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
   return admin
 }
 
@@ -685,7 +685,7 @@ export async function recordMatchReviews(
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
   const clean = folders
-    .map((folder) => ({ name: safeSegment(folder.name), reason: String(folder.reason || 'No trusted manifest or internal ID matched this folder.') }))
+    .map((folder) => ({ name: safeSegment(folder.name), reason: String(folder.reason || 'This folder could not be matched to a client.') }))
     .filter((folder) => folder.name)
     .slice(0, 100)
   if (!clean.length) throw new Error('No unmatched client folders were provided.')
@@ -1891,7 +1891,7 @@ export async function createBatchUploadRun(
     .eq('batch_id', batch.id)
     .in('booking_id', uniqueIds)
   if (error) throw new Error(error.message)
-  if (!jobs?.length || jobs.length !== uniqueIds.length) throw new Error('Upload manifest contains unknown batch clients.')
+  if (!jobs?.length || jobs.length !== uniqueIds.length) throw new Error('Some clients are not part of this batch. Try: select the correct batch folder.')
   const invalid = jobs.find((job) => !['DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'].includes(job.status))
   if (invalid) throw new Error(`${invalid.booking_id} is not ready for deliverable upload.`)
   const { data: run, error: runError } = await admin
@@ -2045,7 +2045,7 @@ export async function completeDeliverableUpload(
     driveFile.appProperties?.relativePath !== uploadFile.relative_path ||
     driveFile.appProperties?.checksum !== uploadFile.checksum
   ) {
-    throw new Error('Google Drive upload metadata does not match the batch manifest.')
+    throw new Error('The uploaded file does not match the selected batch. Try: select the correct folder.')
   }
   const { data: job } = await admin
     .from('editing_jobs')
@@ -2069,7 +2069,7 @@ export async function completeDeliverableUpload(
       bookingId,
       metadata: { uploadFileId: uploadFile.id, reason: 'size_mismatch' },
     })
-    throw new Error('The uploaded Drive file size does not match the batch manifest.')
+    throw new Error('The uploaded file size is incorrect. Try: upload the original edited file again.')
   }
   const verified = await hashDriveFileSha256(driveFile.id, 500 * 1024 * 1024)
   if (verified.bytes !== expectedBytes || verified.checksum !== uploadFile.checksum) {
@@ -2077,7 +2077,7 @@ export async function completeDeliverableUpload(
       bookingId,
       metadata: { uploadFileId: uploadFile.id, reason: 'sha256_mismatch' },
     })
-    throw new Error('The uploaded Drive file checksum does not match the batch manifest.')
+    throw new Error('The uploaded file could not be verified. Try: upload the original edited file again.')
   }
   const { error: deliveryError } = await admin.from('deliverable_files').upsert(
     {

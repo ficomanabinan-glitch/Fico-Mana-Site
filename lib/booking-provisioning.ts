@@ -176,7 +176,7 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
 
 export async function provisionBookingResources(bookingId: string, actor: Actor = {}) {
   const admin = getSupabaseAdmin()
-  if (!admin) throw new Error('Database admin client unavailable.')
+  if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
 
   const booking = await loadBooking(admin, bookingId)
   const row = await getProvisioningRow(admin, bookingId)
@@ -294,7 +294,7 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
 
 export async function disableClientPortal(bookingId: string, actor: Actor = {}) {
   const admin = getSupabaseAdmin()
-  if (!admin) throw new Error('Database admin client unavailable.')
+  if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
   const { data } = await admin
     .from('client_portals')
     .update({ status: 'disabled', updated_at: new Date().toISOString() })
@@ -305,7 +305,7 @@ export async function disableClientPortal(bookingId: string, actor: Actor = {}) 
 
 export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const admin = getSupabaseAdmin()
-  if (!admin) throw new Error('Database admin client unavailable.')
+  if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
   const now = new Date()
   const { data: portal, error: portalError } = await admin
     .from('client_portals')

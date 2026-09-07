@@ -45,7 +45,7 @@ export async function GET() {
   const auth = await authorize()
   if (auth.error || !auth.access) return auth.error
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     const { data, error } = await admin.from('addon_catalog').select('*').eq('workspace_id', auth.access.workspaceId).order('display_order').order('name')
     if (error) throw new Error(error.message)
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   const auth = await authorize(request)
   if (auth.error || !auth.access) return auth.error
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     const parsed = addonSchema.omit({ id: true }).safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Enter valid add-on details.' }, { status: 400 })
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
   const auth = await authorize(request)
   if (auth.error || !auth.access) return auth.error
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   try {
     const parsed = addonSchema.required({ id: true }).safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Enter valid add-on details.' }, { status: 400 })

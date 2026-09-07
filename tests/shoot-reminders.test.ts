@@ -20,6 +20,30 @@ test('reminder content includes explicit response links and escapes customer-pro
   assert.match(content.text, /Arrival: 10:00 AM/)
 })
 
+test('both reminder emails use matching rounded buttons and the GMT+8 timezone label', () => {
+  for (const kind of ['day_before', 'shoot_day'] as const) {
+    const content = buildShootReminder({
+      bookingId: 'TEST-2', customerName: 'Sample Client', customerEmail: 'sample@example.com',
+      packageName: 'MANA', shootDate: '2026-09-09', bookingTime: '10:00 AM',
+      arrivalTime: '9:45 AM', shootTime: '10:00 AM', token: 'b'.repeat(64),
+    }, kind, 'https://www.ficomana.com')
+    const actions = [...content.html.matchAll(/<a href="([^"]+)" style="([^"]+)">([^<]+)<\/a>/g)]
+    assert.equal(actions.length, 2)
+    assert.deepEqual(actions.map(action => action[3]), ['Confirm My Shoot', "I Can't Attend"])
+    for (const action of actions) {
+      assert.match(action[1], /^https:\/\/www\.ficomana\.com\/shoot-response\/b{64}\?choice=(confirmed|declined)$/)
+      assert.match(action[2], /border-radius:999px/)
+      assert.match(action[2], /min-width:176px/)
+      assert.match(action[2], /padding:14px 22px/)
+      assert.match(action[2], /line-height:20px/)
+    }
+    assert.match(content.html, />Timezone<\/td><td[^>]*>GMT\+8<\/td>/)
+    assert.match(content.text, /Timezone: GMT\+8/)
+    assert.doesNotMatch(content.html + content.text, /All times are Philippine time|Asia\/Manila|line-height:3\.5/)
+    assert.match(content.html, /Please arrive at your scheduled arrival time/)
+  }
+})
+
 test('Postgres reminder queue, attendance, access boundaries and retry behavior', async t => {
   const db = new PGlite({ extensions: { pgcrypto } })
   t.after(()=>db.close())

@@ -67,7 +67,7 @@ export async function POST(
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+      if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
       const patch: Record<string, unknown> = {
         edited_photo_link: editedPhotoLink,

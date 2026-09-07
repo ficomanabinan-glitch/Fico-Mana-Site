@@ -48,7 +48,7 @@ export async function POST(
     }
 
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
     const { data: row, error } = await admin.from('bookings').select('*').eq('id', id).maybeSingle()
     if (error || !row) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })

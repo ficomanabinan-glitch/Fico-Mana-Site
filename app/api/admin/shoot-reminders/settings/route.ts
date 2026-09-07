@@ -28,7 +28,7 @@ async function handle(request: Request, mutate: boolean) {
       if (!parsed.success) return NextResponse.json({ error: 'Choose Check Reminder Service, Enable Reminders, or Pause Reminders.' }, { status: 400, headers })
       action = parsed.data.action
       if (action !== 'pause' && !isResendConfigured()) {
-        return NextResponse.json({ error: 'The email service is not configured. Try: ask the deployment administrator to configure Resend; no emails were sent.' }, { status: 503, headers })
+        return NextResponse.json({ error: 'Email setup is incomplete. Try: ask your administrator to check the email settings. No emails were sent.' }, { status: 503, headers })
       }
     }
     const args = { p_workspace: access.workspaceId, p_actor: user!.id }
@@ -39,14 +39,14 @@ async function handle(request: Request, mutate: boolean) {
         : await admin.rpc('get_shoot_reminder_control', args)
     if (result.error) {
       if (result.error.code === '22023') return NextResponse.json({ error: 'Please run Check Reminder Service and wait for a successful result, then enable reminders within 10 minutes.' }, { status: 409, headers })
-      if (result.error.code === '42501') return NextResponse.json({ error: 'Your workspace role cannot change these reminder settings.' }, { status: 403, headers })
+      if (result.error.code === '42501') return NextResponse.json({ error: 'Your account cannot change these reminder settings.' }, { status: 403, headers })
       throw new Error('Reminder configuration unavailable')
     }
     if (!result.data) throw new Error('Reminder configuration unavailable')
     return NextResponse.json({ ...result.data, emailConfigured: isResendConfigured(),
       senderAddress: isResendConfigured() ? getResendFromAddress() : null }, { headers })
   } catch {
-    return NextResponse.json({ error: 'Reminder settings are temporarily unavailable. Try: refresh after the reminder-settings database update has been installed.' }, { status: 503, headers })
+    return NextResponse.json({ error: 'Reminder settings are temporarily unavailable. Try: refresh this page, or ask your administrator to check the reminder settings.' }, { status: 503, headers })
   }
 }
 

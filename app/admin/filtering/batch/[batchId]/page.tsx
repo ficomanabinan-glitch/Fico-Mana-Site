@@ -170,18 +170,18 @@ export default function BatchDetailPage() {
     const resolved=new Map((detail.needsReview||[]).filter((item)=>item.status==='RESOLVED'&&item.resolvedBookingId).map((item)=>[item.sourceFolderName.toLowerCase(),String(item.resolvedBookingId)]))
     let manifest:BatchManifest
     if(manifestFile){
-      try{manifest=JSON.parse(await manifestFile.text()) as BatchManifest}catch{toast.error('Invalid manifest','The batch manifest could not be read.');return}
+      try{manifest=JSON.parse(await manifestFile.text()) as BatchManifest}catch{toast.error('Folder could not be read','Try: download the batch again and unzip the folder.');return}
       if(manifest.batch_id!==batchId||!Array.isArray(manifest.clients)){toast.error('Wrong batch folder',`Expected ${batchId}.`);return}
     }else{
       const clients=folderNames.map((folderName)=>{const bookingId=resolved.get(folderName.toLowerCase());const job=detail.jobs.find((item)=>item.bookingId===bookingId);return job?{booking_id:job.bookingId,client_id:job.clientId,folder_name:folderName,customer_name:job.customerName,expected_output_count:job.expectedOutputCount}:null}).filter((item):item is ManifestClient=>Boolean(item))
       const unmatched=folderNames.filter((folderName)=>!resolved.has(folderName.toLowerCase()))
-      if(unmatched.length){await fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/review-match`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({folders:unmatched.map((name)=>({name,reason:'The uploaded batch did not include a trusted Fico Mana manifest or internal client metadata.'}))})}).catch(()=>undefined);toast.warning('Needs Review',`${unmatched.length} folder${unmatched.length===1?' was':'s were'} blocked from Drive. Assign the correct client below.`);await load();return}
+      if(unmatched.length){await fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/review-match`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({folders:unmatched.map((name)=>({name,reason:'The folder could not be matched to a client. Select the correct client before uploading.'}))})}).catch(()=>undefined);toast.warning('Needs Review',`${unmatched.length} folder${unmatched.length===1?' was':'s were'} blocked from Drive. Assign the correct client below.`);await load();return}
       manifest={schema_version:1,batch_id:batchId,shoot_date:detail.shootDate,clients}
     }
 
     const knownFolders=new Set(manifest.clients.map((client)=>client.folder_name.toLowerCase()))
     const unknownFolders=folderNames.filter((folderName)=>!knownFolders.has(folderName.toLowerCase()))
-    if(unknownFolders.length){await fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/review-match`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({folders:unknownFolders.map((name)=>({name,reason:'This folder is not present in the trusted batch manifest.'}))})}).catch(()=>undefined);toast.warning('Needs Review',`${unknownFolders.length} unknown folder${unknownFolders.length===1?' was':'s were'} blocked from Drive.`);await load();return}
+    if(unknownFolders.length){await fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/review-match`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({folders:unknownFolders.map((name)=>({name,reason:'This folder is not listed in the downloaded batch.'}))})}).catch(()=>undefined);toast.warning('Needs Review',`${unknownFolders.length} unknown folder${unknownFolders.length===1?' was':'s were'} blocked from Drive.`);await load();return}
 
     let failedIds=new Set<string>()
     if(uploadMode==='failed'){

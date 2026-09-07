@@ -97,13 +97,13 @@ export default function ShootReminderSettings() {
       </div>
       <div className="mt-4 flex items-start gap-2 rounded-lg bg-[#C4CEFF]/5 p-4 text-xs leading-relaxed text-white/65"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-[#C4CEFF]"/><p>The shoot-day email is sent only after a successful first email, to clients who <strong className="text-white">confirmed or have not responded</strong>. Clients who can’t attend are excluded. Declining does not cancel a booking or change payments.</p></div>
       {control ? <div className="mt-4 space-y-1 text-xs text-white/50" aria-live="polite">
-        <p>Email configuration: {control.emailConfigured?'Present':'Missing'}{control.senderAddress?` · ${control.senderAddress}`:''}</p>
+        <p>Email setup: {control.emailConfigured?'Present':'Missing'}{control.senderAddress?` · ${control.senderAddress}`:''}</p>
         <p>Reminder service: {checking?'Checking…':control.probeStatus==='ready'?'Check passed':control.probeStatus==='failed'?'Check failed':'Not checked yet'}</p>
         {control.checkedAt?<p>Last check: {stamp(control.checkedAt)} PHT</p>:null}
         {control.lastCompletedAt?<p>Last scheduled run: {stamp(control.lastCompletedAt)} PHT</p>:null}
-        <p className="pt-1 text-white/35">Checks verify setup and the production endpoint, not inbox delivery. Failed sends retry during the 6–8 AM window; they are not new reminders.</p>
+        <p className="pt-1 text-white/35">This check confirms that reminders can run. Use a test email to check delivery. Failed reminders are retried between 6 and 8 AM.</p>
       </div>:null}
-      {mismatch?<p role="alert" className="mt-4 text-sm text-amber-200">The saved setting and scheduler differ. Try: Check Reminder Service to repair the schedule, or Pause Reminders to stop future sends.</p>:null}
+      {mismatch?<p role="alert" className="mt-4 text-sm text-amber-200">The reminder schedule needs attention. Try: Check Reminder Service to repair the schedule, or Pause Reminders to stop future sends.</p>:null}
       {control?.problem?<p role="alert" className="mt-4 text-sm text-amber-200">{control.problem}</p>:null}
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <button type="button" disabled={!!busy || !!checking || !control} onClick={()=>void apply('check')} className={`${adminBtnGhost} ${button}`}>

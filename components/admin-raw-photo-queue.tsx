@@ -82,7 +82,7 @@ export default function AdminRawPhotoQueue({
       setBookings(data.filter(hasRawPhotoSubmission))
     } catch (err) {
       console.error(err)
-      toast.error('Sync failed', 'Could not load raw photo queue from database.')
+      toast.error('Sync failed', 'Could not load photo selections. Try: refresh the page.')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -124,7 +124,7 @@ export default function AdminRawPhotoQueue({
       fetchQueue(true)
     } catch (err) {
       console.error(err)
-      toast.error('Approval failed', err instanceof Error ? err.message : 'Could not update database.')
+      toast.error('Approval failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
     } finally {
       setActionLoading(false)
     }
@@ -175,7 +175,7 @@ export default function AdminRawPhotoQueue({
       fetchQueue(true)
     } catch (err) {
       console.error(err)
-      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not update database.')
+      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
     } finally {
       setActionLoading(false)
     }

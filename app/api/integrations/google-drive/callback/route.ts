@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
     const code = url.searchParams.get('code')
     const state = verifyGoogleOAuthState(url.searchParams.get('state'))
-    if (!code || !state) return redirectWith({ drive_error: 'Invalid or expired Google OAuth callback.' })
+    if (!code || !state) return redirectWith({ drive_error: 'The Google Drive connection request expired. Try: connect your account again.' })
 
     const token = await exchangeGoogleAuthorizationCode(code)
     const allowedEmail = process.env.GOOGLE_DRIVE_ALLOWED_EMAIL?.trim().toLowerCase() || ''
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     }
 
     const admin = getSupabaseAdmin()
-    if (!admin) return redirectWith({ drive_error: 'Database admin client unavailable.' })
+    if (!admin) return redirectWith({ drive_error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' })
 
     const now = new Date().toISOString()
     const { error } = await admin

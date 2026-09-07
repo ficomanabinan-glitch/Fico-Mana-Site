@@ -61,17 +61,17 @@ export default function SystemPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatusCard
           icon={Database}
-          title="Database"
+          title="Records"
           value="Connected"
           tone="good"
-          detail="Bookings, payments, editor jobs, selections, deliveries, and audit records are stored in Supabase."
+          detail="Your bookings, payments, photos, and activity history are saved here."
         />
         <StatusCard
           icon={ShieldCheck}
           title="Security"
-          value="Server enforced"
+          value="Protected"
           tone="good"
-          detail="Admin access is authenticated server-side and workflow tables are protected from direct browser writes."
+          detail="Only authorized staff can view and update your records."
         />
         <StatusCard
           icon={Cloud}
@@ -82,8 +82,8 @@ export default function SystemPage() {
             drive?.connected
               ? `${drive.accountEmail || 'Drive account'} · ${drive.rootFolderName || 'FICOMANA SHOOTS'}`
               : drive?.oauthAppConfigured
-                ? 'Connect the production Google account before uploading or delivering photos.'
-                : 'Google OAuth credentials must be configured before the Drive account can be connected.'
+                ? 'Connect your studio Google account before uploading or delivering photos.'
+                : 'Google Drive setup is incomplete. Ask your administrator to finish the connection.'
           }
         />
         <StatusCard
@@ -91,7 +91,7 @@ export default function SystemPage() {
           title="Email"
           value={loading ? 'Checking…' : email?.ok ? 'Configured' : 'Action needed'}
           tone={email?.ok ? 'good' : 'warning'}
-          detail={email?.ok ? `API key is present${email.fromAddress ? ` for ${email.fromAddress}` : ''}. Use the test below to verify delivery.` : 'Configure Resend on the production deployment to send delivery notifications.'}
+          detail={email?.ok ? `Email setup is available${email.fromAddress ? ` for ${email.fromAddress}` : ''}. Use the test below to check delivery.` : 'Complete email setup to send client notifications.'}
         />
       </div>
 

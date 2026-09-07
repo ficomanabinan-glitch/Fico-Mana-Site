@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   if (authError) return authError
 
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
   const { data } = await admin
     .from('google_drive_settings')
     .select('root_folder_id,root_folder_name,portal_expiry_days,account_email,refresh_token_encrypted,granted_scopes,connected_at,disconnected_at,updated_at')
@@ -55,7 +55,7 @@ export async function PUT(request: Request) {
   try {
     const body = (await request.json()) as Body
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
     let rootFolderId = body.rootFolderId?.trim() || null
     let rootFolderName = 'FICOMANA SHOOTS'

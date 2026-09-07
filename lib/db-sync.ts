@@ -25,14 +25,14 @@ export async function syncStoreToDatabase(client?: SupabaseClient | null): Promi
   }
 
   if (!isSupabaseConfigured()) {
-    return { ...empty, ok: true, message: 'Supabase not configured — file store only.' }
+    return { ...empty, ok: true, message: 'Online records are unavailable. Only locally saved records can be used.' }
   }
 
   const db = client ?? getSupabaseAdmin()
   if (!db) {
     return {
       ...empty,
-      message: 'Supabase admin key required. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.',
+      message: 'Records cannot be updated. Try: ask your administrator to check the connection.',
     }
   }
 
@@ -44,7 +44,7 @@ export async function syncStoreToDatabase(client?: SupabaseClient | null): Promi
     bookingsUpdated: 0,
     notificationsPushed: 0,
     packagesSynced,
-    message: packagesSynced ? 'Package catalog synced.' : 'Database is up to date.',
+    message: packagesSynced ? 'Package catalog synced.' : 'Your records are up to date.',
   }
 }
 

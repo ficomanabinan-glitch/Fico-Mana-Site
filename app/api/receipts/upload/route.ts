@@ -231,7 +231,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'Failed to upload receipt. Ensure receipt storage is configured and the Supabase server secret is available on Vercel.',
+            'Your receipt could not be uploaded. Try: upload it again, or contact the studio if the problem continues.',
         },
         { status: 500 },
       )

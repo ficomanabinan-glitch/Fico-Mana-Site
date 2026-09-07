@@ -12,7 +12,7 @@ export async function GET(
   try {
     const { id } = await params
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
     const { data, error } = await admin
       .from('provisioning_audit')
       .select('id,action,actor_type,actor_id,external_resource_id,metadata,error,created_at')

@@ -19,7 +19,7 @@ type WebsiteMediaRow = {
 
 export async function getFicoManaWorkspaceId() {
   const admin = getSupabaseAdmin()
-  if (!admin) throw new Error('Database admin client unavailable.')
+  if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
   const { data, error } = await admin
     .from('workspaces')
     .select('id')
@@ -33,7 +33,7 @@ export async function getFicoManaWorkspaceId() {
 
 export async function getWebsiteMediaForWorkspace(workspaceId: string): Promise<WebsiteMediaSlot[]> {
   const admin = getSupabaseAdmin()
-  if (!admin) throw new Error('Database admin client unavailable.')
+  if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
   const { data, error } = await admin
     .from('website_media_slots')
     .select('slot_key,storage_path,file_name,mime_type,file_size,alt_text,updated_at')

@@ -152,7 +152,7 @@ function BookingsManagement() {
       setFilteredBookings(data)
     } catch (err) {
       console.error(err)
-      toast.error('Sync failed', 'Could not load bookings from database.')
+      toast.error('Sync failed', 'Could not load bookings. Try: refresh the page.')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -253,7 +253,7 @@ function BookingsManagement() {
       await fetchBookings(true)
       toast.success(
         'Walk-in saved',
-        receiptUrl ? `${id} confirmed with receipt on file.` : `${id} confirmed in database.`,
+        receiptUrl ? `${id} confirmed with receipt on file.` : `${id} confirmed.`,
       )
     } catch (err) {
       console.error(err)
@@ -454,7 +454,7 @@ function BookingsManagement() {
       } else if (dateChanged) {
         toast.success('Rescheduled', 'Booking moved — customer notified.')
       } else {
-        toast.success('Details saved', 'Booking updated in database.')
+        toast.success('Details saved', 'Booking details saved.')
       }
     } catch (err) {
       console.error(err)
@@ -472,7 +472,7 @@ function BookingsManagement() {
       const { saved } = await runAdminTransaction(updated)
       setSelectedBooking(saved)
       fetchBookings(true)
-      toast.success('Staff notes saved', 'Internal notes updated in database.')
+      toast.success('Staff notes saved', 'Staff notes saved.')
     } catch (err) {
       toast.error('Save failed', err instanceof Error ? err.message : 'Could not save notes.')
     } finally {
@@ -582,7 +582,7 @@ function BookingsManagement() {
       if (emailMsg) {
         toast.warning(`Status → ${status} — email issue`, emailMsg)
       } else {
-        toast.success(`Status → ${status}`, `${booking.id} updated in database.`)
+        toast.success(`Status → ${status}`, `${booking.id} updated.`)
       }
     } catch (err) {
       console.error(err)

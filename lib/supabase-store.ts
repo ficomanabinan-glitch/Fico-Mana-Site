@@ -38,7 +38,10 @@ export async function saveBookingToDb(client: SupabaseClient, booking: Booking):
   let { data, error } = await attempt(mapModelBookingToDb(booking))
   if (error) {
     const retry = await attempt(mapModelBookingToDbCore(booking))
-    if (retry.error) throw new Error(`Database save failed: ${error.message}`)
+    if (retry.error) {
+      console.error('saveBookingToDb:', { initialError: error.message, retryError: retry.error.message })
+      throw new Error('Your booking could not be saved. Try: refresh the page, or contact the studio if the problem continues.')
+    }
     data = retry.data
   }
   const fromDb = mapDbBookingToModel(data)

@@ -34,7 +34,7 @@ function requireSupabaseAdmin() {
   const admin = getSupabaseAdmin()
   if (!admin) {
     throw new Error(
-      'Supabase admin client unavailable. Set SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY.',
+      'Schedule settings are unavailable. Try: ask your administrator to check the connection.',
     )
   }
   return admin

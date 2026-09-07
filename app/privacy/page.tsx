@@ -23,7 +23,7 @@ export default function PrivacyPage() {
             verify, and confirm your reservation.
           </p>
           <p>
-            Booking and payment records may be stored in our secure database and emailed to you for
+            Booking and payment records may be stored securely and emailed to you for
             confirmation, receipts, and status updates. We do not sell your personal information to third parties.
           </p>
           <p>

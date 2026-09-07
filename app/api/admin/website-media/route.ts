@@ -135,7 +135,7 @@ export async function POST(request: Request) {
   const auth = await authorize(request)
   if (auth.error || !auth.access || !auth.user) return auth.error
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
   try {
     const payload = await request.json().catch(() => null)
@@ -280,7 +280,7 @@ export async function PATCH(request: Request) {
   const auth = await authorize(request)
   if (auth.error || !auth.access || !auth.user) return auth.error
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
   try {
     const parsed = descriptionSchema.safeParse(await request.json().catch(() => null))
@@ -312,7 +312,7 @@ export async function DELETE(request: Request) {
   const auth = await authorize(request)
   if (auth.error || !auth.access || !auth.user) return auth.error
   const admin = getSupabaseAdmin()
-  if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
   try {
     const parsed = deleteGallerySchema.safeParse(await request.json().catch(() => null))

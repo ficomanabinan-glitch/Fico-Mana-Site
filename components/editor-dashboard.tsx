@@ -138,7 +138,7 @@ export default function EditorDashboard() {
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
-    toast.success('Batch download started', 'Client folders and the secure batch manifest are included.')
+    toast.success('Batch download started', 'Client folders and their upload details are included.')
     window.setTimeout(() => {
       setDownloading('')
       void load(true)

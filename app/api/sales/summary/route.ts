@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     if (authError) return authError
 
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
 
     const url = new URL(request.url)
     const requestedPeriod = url.searchParams.get('period') as SalesPeriod | null

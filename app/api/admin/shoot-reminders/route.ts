@@ -28,6 +28,6 @@ export async function GET(request: Request) {
     const rows = attendance.data || []
     return NextResponse.json({ rows: rows.slice(0,2000), truncated: rows.length>2000, settings: settings.data }, { headers })
   } catch {
-    return NextResponse.json({ error: 'Shoot reminders could not be loaded. Try: refresh; if this persists, ask the system administrator to complete the shoot-reminder database setup.' }, { status: 503, headers })
+    return NextResponse.json({ error: 'Shoot reminders could not be loaded. Try: refresh this page, or ask your administrator to check the reminder settings.' }, { status: 503, headers })
   }
 }

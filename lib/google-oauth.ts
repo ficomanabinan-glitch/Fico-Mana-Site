@@ -16,9 +16,9 @@ function encryptionKey() {
   // Keep existing refresh tokens decryptable until they can be deliberately
   // re-encrypted with a dedicated key during a planned Drive reconnection.
   const material = dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
-  if (!material) throw new Error('Server encryption key is unavailable.')
+  if (!material) throw new Error('Google Drive setup is incomplete. Ask your administrator to check the connection settings.')
   if (process.env.NODE_ENV === 'production' && material.length < 32) {
-    throw new Error('Google token encryption key is too short.')
+    throw new Error('Google Drive setup needs attention. Ask your administrator to check the connection settings.')
   }
   return createHash('sha256').update(`ficomana-google-drive:${material}`).digest()
 }
@@ -28,9 +28,9 @@ function stateKey() {
   const material = process.env.NODE_ENV === 'production'
     ? dedicated
     : dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
-  if (!material) throw new Error('OAuth state signing secret is unavailable.')
+  if (!material) throw new Error('Google Drive setup is incomplete. Ask your administrator to check the connection settings.')
   if (process.env.NODE_ENV === 'production' && material.length < 32) {
-    throw new Error('OAuth state signing secret is too short.')
+    throw new Error('Google Drive setup needs attention. Ask your administrator to check the connection settings.')
   }
   return createHash('sha256').update(`ficomana-google-oauth-state:${material}`).digest()
 }
@@ -105,7 +105,7 @@ export function verifyGoogleOAuthState(value: string | null | undefined): OAuthS
 export function buildGoogleAuthorizationUrl(loginHint?: string) {
   const clientId = env('GOOGLE_CLIENT_ID')
   if (!clientId || !env('GOOGLE_CLIENT_SECRET')) {
-    throw new Error('Google OAuth app credentials are not configured on the server.')
+    throw new Error('Google Drive setup is incomplete. Ask your administrator to check the connection settings.')
   }
   const params = new URLSearchParams({
     client_id: clientId,
@@ -124,7 +124,7 @@ export function buildGoogleAuthorizationUrl(loginHint?: string) {
 export async function exchangeGoogleAuthorizationCode(code: string) {
   const clientId = env('GOOGLE_CLIENT_ID')
   const clientSecret = env('GOOGLE_CLIENT_SECRET')
-  if (!clientId || !clientSecret) throw new Error('Google OAuth app credentials are not configured.')
+  if (!clientId || !clientSecret) throw new Error('Google Drive setup is incomplete. Ask your administrator to check the connection settings.')
 
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -144,8 +144,8 @@ export async function exchangeGoogleAuthorizationCode(code: string) {
     scope?: string
     error_description?: string
   }
-  if (!response.ok || !data.access_token) throw new Error(data.error_description || 'Google OAuth connection failed.')
-  if (!data.refresh_token) throw new Error('Google did not return an offline refresh token. Reconnect and approve Drive access.')
+  if (!response.ok || !data.access_token) throw new Error(data.error_description || 'Google Drive could not connect. Try: connect your account again.')
+  if (!data.refresh_token) throw new Error('Google Drive access was not fully approved. Try: reconnect your account and allow access to your files.')
 
   const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: { Authorization: `Bearer ${data.access_token}` },
@@ -166,6 +166,6 @@ export async function exchangeGoogleAuthorizationCode(code: string) {
 export function googleOAuthClientCredentials() {
   const clientId = env('GOOGLE_CLIENT_ID')
   const clientSecret = env('GOOGLE_CLIENT_SECRET')
-  if (!clientId || !clientSecret) throw new Error('Google OAuth app credentials are not configured.')
+  if (!clientId || !clientSecret) throw new Error('Google Drive setup is incomplete. Ask your administrator to check the connection settings.')
   return { clientId, clientSecret }
 }

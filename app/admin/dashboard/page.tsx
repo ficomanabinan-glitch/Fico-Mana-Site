@@ -88,7 +88,7 @@ export default function DashboardOverview() {
       })
     } catch (err) {
       console.error(err)
-      if (!silent) toast.error('Sync failed', 'Could not load dashboard data from database.')
+      if (!silent) toast.error('Sync failed', 'Could not load the dashboard. Try: refresh the page.')
     } finally {
       setLoading(false)
       setRefreshing(false)

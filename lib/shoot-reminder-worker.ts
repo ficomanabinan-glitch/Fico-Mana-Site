@@ -9,7 +9,7 @@ export async function runShootReminderWorker(admin: SupabaseClient) {
   const resend = getResendClient()
   if (!resend) throw new Error('Reminder email service is not configured.')
   const { data, error } = await admin.rpc('claim_shoot_reminders', { p_limit: 40 })
-  if (error) throw new Error('Could not claim scheduled reminders. Check the reminder database setup.')
+  if (error) throw new Error('Could not load scheduled reminders. Try: check the reminder settings.')
   const jobs = (data || []) as Delivery[]
   const result = { claimed: jobs.length, sent: 0, failed: 0, skipped: 0, deferred: 0 }
   const deadline = Date.now() + 85_000

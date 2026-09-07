@@ -29,12 +29,12 @@ export default function EmailTestSettings({ configured, fromAddress }: { configu
       const body = await response.json().catch(() => ({})) as { success?: boolean; resendId?: string; error?: string; to?: string }
       if (!response.ok || !body.success || !body.resendId) {
         const reason = body.error || 'Email result could not be confirmed.'
-        throw new Error(reason.includes('Try:') ? reason : `${reason} Try: check your admin session and Resend email logs before retrying.`)
+        throw new Error(reason.includes('Try:') ? reason : `${reason} Try: check that you are signed in and review the email history before retrying.`)
       }
-      setResult({ success: true, message: `Resend accepted the test for ${body.to || recipient}. Check the inbox and spam folder, or confirm Delivered in Resend. Email ID: ${body.resendId}` })
+      setResult({ success: true, message: `The email service accepted the test for ${body.to || recipient}. Check the inbox and spam folder to confirm delivery. Reference: ${body.resendId}` })
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Email result could not be confirmed.'
-      setResult({ success: false, message: reason.includes('Try:') ? reason : `${reason} Try: check Resend email logs, then retry this same request.` })
+      setResult({ success: false, message: reason.includes('Try:') ? reason : `${reason} Try: review the email history, then retry this same request.` })
     } finally {
       inFlight.current = false
       setSending(false)
@@ -48,7 +48,7 @@ export default function EmailTestSettings({ configured, fromAddress }: { configu
         <div className="min-w-0">
           <h2 id="email-test-title" className="text-sm font-semibold">Test email delivery</h2>
           <p className="mt-1 break-words text-xs text-white/50">Sender: {fromAddress || 'Not available'}</p>
-          <p className="mt-1 text-xs text-white/40">Send one real test email without creating a booking. Up to 5 requests per hour per admin/IP.</p>
+          <p className="mt-1 text-xs text-white/40">Send one real test email without creating a booking. You can send up to 5 test requests per hour.</p>
         </div>
       </div>
       <form onSubmit={sendTest} className="flex flex-col gap-3 sm:flex-row sm:items-end">

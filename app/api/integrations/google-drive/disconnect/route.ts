@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
   try {
     const admin = getSupabaseAdmin()
-    if (!admin) return NextResponse.json({ error: 'Database admin client unavailable.' }, { status: 500 })
+    if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
     const now = new Date().toISOString()
     const { error } = await admin
       .from('google_drive_settings')
