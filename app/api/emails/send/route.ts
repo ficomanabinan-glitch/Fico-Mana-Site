@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import type { Booking, PaymentRecord } from '@/lib/data-store'
 import type { EmailAction } from '@/lib/email-dispatch'
 import { requireStaffAuth } from '@/lib/auth-api'
+import { loadBookingById } from '@/lib/booking-load'
+import { bookingReferenceSchema, googleDriveFolderUrlSchema } from '@/lib/security/schemas'
 import {
   sendBookingCreatedEmail,
   sendBookingSubmittedEmail,
@@ -34,10 +36,20 @@ export async function POST(request: Request) {
     if (authError) return authError
 
     const body = (await request.json()) as Body
-    const { action, booking, payment, reason, reasonId, rebookingFee, driveLink } = body
+    const { action, reason, reasonId, rebookingFee, driveLink } = body
 
-    if (!booking?.id || !booking?.customerEmail) {
+    if (!bookingReferenceSchema.safeParse(body.booking?.id).success) {
       return NextResponse.json({ error: 'Invalid booking payload' }, { status: 400 })
+    }
+    const booking = await loadBookingById(body.booking.id)
+    if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    const payment = body.payment ? booking.paymentHistory.find((item) => item.id === body.payment?.id) : undefined
+    if ((body.payment && !payment) ||
+      (reason !== undefined && (typeof reason !== 'string' || reason.length > 1_000)) ||
+      (reasonId !== undefined && (typeof reasonId !== 'string' || reasonId.length > 100)) ||
+      (rebookingFee !== undefined && (!Number.isFinite(rebookingFee) || rebookingFee < 0 || rebookingFee > 10_000_000)) ||
+      (driveLink !== undefined && !googleDriveFolderUrlSchema.safeParse(driveLink).success)) {
+      return NextResponse.json({ error: 'Invalid email request' }, { status: 400 })
     }
 
     let result: { success: boolean; error?: string } = { success: true }

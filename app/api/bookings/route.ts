@@ -325,11 +325,8 @@ export async function POST(request: Request) {
     }
     const supabaseResult = db ? await saveBookingToDb(db, booking) : null
 
-    try {
-      await upsertBooking(supabaseResult ?? booking)
-    } catch (fileError) {
-      console.warn('File store upsert skipped:', fileError)
-    }
+    if (db && !supabaseResult) throw new Error('The booking could not be saved.')
+    if (!isSupabaseConfigured()) await upsertBooking(booking)
 
     const result = supabaseResult ?? booking
     const emailErrors: string[] = []

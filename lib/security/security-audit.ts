@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { safeMetadata } from '@/lib/security/audit-metadata'
+import { safeAuditRoute, safeMetadata } from '@/lib/security/audit-metadata'
 
 export type SecurityAuditEvent = {
   eventType: string
@@ -22,7 +22,7 @@ export async function recordSecurityAuditEvent(event: SecurityAuditEvent) {
       actor_id: event.actorId?.slice(0, 200) || null,
       workspace_id: event.workspaceId || null,
       booking_id: event.bookingId?.slice(0, 100) || null,
-      route: event.route?.slice(0, 300) || null,
+      route: safeAuditRoute(event.route),
       metadata: safeMetadata(event.metadata),
     })
     if (error) console.error('Security audit insert failed:', error.code)

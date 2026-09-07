@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { isAdminUser } from '@/lib/auth/admin'
+import { canUseWorkflow, getWorkflowAccess } from '@/lib/auth/workflow'
 import { getSupabaseUrl, getSupabaseKey } from '@/lib/supabase/env'
 
 export async function createSupabaseServerClient() {
@@ -50,14 +51,17 @@ export async function getStaffAuthContext() {
 /** Returns a server-validated administrator, never trusting user_metadata. */
 export async function getAdminUser() {
   const user = await getStaffUser()
-  return isAdminUser(user) ? user : null
+  if (!user || !isAdminUser(user)) return null
+  const access = await getWorkflowAccess(user)
+  return access && canUseWorkflow(access, 'admin') ? user : null
 }
 
 /** Server-validated admin plus the current Supabase MFA assurance level. */
 export async function getAdminAuthContext() {
   const context = await getStaffAuthContext()
+  const access = context.user && isAdminUser(context.user) ? await getWorkflowAccess(context.user) : null
   return {
     ...context,
-    user: isAdminUser(context.user) ? context.user : null,
+    user: access && canUseWorkflow(access, 'admin') ? context.user : null,
   }
 }

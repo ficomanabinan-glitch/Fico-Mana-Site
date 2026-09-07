@@ -2,6 +2,8 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type { Booking, Notification } from '@/lib/data-store'
 import { isValidBookingId } from '@/lib/booking-id'
+import { assertLocalFileStoreAllowed } from '@/lib/security/local-file-store'
+import { isSupabaseConfigured } from '@/lib/supabase/env'
 
 type StoreData = {
   bookings: Booking[]
@@ -16,6 +18,8 @@ const emptyStore = (): StoreData => ({
 })
 
 async function readStore(): Promise<StoreData> {
+  assertLocalFileStoreAllowed()
+  if (isSupabaseConfigured()) throw new Error('Online booking records are authoritative.')
   try {
     const raw = await fs.readFile(STORE_PATH, 'utf-8')
     const parsed = JSON.parse(raw) as StoreData
@@ -29,6 +33,8 @@ async function readStore(): Promise<StoreData> {
 }
 
 async function writeStore(data: StoreData): Promise<boolean> {
+  assertLocalFileStoreAllowed()
+  if (isSupabaseConfigured()) throw new Error('Online booking records are authoritative.')
   try {
     await fs.mkdir(path.dirname(STORE_PATH), { recursive: true })
     await fs.writeFile(STORE_PATH, JSON.stringify(data, null, 2), 'utf-8')

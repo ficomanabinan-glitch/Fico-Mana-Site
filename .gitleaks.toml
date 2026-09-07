@@ -1,0 +1,12 @@
+title = "FICO MANA credential detection"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed public Supabase publishable key, not a privileged server credential"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^lib/supabase/env\.ts$''']
+regexTarget = "secret"
+regexes = ['''^sb_publishable_[A-Za-z0-9_-]+$''']

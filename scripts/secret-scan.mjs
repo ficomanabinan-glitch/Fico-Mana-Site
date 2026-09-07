@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 
-const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+const tracked = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' })
   .split('\0')
   .filter(Boolean)
   .filter((path) => !path.endsWith('pnpm-lock.yaml') && !/\.(png|jpe?g|gif|webp|avif|ico|mp4|pdf)$/i.test(path))
@@ -31,6 +31,9 @@ for (const path of tracked) {
   }
   for (const signature of signatures) {
     if (signature.pattern.test(source)) findings.push(`${path}: ${signature.name}`)
+  }
+  if (/^data\/(ficomana-store|email-logs|blocked-slots|fico-spot-blocks)\.json$/.test(path)) {
+    findings.push(`${path}: transactional snapshot must not be tracked`)
   }
 }
 

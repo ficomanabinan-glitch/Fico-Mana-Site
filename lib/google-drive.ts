@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { decryptGoogleRefreshToken, googleOAuthClientCredentials } from '@/lib/google-oauth'
+import { googleThumbnailUrl, readBoundedResponse } from '@/lib/security/outbound-url'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -197,13 +198,16 @@ export async function hashDriveFileSha256(fileId: string, maximumBytes: number) 
 }
 
 export async function downloadDriveThumbnail(thumbnailLink: string): Promise<Buffer> {
+  const url = googleThumbnailUrl(thumbnailLink)
   const token = await getGoogleDriveAccessToken()
-  const response = await fetch(thumbnailLink, {
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) throw new Error(`Google Drive thumbnail download failed (${response.status}).`)
-  return Buffer.from(await response.arrayBuffer())
+  return readBoundedResponse(response, 8 * 1024 * 1024)
 }
 
 export async function copyDriveFile(input: {

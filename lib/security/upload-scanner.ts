@@ -40,13 +40,14 @@ export async function scanUpload(input: {
     },
     body: new Uint8Array(input.buffer),
     signal: AbortSignal.timeout(30_000),
+    redirect: 'error',
     cache: 'no-store',
   })
   if (!response.ok) throw new Error('Upload security scanning is temporarily unavailable.')
   const result = (await response.json().catch(() => ({}))) as ScanResponse
   if (result.verdict === 'clean') return { status: 'clean' }
   if (result.verdict === 'infected' || result.verdict === 'suspicious') {
-    return { status: 'rejected', reason: result.reason?.slice(0, 300) || 'The file was rejected by security scanning.' }
+    return { status: 'rejected', reason: 'The file was rejected by security scanning.' }
   }
   throw new Error('Upload security scanning returned an invalid result.')
 }

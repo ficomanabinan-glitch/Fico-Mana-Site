@@ -4,6 +4,7 @@ import { getBookingById } from '@/lib/server-store'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getBookingFromDb } from '@/lib/supabase-store'
+import { readAuthoritativeRecord } from '@/lib/security/local-file-store'
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
@@ -13,17 +14,18 @@ export function emailsMatch(a: string, b: string): boolean {
   return normalizeEmail(a) === normalizeEmail(b)
 }
 
-/** Load a booking from Supabase (service role) or file store fallback. */
+/** A missing online booking must never reappear from a local snapshot. */
 export async function loadBookingById(id: string): Promise<Booking | null> {
   const resolvedId = resolveBookingReference(id)
-  if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (admin) {
-      const fromDb = await getBookingFromDb(admin, resolvedId)
-      if (fromDb) return fromDb
-    }
-  }
-  return getBookingById(resolvedId)
+  return readAuthoritativeRecord({
+    configured: isSupabaseConfigured(),
+    online: async () => {
+      const admin = getSupabaseAdmin()
+      if (!admin) throw new Error('Booking records are temporarily unavailable.')
+      return getBookingFromDb(admin, resolvedId)
+    },
+    local: () => getBookingById(resolvedId),
+  })
 }
 
 export type PublicResubmitBooking = {

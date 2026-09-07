@@ -49,5 +49,5 @@ export function isAdminUser(user: User | null | undefined) {
   if (role === 'owner' || role === 'admin' || roles.includes('owner') || roles.includes('admin')) return true
 
   const email = user.email?.trim().toLowerCase()
-  return !!email && adminEmailAllowlist().has(email)
+  return process.env.ALLOW_ADMIN_EMAIL_BOOTSTRAP === 'true' && !!email && adminEmailAllowlist().has(email)
 }

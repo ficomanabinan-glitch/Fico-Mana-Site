@@ -101,7 +101,6 @@ export async function POST(
         }
       }
 
-      await upsertBooking(saved)
       await addNotificationToDb(admin, booking.id, 'EDITED_PHOTOS_READY', notificationMessage)
       await setPortalExpiryFromDelivery(booking.id, deliveredAt)
     } else {

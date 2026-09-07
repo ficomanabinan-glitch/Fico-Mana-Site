@@ -2,6 +2,13 @@ node_modules/
 .next/
 .vercel/
 .staging-data/
+.local-data/
+data/ficomana-store.json
+data/email-logs.json
+data/blocked-slots.json
+data/fico-spot-blocks.json
+previews/
+artifacts/
 
 .env*
 !.env.example

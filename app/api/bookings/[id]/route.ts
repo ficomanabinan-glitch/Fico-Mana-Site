@@ -7,6 +7,8 @@ import { secureErrorResponse } from '@/lib/security/error-response'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getBookingFromDb, saveBookingToDb, deleteBookingFromDb } from '@/lib/supabase-store'
 import { disableClientPortal, provisionBookingResources } from '@/lib/booking-provisioning'
+import { bookingMutationSchema } from '@/lib/security/schemas'
+import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 
 const DELETE_REASONS = {
   admin_error: 'Admin error',
@@ -31,6 +33,7 @@ export async function GET(
       if (booking) {
         return NextResponse.json(booking)
       }
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
     const booking = await getBookingById(id)
@@ -52,10 +55,13 @@ export async function PUT(
     if (authError) return authError
 
     const { id } = await params
-    const booking = (await request.json()) as Booking
+    const parsed = bookingMutationSchema.safeParse(await request.json())
+    if (!parsed.success) return NextResponse.json({ error: 'Invalid booking payload' }, { status: 400 })
+    const booking = parsed.data as Booking
     if (booking.id !== id) return NextResponse.json({ error: 'ID mismatch' }, { status: 400 })
 
     const admin = isSupabaseConfigured() ? getSupabaseAdmin() : null
+    if (isSupabaseConfigured() && !admin) throw new Error('Booking records are temporarily unavailable.')
     const prior = admin ? await getBookingFromDb(admin, id) : await getBookingById(id)
     if (!prior) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
@@ -64,7 +70,6 @@ export async function PUT(
       const dbSaved = await saveBookingToDb(admin, booking)
       if (!dbSaved) return NextResponse.json({ error: 'Your booking could not be saved. Try: refresh the page and try again.' }, { status: 500 })
       saved = dbSaved
-      await upsertBooking(saved)
     } else {
       saved = await upsertBooking(booking)
     }
@@ -130,12 +135,9 @@ export async function DELETE(
         })()
       : await getBookingById(id)
 
-    if (!booking && !(await getBookingById(id))) {
+    if (!booking) {
       return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
     }
-
-    const target = booking || (await getBookingById(id))
-    if (!target) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
@@ -144,11 +146,11 @@ export async function DELETE(
       if (!ok) return NextResponse.json({ error: 'The booking could not be deleted. Try: refresh the page and try again.' }, { status: 500 })
     }
 
-    await deleteBookingFromStore(id)
-
-    console.info(
-      `[booking-delete] ${id} by ${user?.email || 'staff'} — ${DELETE_REASONS[reason]}${notes ? `: ${notes}` : ''}`,
-    )
+    if (!isSupabaseConfigured()) await deleteBookingFromStore(id)
+    await recordSecurityAuditEvent({
+      eventType: 'booking_deleted', outcome: 'success', actorId: user?.id,
+      bookingId: id, route: '/api/bookings/[id]', metadata: { reason, hasNotes: Boolean(notes) },
+    })
 
     return NextResponse.json({
       ok: true,

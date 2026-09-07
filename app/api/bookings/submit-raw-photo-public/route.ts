@@ -87,7 +87,6 @@ async function saveRawSubmission(booking: Booking, rawPhotoLink: string): Promis
           `Database save failed: ${error.message}. Run migration 011_raw_photo_filtering.sql in Supabase if columns are missing.`,
         )
       }
-      await upsertBooking(saved)
       await addNotificationToDb(admin, booking.id, 'RAW_PHOTO_UPLOAD', notificationMessage)
       try {
         await sendRawPhotoSubmittedEmails(saved)
@@ -106,7 +105,6 @@ async function saveRawSubmission(booking: Booking, rawPhotoLink: string): Promis
         : submittedAt,
     }
 
-    await upsertBooking(saved)
     await addNotificationToDb(admin, booking.id, 'RAW_PHOTO_UPLOAD', notificationMessage)
 
     try {

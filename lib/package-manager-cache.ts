@@ -50,7 +50,7 @@ export async function fetchManagedPackages({ force = false }: { force?: boolean 
   if (packageRequest) return packageRequest
 
   const requestGeneration = cacheGeneration
-  packageRequest = fetch('/api/admin/packages', {
+  const request = fetch('/api/admin/packages', {
     cache: 'no-store',
     credentials: 'include',
   }).then(async (response) => {
@@ -60,17 +60,20 @@ export async function fetchManagedPackages({ force = false }: { force?: boolean 
     if (requestGeneration === cacheGeneration) {
       packageCache = { data, cachedAt: Date.now() }
     }
-    return data
+    return requestGeneration === cacheGeneration ? data : packageCache?.data ?? data
   })
+  packageRequest = request
 
   try {
-    return await packageRequest
+    return await request
   } finally {
-    packageRequest = null
+    if (packageRequest === request) packageRequest = null
   }
 }
 
 export function rememberManagedPackage(pkg: ManagedPackage) {
+  cacheGeneration += 1
+  packageRequest = null
   const current = packageCache?.data ?? []
   const next = current.some((item) => item.id === pkg.id)
     ? current.map((item) => (item.id === pkg.id ? pkg : item))

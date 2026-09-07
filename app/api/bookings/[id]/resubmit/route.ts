@@ -55,7 +55,6 @@ export async function POST(
       if (admin) {
         const saved = await saveBookingToDb(admin, updatedBooking)
         if (saved) {
-          await upsertBooking(saved)
           const msg = `${booking.customerName} resubmitted a receipt for booking ${booking.id}.`
           await addNotificationToDb(admin, booking.id, 'RESUBMITTED', msg)
           await sendBookingSubmittedEmail(saved).catch(console.error)

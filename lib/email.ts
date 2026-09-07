@@ -1,6 +1,6 @@
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import { persistEmailLog } from './server-email-log'
-import { getServerEmailTemplate, renderTemplate } from './email-templates'
+import { escapeEmailText, getServerEmailTemplate, renderTemplate, safeEmailUrl } from './email-templates'
 import { LATE_FEE_POLICY } from './booking-slots'
 import { resubmitBookingUrl, submitRawPhotoUrl } from './site-url'
 import { isForgedRejection } from './rejection-reasons'
@@ -78,27 +78,27 @@ function sessionDetailsTable(booking: any) {
     <table style="width: 100%; font-size: 13px; margin: 16px 0; border-collapse: collapse;">
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Booking Reference</td>
-        <td style="padding: 8px 0; font-weight: bold; color: #0500D0; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${booking.id}</td>
+        <td style="padding: 8px 0; font-weight: bold; color: #0500D0; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.id)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Package</td>
-        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${booking.packageName}</td>
+        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.packageName)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Session Date</td>
-        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${booking.bookingDate}</td>
+        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.bookingDate)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Time Slot</td>
-        <td style="padding: 8px 0; font-weight: bold; color: #0500D0; border-bottom: 1px solid #EEF0FF;">${booking.bookingTime}</td>
+        <td style="padding: 8px 0; font-weight: bold; color: #0500D0; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.bookingTime)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Arrival Time</td>
-        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${arrival}</td>
+        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(arrival)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Shoot Time</td>
-        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${shoot}</td>
+        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(shoot)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A;">Status</td>
@@ -121,7 +121,7 @@ function paymentDetailsTable(booking: any, payment: PaymentRecord) {
     <table style="width: 100%; font-size: 13px; margin: 16px 0; border-collapse: collapse;">
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Booking Reference</td>
-        <td style="padding: 8px 0; font-weight: bold; color: #0500D0; border-bottom: 1px solid #EEF0FF;">${booking.id}</td>
+        <td style="padding: 8px 0; font-weight: bold; color: #0500D0; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.id)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Receipt No.</td>
@@ -129,19 +129,19 @@ function paymentDetailsTable(booking: any, payment: PaymentRecord) {
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Transaction ID</td>
-        <td style="padding: 8px 0; font-weight: bold; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${payment.id}</td>
+        <td style="padding: 8px 0; font-weight: bold; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(payment.id)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Payment Type</td>
-        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${payment.type}</td>
+        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(payment.type)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Payment Method</td>
-        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${payment.method}</td>
+        <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(payment.method)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Transaction Ref</td>
-        <td style="padding: 8px 0; font-weight: bold; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${payment.transactionRef || 'N/A'}</td>
+        <td style="padding: 8px 0; font-weight: bold; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(payment.transactionRef || 'N/A')}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Date</td>
@@ -169,8 +169,8 @@ export async function sendTransactionConfirmationEmail(booking: Record<string, u
   const html = brandedEmail(
     'Payment Confirmation',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>We have confirmed receipt of your <strong>${payment.type}</strong> payment. This email serves as your payment confirmation.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>We have confirmed receipt of your <strong>${escapeEmailText(payment.type)}</strong> payment. This email serves as your payment confirmation.</p>
       ${paymentDetailsTable(booking, payment)}
       <div style="background-color: #EEF0FF; padding: 14px; border-left: 3px solid #0500D0; margin-top: 16px;">
         <p style="margin: 0; font-size: 12px; color: #5A5A8A;">A separate <strong>Official Receipt</strong> for this transaction will follow in another email. Please keep both for your records.</p>
@@ -189,22 +189,22 @@ export async function sendTransactionReceiptEmail(booking: Record<string, unknow
   const html = brandedEmail(
     'Official Payment Receipt',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>This is your official receipt for the verified transaction below. Please save or print this email and present it at the studio if requested.</p>
 
       <div style="background: linear-gradient(135deg, #EEF0FF 0%, #F8FAFC 100%); border: 2px solid #0500D0; padding: 20px; margin: 16px 0; text-align: center;">
         <p style="margin: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em; color: #5A5A8A;">Official Receipt</p>
-        <p style="margin: 10px 0 4px; font-size: 22px; font-weight: bold; font-family: monospace; color: #0500D0;">${rcpNo}</p>
+        <p style="margin: 10px 0 4px; font-size: 22px; font-weight: bold; font-family: monospace; color: #0500D0;">${escapeEmailText(rcpNo)}</p>
         <p style="margin: 0; font-size: 11px; color: #16A34A; font-weight: bold;">${verifiedLabel}</p>
       </div>
 
       ${paymentDetailsTable(booking, payment)}
 
       <table style="width: 100%; font-size: 12px; margin-top: 8px; border-collapse: collapse; border-top: 1px dashed #D4D8F0; padding-top: 12px;">
-        <tr><td style="padding: 4px 0; color: #5A5A8A; width: 40%;">Client</td><td style="padding: 4px 0; font-weight: bold;">${booking.customerName}</td></tr>
-        <tr><td style="padding: 4px 0; color: #5A5A8A;">Package</td><td style="padding: 4px 0; font-weight: bold;">${booking.packageName}</td></tr>
-        <tr><td style="padding: 4px 0; color: #5A5A8A;">Session Date</td><td style="padding: 4px 0; font-weight: bold;">${booking.bookingDate} · ${booking.bookingTime}</td></tr>
-        <tr><td style="padding: 4px 0; color: #5A5A8A;">Booking Status</td><td style="padding: 4px 0; font-weight: bold; color: #16A34A;">${booking.bookingStatus === 'Confirmed' ? 'Confirmed' : booking.bookingStatus}</td></tr>
+        <tr><td style="padding: 4px 0; color: #5A5A8A; width: 40%;">Client</td><td style="padding: 4px 0; font-weight: bold;">${escapeEmailText(booking.customerName)}</td></tr>
+        <tr><td style="padding: 4px 0; color: #5A5A8A;">Package</td><td style="padding: 4px 0; font-weight: bold;">${escapeEmailText(booking.packageName)}</td></tr>
+        <tr><td style="padding: 4px 0; color: #5A5A8A;">Session Date</td><td style="padding: 4px 0; font-weight: bold;">${escapeEmailText(booking.bookingDate)} · ${escapeEmailText(booking.bookingTime)}</td></tr>
+        <tr><td style="padding: 4px 0; color: #5A5A8A;">Booking Status</td><td style="padding: 4px 0; font-weight: bold; color: #16A34A;">${escapeEmailText(booking.bookingStatus === 'Confirmed' ? 'Confirmed' : booking.bookingStatus)}</td></tr>
       </table>
 
       <p style="font-size: 11px; color: #5A5A8A; margin-top: 20px; font-style: italic; text-align: center;">
@@ -332,21 +332,21 @@ export async function sendBookingCreatedEmail(booking: any) {
       <p style="font-size: 8px; text-transform: uppercase; letter-spacing: 0.2em; color: #5A5A8A;">Self Portrait Studio</p>
       <hr style="border: 0; border-top: 1px dashed #D4D8F0; margin: 20px 0;" />
       <h3>Booking Submitted - Pending Deposit</h3>
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Thank you for submitting your booking request! To secure your slot, please complete your GCash deposit payment if you haven't already and upload your receipt on our portal.</p>
       
       <table style="width: 100%; font-size: 13px; margin: 20px 0; border-collapse: collapse;">
         <tr>
           <td style="padding: 6px 0; color: #5A5A8A;">Booking Reference:</td>
-          <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${booking.id}</td>
+          <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${escapeEmailText(booking.id)}</td>
         </tr>
         <tr>
           <td style="padding: 6px 0; color: #5A5A8A;">Package:</td>
-          <td style="padding: 6px 0; font-weight: bold;">${booking.packageName}</td>
+          <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.packageName)}</td>
         </tr>
         <tr>
           <td style="padding: 6px 0; color: #5A5A8A;">Date & Time:</td>
-          <td style="padding: 6px 0; font-weight: bold;">${booking.bookingDate} at ${booking.bookingTime}</td>
+          <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.bookingDate)} at ${escapeEmailText(booking.bookingTime)}</td>
         </tr>
         <tr>
           <td style="padding: 6px 0; color: #5A5A8A;">Required Deposit:</td>
@@ -373,17 +373,17 @@ export async function sendPaymentReceivedEmail(booking: any) {
       <p style="font-size: 8px; text-transform: uppercase; letter-spacing: 0.2em; color: #5A5A8A;">Self Portrait Studio</p>
       <hr style="border: 0; border-top: 1px dashed #D4D8F0; margin: 20px 0;" />
       <h3>Receipt Received</h3>
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>We have successfully received your GCash payment receipt upload. Our studio staff are reviewing it to verify the transaction.</p>
       
       <table style="width: 100%; font-size: 13px; margin: 20px 0; border-collapse: collapse;">
         <tr>
           <td style="padding: 6px 0; color: #5A5A8A;">Booking Reference:</td>
-          <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${booking.id}</td>
+          <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${escapeEmailText(booking.id)}</td>
         </tr>
         <tr>
           <td style="padding: 6px 0; color: #5A5A8A;">Uploaded Ref:</td>
-          <td style="padding: 6px 0; font-weight: bold; font-family: monospace;">${booking.transactionRef || 'None provided'}</td>
+          <td style="padding: 6px 0; font-weight: bold; font-family: monospace;">${escapeEmailText(booking.transactionRef || 'None provided')}</td>
         </tr>
       </table>
 
@@ -404,7 +404,7 @@ export async function sendPaymentApprovedEmail(
   const html = brandedEmail(
     'Your Booking is Confirmed',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Great news — we have verified your <strong>${deposit.method}</strong> deposit. Your studio session is now <strong style="color: #16A34A;">confirmed</strong>.</p>
 
       <div style="background: #ECFDF5; border: 1px solid #86EFAC; padding: 12px 16px; margin: 16px 0; text-align: center;">
@@ -438,7 +438,7 @@ export async function sendPaymentApprovedEmail(
       <div style="background-color: #FEF3C7; border: 1px solid #F59E0B; padding: 14px; margin: 16px 0;">
         <p style="margin: 0; font-size: 12px; font-weight: bold; color: #B45309;">Before your session</p>
         <p style="margin: 6px 0 0; font-size: 12px; color: #92400E; line-height: 1.6;">
-          Arrive <strong>10 minutes before</strong> your scheduled arrival time. Bring a valid ID and this booking reference (<strong>${booking.id}</strong>).
+          Arrive <strong>10 minutes before</strong> your scheduled arrival time. Bring a valid ID and this booking reference (<strong>${escapeEmailText(booking.id)}</strong>).
           ${remaining > 0 ? `The remaining balance of <strong>${formatMoney(remaining)}</strong> is payable in person at the studio.` : ''}
         </p>
       </div>
@@ -471,7 +471,7 @@ export async function sendDepositApprovedEmails(booking: Record<string, unknown>
   const html = brandedEmail(
     'Booking Confirmed & Official Receipt',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Your <strong>${deposit.method}</strong> deposit is verified. Your session is <strong style="color: #16A34A;">confirmed</strong> — save this email as your confirmation and official receipt.</p>
 
       <div style="background: #ECFDF5; border: 1px solid #86EFAC; padding: 12px 16px; margin: 16px 0; text-align: center;">
@@ -481,7 +481,7 @@ export async function sendDepositApprovedEmails(booking: Record<string, unknown>
 
       <div style="background: linear-gradient(135deg, #EEF0FF 0%, #F8FAFC 100%); border: 2px solid #0500D0; padding: 16px; margin: 16px 0; text-align: center;">
         <p style="margin: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em; color: #5A5A8A;">Official Receipt No.</p>
-        <p style="margin: 8px 0 0; font-size: 20px; font-weight: bold; font-family: monospace; color: #0500D0;">${rcpNo}</p>
+        <p style="margin: 8px 0 0; font-size: 20px; font-weight: bold; font-family: monospace; color: #0500D0;">${escapeEmailText(rcpNo)}</p>
       </div>
 
       ${sessionDetailsTable(booking)}
@@ -497,7 +497,7 @@ export async function sendDepositApprovedEmails(booking: Record<string, unknown>
       <div style="background-color: #FEF3C7; border: 1px solid #F59E0B; padding: 14px; margin: 16px 0;">
         <p style="margin: 0; font-size: 12px; font-weight: bold; color: #B45309;">Before your session</p>
         <p style="margin: 6px 0 0; font-size: 12px; color: #92400E; line-height: 1.6;">
-          Arrive <strong>10 minutes before</strong> your arrival time. Present reference <strong>${booking.id}</strong> at reception.
+          Arrive <strong>10 minutes before</strong> your arrival time. Present reference <strong>${escapeEmailText(booking.id)}</strong> at reception.
           ${remaining > 0 ? ` Balance of <strong>${formatMoney(remaining)}</strong> is payable in person.` : ''}
         </p>
       </div>
@@ -525,21 +525,21 @@ export async function sendBookingSubmittedEmail(booking: Record<string, unknown>
     const html = brandedEmail(
       'Booking Confirmed',
       `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Your FICO MANA session is <strong style="color: #16A34A;">confirmed</strong>. No online deposit is required — please pay the full package amount at the studio on your shoot day.</p>
 
       <table style="width: 100%; font-size: 13px; margin: 16px 0; border-collapse: collapse;">
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Reference</td>
-          <td style="padding: 8px 0; font-weight: bold; color: #0500D0; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${booking.id}</td>
+          <td style="padding: 8px 0; font-weight: bold; color: #0500D0; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.id)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Package</td>
-          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${booking.packageName}</td>
+          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.packageName)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Session</td>
-          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${booking.bookingDate} · ${booking.bookingTime}</td>
+          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.bookingDate)} · ${escapeEmailText(booking.bookingTime)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A;">Amount due at studio</td>
@@ -561,25 +561,25 @@ export async function sendBookingSubmittedEmail(booking: Record<string, unknown>
   const html = brandedEmail(
     'Booking Received — Pending Verification',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>We received your booking request and payment receipt. Our team will verify your deposit shortly.</p>
 
       <table style="width: 100%; font-size: 13px; margin: 16px 0; border-collapse: collapse;">
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Reference</td>
-          <td style="padding: 8px 0; font-weight: bold; color: #0500D0; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${booking.id}</td>
+          <td style="padding: 8px 0; font-weight: bold; color: #0500D0; font-family: monospace; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.id)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Package</td>
-          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${booking.packageName}</td>
+          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.packageName)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A; border-bottom: 1px solid #EEF0FF;">Session</td>
-          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${booking.bookingDate} · ${booking.bookingTime}</td>
+          <td style="padding: 8px 0; font-weight: bold; border-bottom: 1px solid #EEF0FF;">${escapeEmailText(booking.bookingDate)} · ${escapeEmailText(booking.bookingTime)}</td>
         </tr>
         <tr>
           <td style="padding: 8px 0; color: #5A5A8A;">Transaction Ref</td>
-          <td style="padding: 8px 0; font-weight: bold; font-family: monospace;">${booking.transactionRef || '—'}</td>
+          <td style="padding: 8px 0; font-weight: bold; font-family: monospace;">${escapeEmailText(booking.transactionRef || '—')}</td>
         </tr>
       </table>
 
@@ -598,8 +598,8 @@ export async function sendFinalOfficialReceiptEmail(booking: any) {
   const paymentRows = (booking.paymentHistory || []).map((pay: any) => `
     <tr style="border-bottom: 1px solid #EEF0FF;">
       <td style="padding: 10px 0; color: #5A5A8A;">${new Date(pay.date).toLocaleDateString()}</td>
-      <td style="padding: 10px 0; font-weight: bold;">${pay.type}</td>
-      <td style="padding: 10px 0;">${pay.method} ${pay.transactionRef ? `(${pay.transactionRef})` : ''}</td>
+      <td style="padding: 10px 0; font-weight: bold;">${escapeEmailText(pay.type)}</td>
+      <td style="padding: 10px 0;">${escapeEmailText(pay.method)} ${escapeEmailText(pay.transactionRef ? `(${pay.transactionRef})` : '')}</td>
       <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #0500D0;">₱${pay.amount.toFixed(2)}</td>
     </tr>
   `).join('')
@@ -611,18 +611,18 @@ export async function sendFinalOfficialReceiptEmail(booking: any) {
       <hr style="border: 0; border-top: 1px dashed #D4D8F0; margin: 20px 0;" />
       
       <h3 style="color: green; text-align: center; margin-bottom: 20px;">Fully Paid Receipt</h3>
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Thank you for your final payment! Your session is now fully paid. Below is the official receipt showing your complete payment history.</p>
       
       <div style="background-color: #F8FAFC; padding: 20px; border: 1px solid #E2E8F0; margin: 25px 0;">
         <table style="width: 100%; font-size: 13px; border-collapse: collapse; margin-bottom: 15px;">
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Booking Code:</td>
-            <td style="padding: 6px 0; font-weight: bold; font-family: monospace; color: #0500D0; font-size: 16px;">${booking.id}</td>
+            <td style="padding: 6px 0; font-weight: bold; font-family: monospace; color: #0500D0; font-size: 16px;">${escapeEmailText(booking.id)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Package Name:</td>
-            <td style="padding: 6px 0; font-weight: bold;">${booking.packageName}</td>
+            <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.packageName)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Total Package Price:</td>
@@ -675,12 +675,12 @@ export async function sendPaymentRejectedEmail(
     forged ? 'Receipt Rejected — Genuine Proof Required' : 'Payment Verification Unsuccessful',
     forged
       ? `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>We reviewed the file uploaded for booking <strong>${booking.id}</strong>. It <strong style="color: #DC2626;">cannot be accepted</strong> as proof of payment.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>We reviewed the file uploaded for booking <strong>${escapeEmailText(booking.id)}</strong>. It <strong style="color: #DC2626;">cannot be accepted</strong> as proof of payment.</p>
 
       <div style="background: #FEF2F2; border: 2px solid #DC2626; padding: 16px; margin: 16px 0;">
         <p style="margin: 0 0 8px; font-size: 11px; font-weight: bold; color: #DC2626; text-transform: uppercase; letter-spacing: 0.1em;">Why it was rejected</p>
-        <p style="margin: 0; font-size: 13px; color: #5A5A8A; line-height: 1.6;">${reason}</p>
+        <p style="margin: 0; font-size: 13px; color: #5A5A8A; line-height: 1.6;">${escapeEmailText(reason)}</p>
       </div>
 
       <div style="background: #FFFBEB; border-left: 4px solid #F59E0B; padding: 14px; margin: 16px 0;">
@@ -702,17 +702,17 @@ export async function sendPaymentRejectedEmail(
       </div>
 
       <p style="font-size: 11px; color: #5A5A8A; text-align: center;">
-        Reference: <strong>${booking.id}</strong> · Use the same email you booked with.<br />
+        Reference: <strong>${escapeEmailText(booking.id)}</strong> · Use the same email you booked with.<br />
         Questions? +63 49 576 5176
       </p>
     `
       : `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>We reviewed the payment receipt for booking <strong>${booking.id}</strong> but could not verify your deposit.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>We reviewed the payment receipt for booking <strong>${escapeEmailText(booking.id)}</strong> but could not verify your deposit.</p>
 
       <div style="background-color: #FEF2F2; border-left: 4px solid #DC2626; padding: 15px; margin: 20px 0; font-size: 13px;">
         <p style="margin: 0; font-weight: bold; color: #DC2626;">Reason:</p>
-        <p style="margin: 8px 0 0; color: #5A5A8A; line-height: 1.6;">${reason}</p>
+        <p style="margin: 8px 0 0; color: #5A5A8A; line-height: 1.6;">${escapeEmailText(reason)}</p>
       </div>
 
       <p style="font-size: 13px; color: #5A5A8A;">Your booking is back to <strong>Pending Payment</strong>. Please upload a clear GCash or BPI screenshot.</p>
@@ -724,7 +724,7 @@ export async function sendPaymentRejectedEmail(
       </div>
 
       <p style="font-size: 11px; color: #5A5A8A; text-align: center;">
-        Or visit our site → <strong>Resubmit Your Receipt</strong> · Ref <strong>${booking.id}</strong>
+        Or visit our site → <strong>Resubmit Your Receipt</strong> · Ref <strong>${escapeEmailText(booking.id)}</strong>
       </p>
     `,
   )
@@ -739,8 +739,8 @@ export async function sendBookingCancelledEmail(booking: any) {
       <p style="font-size: 8px; text-transform: uppercase; letter-spacing: 0.2em; color: #5A5A8A;">Self Portrait Studio</p>
       <hr style="border: 0; border-top: 1px dashed #D4D8F0; margin: 20px 0;" />
       <h3>Booking Cancellation Confirmation</h3>
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>Your booking reservation with Reference <strong>${booking.id}</strong> has been cancelled.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>Your booking reservation with Reference <strong>${escapeEmailText(booking.id)}</strong> has been cancelled.</p>
       <p>If this was not done by you or if you have questions regarding refunds/rescheduling, please contact us at +63 49 576 5176.</p>
     </div>
   `
@@ -757,22 +757,22 @@ export async function sendBookingRescheduledEmail(booking: any, rebookingFee: nu
       <hr style="border: 0; border-top: 1px dashed #D4D8F0; margin: 20px 0;" />
       
       <h3>Booking Schedule Updated</h3>
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Your studio booking schedule has been updated by our administrator.</p>
       
       <div style="background-color: #FFFBEB; padding: 20px; border: 1px solid #FDE68A; margin: 25px 0;">
         <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Booking Code:</td>
-            <td style="padding: 6px 0; font-weight: bold; font-family: monospace; color: #0500D0; font-size: 16px;">${booking.id}</td>
+            <td style="padding: 6px 0; font-weight: bold; font-family: monospace; color: #0500D0; font-size: 16px;">${escapeEmailText(booking.id)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">New Date:</td>
-            <td style="padding: 6px 0; font-weight: bold;">${booking.bookingDate}</td>
+            <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.bookingDate)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">New Time Slot:</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${booking.bookingTime}</td>
+            <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${escapeEmailText(booking.bookingTime)}</td>
           </tr>
           ${rebookingFee > 0 ? `
           <tr>
@@ -812,7 +812,7 @@ export async function sendGalleryLinkEmail(booking: any, driveLink: string) {
   const html = brandedEmail(
     'Your Raw Photos Are Ready',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Your session raw photos are ready. Please follow the steps below carefully so your 5 chosen photos reach our filtering team.</p>
 
       <div style="background-color: #EEF0FF; padding: 20px; border: 1px solid #D4D8F0; margin: 25px 0;">
@@ -821,7 +821,7 @@ export async function sendGalleryLinkEmail(booking: any, driveLink: string) {
           Click the Google Drive link below to access all of your session&apos;s raw photos.
         </p>
         <p style="text-align: center; margin: 0 0 22px;">
-          <a href="${driveLink}" target="_blank" rel="noopener noreferrer" style="background-color: #0500D0; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block;">
+          <a href="${safeEmailUrl(driveLink)}" target="_blank" rel="noopener noreferrer" style="background-color: #0500D0; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block;">
             Open Google Drive Gallery
           </a>
         </p>
@@ -865,7 +865,7 @@ export async function sendGalleryLinkEmail(booking: any, driveLink: string) {
         • Use original unedited files only<br/>
         • Place exactly 5 raw photos in the &quot;5 Enhanced Photos&quot; folder<br/>
         • Include a clear photo of your completed Printing Template<br/>
-        • Booking reference: <strong>${booking.id}</strong>
+        • Booking reference: <strong>${escapeEmailText(booking.id)}</strong>
       </div>
 
       <p style="font-size: 12px; color: #5A5A8A; line-height: 1.6;">
@@ -898,14 +898,14 @@ export async function sendRawPhotoSubmittedEmails(booking: any) {
   const clientHtml = brandedEmail(
     'Selection Received',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Thank you — your Google Drive folder with your 5 chosen photos is now in our <strong>filtering queue</strong>.</p>
       <div style="background-color: #EEF0FF; padding: 15px; border-left: 4px solid #0500D0; margin: 20px 0; font-size: 13px;">
         <strong>Submission details</strong><br/>
-        Booking: <strong>${booking.id}</strong><br/>
-        Package: ${booking.packageName}<br/>
+        Booking: <strong>${escapeEmailText(booking.id)}</strong><br/>
+        Package: ${escapeEmailText(booking.packageName)}<br/>
         Status: <strong>Pending Review</strong><br/>
-        Folder: <a href="${booking.rawPhotoLink}" target="_blank" style="color: #0500D0; word-break: break-all;">Open submitted folder</a>
+        Folder: <a href="${safeEmailUrl(booking.rawPhotoLink)}" target="_blank" style="color: #0500D0; word-break: break-all;">Open submitted folder</a>
       </div>
       <p style="font-size: 12px; color: #5A5A8A; line-height: 1.6;">
         Our editors will check that the photos are original and not blurry. You will receive another email once your selection is approved, or if we need a resubmission.
@@ -918,12 +918,12 @@ export async function sendRawPhotoSubmittedEmails(booking: any) {
   const staffHtml = brandedEmail(
     'New Filtering Submission',
     `
-      <p><strong>${booking.customerName}</strong> submitted a 5-pick Drive folder.</p>
+      <p><strong>${escapeEmailText(booking.customerName)}</strong> submitted a 5-pick Drive folder.</p>
       <div style="background-color: #EEF0FF; padding: 15px; border-left: 4px solid #0500D0; margin: 20px 0; font-size: 13px;">
-        Booking: <strong>${booking.id}</strong><br/>
-        Package: ${booking.packageName}<br/>
-        Shoot: ${booking.bookingDate} · ${booking.bookingTime}<br/>
-        Folder: <a href="${booking.rawPhotoLink}" target="_blank" style="color: #0500D0; word-break: break-all;">${booking.rawPhotoLink}</a>
+        Booking: <strong>${escapeEmailText(booking.id)}</strong><br/>
+        Package: ${escapeEmailText(booking.packageName)}<br/>
+        Shoot: ${escapeEmailText(booking.bookingDate)} · ${escapeEmailText(booking.bookingTime)}<br/>
+        Folder: <a href="${safeEmailUrl(booking.rawPhotoLink)}" target="_blank" style="color: #0500D0; word-break: break-all;">${safeEmailUrl(booking.rawPhotoLink)}</a>
       </div>
       <p style="font-size: 12px; color: #5A5A8A;">Open the Filtering Dashboard → Review Queue to approve or reject.</p>
     `,
@@ -964,7 +964,7 @@ export async function sendBookingReminderEmail(booking: any) {
   const html = brandedEmail(
     'Session Reminder',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
       <p>Good day! 🌸✨<br/>
       Welcome to FICO MANA Studio. This is a friendly reminder that your Graduation Pictorial is scheduled for <strong>today</strong>. We look forward to seeing you! 📸🎓</p>
 
@@ -972,23 +972,23 @@ export async function sendBookingReminderEmail(booking: any) {
         <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Booking Code</td>
-            <td style="padding: 6px 0; font-weight: bold; font-family: monospace; color: #0500D0;">${booking.id}</td>
+            <td style="padding: 6px 0; font-weight: bold; font-family: monospace; color: #0500D0;">${escapeEmailText(booking.id)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Package</td>
-            <td style="padding: 6px 0; font-weight: bold;">${booking.packageName}</td>
+            <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.packageName)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Shoot Date</td>
-            <td style="padding: 6px 0; font-weight: bold;">${booking.bookingDate}</td>
+            <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.bookingDate)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Arrival Time</td>
-            <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${arrival}</td>
+            <td style="padding: 6px 0; font-weight: bold; color: #0500D0;">${escapeEmailText(arrival)}</td>
           </tr>
           <tr>
             <td style="padding: 6px 0; color: #5A5A8A;">Shoot Time</td>
-            <td style="padding: 6px 0; font-weight: bold;">${shoot}</td>
+            <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(shoot)}</td>
           </tr>
         </table>
       </div>
@@ -1035,14 +1035,14 @@ export async function sendRawPhotoApprovedEmail(booking: any) {
   const html = brandedEmail(
     'Raw Photo Selection Approved',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>Great news! Your chosen raw photo selection for booking reference <strong>${booking.id}</strong> has been approved for editing.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>Great news! Your chosen raw photo selection for booking reference <strong>${escapeEmailText(booking.id)}</strong> has been approved for editing.</p>
       <p>Our editors are processing your photos. When the edits are finished, you will receive another email with a Google Drive download link to your edited pictures.</p>
       <div style="background-color: #EEF0FF; padding: 15px; border-left: 4px solid #0500D0; margin: 20px 0; font-size: 13px;">
         <strong>Details:</strong><br/>
-        Booking Code: ${booking.id}<br/>
-        Package: ${booking.packageName}<br/>
-        Submitted Photos: <a href="${booking.rawPhotoLink}" target="_blank" style="color: #0500D0; word-break: break-all;">Open Submitted Folder</a>
+        Booking Code: ${escapeEmailText(booking.id)}<br/>
+        Package: ${escapeEmailText(booking.packageName)}<br/>
+        Submitted Photos: <a href="${safeEmailUrl(booking.rawPhotoLink)}" target="_blank" style="color: #0500D0; word-break: break-all;">Open Submitted Folder</a>
       </div>
       <p style="font-size: 12px; color: #5A5A8A;">No action is required from you. Thank you for choosing FICO MANA!</p>
     `
@@ -1059,13 +1059,13 @@ export async function sendRawPhotoRejectedEmail(booking: any, reason: string, cu
   const html = brandedEmail(
     'Raw Photo Selection Rejected',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>We reviewed your submitted raw photo Google Drive folder for booking reference <strong>${booking.id}</strong>, and unfortunately, it was rejected by our editors.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>We reviewed your submitted raw photo Google Drive folder for booking reference <strong>${escapeEmailText(booking.id)}</strong>, and unfortunately, it was rejected by our editors.</p>
       
       <div style="background-color: #FEF2F2; border-left: 4px solid #DC2626; padding: 15px; margin: 20px 0; font-size: 13px; color: #991B1B;">
         <p style="margin: 0; font-weight: bold;">Rejection Reason:</p>
-        <p style="margin: 5px 0 0 0; font-style: italic;">${reason}</p>
-        ${customDetails ? `<p style="margin: 5px 0 0 0; font-size: 12px; color: #7F1D1D;"><strong>Editor Notes:</strong> ${customDetails}</p>` : ''}
+        <p style="margin: 5px 0 0 0; font-style: italic;">${escapeEmailText(reason)}</p>
+        ${customDetails ? `<p style="margin: 5px 0 0 0; font-size: 12px; color: #7F1D1D;"><strong>Editor Notes:</strong> ${escapeEmailText(customDetails)}</p>` : ''}
       </div>
 
       <p><strong>How to resubmit:</strong></p>
@@ -1093,8 +1093,8 @@ export async function sendEditedPhotosEmail(booking: any, editedPhotoLink: strin
   const html = brandedEmail(
     'Your Edited Photos Are Ready',
     `
-      <p>Hello <strong>${booking.customerName}</strong>,</p>
-      <p>Great news — your professionally edited photos for booking <strong>${booking.id}</strong> are ready to download.</p>
+      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
+      <p>Great news — your professionally edited photos for booking <strong>${escapeEmailText(booking.id)}</strong> are ready to download.</p>
 
       <div style="background-color: #EEF0FF; padding: 20px; border: 1px solid #D4D8F0; margin: 25px 0; text-align: center;">
         <p style="font-size: 14px; font-weight: bold; margin: 0 0 14px; color: #0500D0;">Download your edited photos</p>
@@ -1115,9 +1115,9 @@ export async function sendEditedPhotosEmail(booking: any, editedPhotoLink: strin
 
       <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; margin: 0 0 18px; font-size: 12px; color: #475569; line-height: 1.6;">
         <strong style="color: #0F172A;">Details</strong><br/>
-        Booking: <strong>${booking.id}</strong><br/>
-        Package: ${booking.packageName}<br/>
-        Shoot date: ${booking.bookingDate}
+        Booking: <strong>${escapeEmailText(booking.id)}</strong><br/>
+        Package: ${escapeEmailText(booking.packageName)}<br/>
+        Shoot date: ${escapeEmailText(booking.bookingDate)}
       </div>
 
       <p style="font-size: 12px; color: #5A5A8A; line-height: 1.6;">

@@ -4,10 +4,12 @@ import type { FicoSpotBlock } from '@/lib/fico-spot-blocks'
 import { FICO_DAILY_LIMIT } from '@/lib/booking-slots'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
+import { assertLocalFileStoreAllowed } from '@/lib/security/local-file-store'
 
 const FILE_PATH = path.join(process.cwd(), 'data', 'fico-spot-blocks.json')
 
 async function readFileBlocks(): Promise<FicoSpotBlock[]> {
+  assertLocalFileStoreAllowed()
   try {
     const raw = await fs.readFile(FILE_PATH, 'utf-8')
     return JSON.parse(raw) as FicoSpotBlock[]
@@ -17,6 +19,7 @@ async function readFileBlocks(): Promise<FicoSpotBlock[]> {
 }
 
 async function writeFileBlocks(blocks: FicoSpotBlock[]): Promise<void> {
+  assertLocalFileStoreAllowed()
   await fs.mkdir(path.dirname(FILE_PATH), { recursive: true })
   await fs.writeFile(FILE_PATH, JSON.stringify(blocks, null, 2), 'utf-8')
 }

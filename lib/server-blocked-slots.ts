@@ -3,10 +3,12 @@ import path from 'path'
 import type { BlockedSlot } from '@/lib/blocked-slots'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
+import { assertLocalFileStoreAllowed } from '@/lib/security/local-file-store'
 
 const FILE_PATH = path.join(process.cwd(), 'data', 'blocked-slots.json')
 
 async function readFileBlockedSlots(): Promise<BlockedSlot[]> {
+  assertLocalFileStoreAllowed()
   try {
     const raw = await fs.readFile(FILE_PATH, 'utf-8')
     return JSON.parse(raw) as BlockedSlot[]
@@ -16,6 +18,7 @@ async function readFileBlockedSlots(): Promise<BlockedSlot[]> {
 }
 
 async function writeFileBlockedSlots(slots: BlockedSlot[]): Promise<void> {
+  assertLocalFileStoreAllowed()
   await fs.mkdir(path.dirname(FILE_PATH), { recursive: true })
   await fs.writeFile(FILE_PATH, JSON.stringify(slots, null, 2), 'utf-8')
 }

@@ -109,7 +109,6 @@ export async function POST(
         }
       }
 
-      await upsertBooking(saved)
       await addNotificationToDb(admin, booking.id, notificationType, notificationMessage)
     } else {
       saved = await upsertBooking(updatedBooking)

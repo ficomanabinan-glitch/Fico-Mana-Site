@@ -168,7 +168,7 @@ test('protected routes authorize on the server and receipt URLs are short-lived'
 
 test('portal file and selection lookups are constrained to the portal booking', async () => {
   const source = await readFile('lib/editor-workflow.ts', 'utf8')
-  assert.match(source, /\.eq\('id', fileId\)\s*\.eq\('booking_id', portal\.booking_id\)/)
+  assert.match(source, /\.eq\('id', fileId\)\s*\.eq\('workspace_id', portal\.workspace_id\)\s*\.eq\('booking_id', portal\.booking_id\)/)
   assert.match(source, /\.from\('gallery_files'\)[\s\S]*?\.eq\('booking_id', bookingId\)[\s\S]*?\.in\('id', unique\)/)
   assert.match(source, /One or more selected photos do not belong to this portal/)
 })

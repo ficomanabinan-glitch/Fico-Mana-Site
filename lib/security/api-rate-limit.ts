@@ -8,23 +8,25 @@ export type ApiRateLimitPolicy = {
   limit: number
   windowSeconds: number
   failClosed?: boolean
+  aggregateLimit?: number
 }
 
 export const API_RATE_LIMITS = {
   bookingCreate: { name: 'booking-create', limit: 20, windowSeconds: 24 * 60 * 60, failClosed: true },
-  bookingLookup: { name: 'booking-lookup', limit: 12, windowSeconds: 15 * 60, failClosed: true },
+  bookingLookup: { name: 'booking-lookup', limit: 12, aggregateLimit: 60, windowSeconds: 15 * 60, failClosed: true },
   receiptUpload: { name: 'receipt-upload', limit: 10, windowSeconds: 60 * 60, failClosed: true },
   receiptAccess: { name: 'receipt-access', limit: 120, windowSeconds: 15 * 60, failClosed: true },
-  rawLookup: { name: 'raw-lookup', limit: 12, windowSeconds: 15 * 60, failClosed: true },
+  rawLookup: { name: 'raw-lookup', limit: 12, aggregateLimit: 60, windowSeconds: 15 * 60, failClosed: true },
   rawSubmit: { name: 'raw-submit', limit: 8, windowSeconds: 60 * 60, failClosed: true },
-  portalSession: { name: 'portal-session', limit: 20, windowSeconds: 15 * 60, failClosed: true },
-  portalRead: { name: 'portal-read', limit: 240, windowSeconds: 5 * 60 },
+  portalSession: { name: 'portal-session', limit: 20, aggregateLimit: 100, windowSeconds: 15 * 60, failClosed: true },
+  portalRead: { name: 'portal-read', limit: 240, windowSeconds: 5 * 60, failClosed: true },
   portalSelection: { name: 'portal-selection', limit: 10, windowSeconds: 10 * 60, failClosed: true },
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
   editorUpload: { name: 'editor-upload', limit: 1_000, windowSeconds: 60 * 60, failClosed: true },
   websiteMediaUpload: { name: 'website-media-upload', limit: 60, windowSeconds: 60 * 60, failClosed: true },
   driveOperation: { name: 'drive-operation', limit: 120, windowSeconds: 15 * 60, failClosed: true },
   mfaEvent: { name: 'mfa-event', limit: 20, windowSeconds: 15 * 60, failClosed: true },
+  adminMutation: { name: 'admin-mutation', limit: 180, windowSeconds: 5 * 60, failClosed: true },
 } as const satisfies Record<string, ApiRateLimitPolicy>
 
 type DatabaseRow = { allowed: boolean; remaining: number; reset_at: string }
@@ -133,7 +135,16 @@ export async function enforceApiRateLimit(
   request: Request,
   policy: ApiRateLimitPolicy,
   dimensions: Array<string | null | undefined> = [],
-) {
+): Promise<NextResponse | null> {
+  // A broader IP quota stops identifier rotation without penalizing ordinary
+  // shared-network traffic at the tighter per-resource quota.
+  if (policy.aggregateLimit) {
+    const aggregateError = await enforceApiRateLimit(request, {
+      name: `${policy.name}-aggregate`, limit: policy.aggregateLimit,
+      windowSeconds: policy.windowSeconds, failClosed: policy.failClosed,
+    })
+    if (aggregateError) return aggregateError
+  }
   try {
     const key = await rateLimitKey(
       request,

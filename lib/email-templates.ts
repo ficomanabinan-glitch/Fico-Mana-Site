@@ -91,12 +91,28 @@ export function renderTemplate(
   template: EmailTemplate,
   vars: Record<string, string | number | undefined>,
 ): { subject: string; body: string } {
-  const replace = (text: string) =>
-    text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => String(vars[key] ?? ''))
+  const replace = (text: string, html = false) =>
+    text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => html ? escapeEmailText(vars[key] ?? '') : String(vars[key] ?? ''))
 
   return {
     subject: replace(template.subject),
-    body: wrapEmailHtml(replace(template.body)),
+    body: wrapEmailHtml(replace(template.body, true)),
+  }
+}
+
+export function escapeEmailText(value: unknown) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]!)
+}
+
+export function safeEmailUrl(value: unknown) {
+  try {
+    const url = new URL(String(value ?? ''))
+    if (url.protocol !== 'https:' || url.username || url.password) return '#'
+    return escapeEmailText(url.href)
+  } catch {
+    return '#'
   }
 }
 

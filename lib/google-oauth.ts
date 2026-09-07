@@ -13,9 +13,8 @@ function env(name: string) {
 
 function encryptionKey() {
   const dedicated = env('GOOGLE_TOKEN_ENCRYPTION_KEY')
-  // Keep existing refresh tokens decryptable until they can be deliberately
-  // re-encrypted with a dedicated key during a planned Drive reconnection.
-  const material = dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
+  const material = process.env.NODE_ENV === 'production' ? dedicated :
+    dedicated || env('PORTAL_SIGNING_SECRET') || env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY')
   if (!material) throw new Error('Google Drive setup is incomplete. Ask your administrator to check the connection settings.')
   if (process.env.NODE_ENV === 'production' && material.length < 32) {
     throw new Error('Google Drive setup needs attention. Ask your administrator to check the connection settings.')
@@ -59,8 +58,12 @@ export function encryptGoogleRefreshToken(token: string) {
 }
 
 export function decryptGoogleRefreshToken(value: string) {
-  const [version, ivPart, tagPart, encryptedPart] = value.split('.')
-  if (version !== 'v1' || !ivPart || !tagPart || !encryptedPart) throw new Error('Stored Google token is invalid.')
+  const parts = value.split('.')
+  const [version, ivPart, tagPart, encryptedPart] = parts
+  if (parts.length !== 4 || version !== 'v1' || !ivPart || !tagPart || !encryptedPart ||
+    Buffer.from(ivPart, 'base64url').length !== 12 || Buffer.from(tagPart, 'base64url').length !== 16) {
+    throw new Error('Stored Google token is invalid.')
+  }
   const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivPart, 'base64url'))
   decipher.setAuthTag(Buffer.from(tagPart, 'base64url'))
   return Buffer.concat([

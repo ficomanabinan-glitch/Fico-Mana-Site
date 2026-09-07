@@ -91,8 +91,12 @@ export async function POST(request: Request) {
       await markBookingNotificationsReadInDb(admin, bookingId)
     }
 
-    await addServerNotification(bookingId, 'OPS_PAID', message)
-    await markServerNotificationsReadForBooking(bookingId)
+    if (!isSupabaseConfigured()) {
+      await addServerNotification(bookingId, 'OPS_PAID', message)
+      await markServerNotificationsReadForBooking(bookingId)
+    } else if (!admin) {
+      throw new Error('Subscription records are temporarily unavailable.')
+    }
 
     return NextResponse.json({ ok: true, cycleKey: period.cycleKey })
   } catch (error) {

@@ -50,7 +50,7 @@ export function isAllowedRequestOrigin(request: Request) {
   const origin = normalizedOrigin(request.headers.get('origin'))
   const fetchSite = request.headers.get('sec-fetch-site')?.toLowerCase()
   if (origin && (configuredOrigins().has(origin) || isLocalDevelopmentOrigin(origin))) return true
-  if (!origin && (fetchSite === 'same-origin' || fetchSite === 'same-site')) return true
+  if (!origin && process.env.NODE_ENV !== 'production' && (fetchSite === 'same-origin' || fetchSite === 'same-site')) return true
 
   return process.env.NODE_ENV !== 'production' && !origin
 }

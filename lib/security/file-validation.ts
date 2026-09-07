@@ -27,7 +27,7 @@ export function detectFileSignature(buffer: Buffer): DetectedImage {
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png'
   if (ascii(buffer, 0, 6) === 'GIF87a' || ascii(buffer, 0, 6) === 'GIF89a') return 'gif'
   if (ascii(buffer, 0, 4) === 'RIFF' && ascii(buffer, 8, 12) === 'WEBP') return 'webp'
-  if (ascii(buffer, 0, 16) === 'FUJIFILMCCD-RAW') return 'raf'
+  if (ascii(buffer, 0, 'FUJIFILMCCD-RAW'.length) === 'FUJIFILMCCD-RAW') return 'raf'
   if (ascii(buffer, 0, 4) === 'IIRO' || ascii(buffer, 0, 4) === 'MMOR') return 'orf'
   if (buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x55 && buffer[3] === 0x00) return 'rw2'
   if (
@@ -66,6 +66,10 @@ export async function validateReceiptImageContent(buffer: Buffer, mimeType: stri
     const metadata = await sharp(buffer, { failOn: 'error', limitInputPixels: 40_000_000 }).metadata()
     const decoded = metadata.format
     if (decoded !== expectedByMime || !metadata.width || !metadata.height) throw new Error('invalid image')
+    // Metadata alone accepts some truncated files. Decode all accepted frames,
+    // with a total pixel bound, without modifying the original upload.
+    if (metadata.width * metadata.height * (metadata.pages || 1) > 40_000_000) throw new Error('invalid image')
+    await sharp(buffer, { animated: true, failOn: 'error', limitInputPixels: 40_000_000 }).stats()
   } catch {
     throw new Error('The receipt is not a valid decodable image.')
   }
@@ -80,6 +84,7 @@ export async function validateJpegThumbnailContent(buffer: Buffer) {
   try {
     const metadata = await sharp(buffer, { failOn: 'error', limitInputPixels: 16_000_000 }).metadata()
     if (metadata.format !== 'jpeg' || !metadata.width || !metadata.height) throw new Error('invalid thumbnail')
+    await sharp(buffer, { failOn: 'error', limitInputPixels: 16_000_000 }).stats()
   } catch {
     throw new Error('The thumbnail is not a valid decodable JPEG image.')
   }

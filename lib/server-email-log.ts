@@ -3,10 +3,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { assertLocalFileStoreAllowed } from '@/lib/security/local-file-store'
 
 const LOG_PATH = path.join(process.cwd(), 'data', 'email-logs.json')
 
 async function readFileLogs(): Promise<EmailLog[]> {
+  assertLocalFileStoreAllowed()
   try {
     const raw = await fs.readFile(LOG_PATH, 'utf-8')
     return JSON.parse(raw) as EmailLog[]
@@ -16,6 +18,7 @@ async function readFileLogs(): Promise<EmailLog[]> {
 }
 
 async function writeFileLogs(logs: EmailLog[]): Promise<void> {
+  assertLocalFileStoreAllowed()
   await fs.mkdir(path.dirname(LOG_PATH), { recursive: true })
   await fs.writeFile(LOG_PATH, JSON.stringify(logs.slice(0, 500), null, 2), 'utf-8')
 }
@@ -55,8 +58,11 @@ export async function persistEmailLog(
           sentAt: String(data.sent_at),
         }
       }
-      console.error('persistEmailLog supabase:', error?.message)
+      console.error('Email log persistence failed; no local copy was created.')
     }
+    // Delivery has already been attempted. Never turn a logging failure into a
+    // duplicate send, and never mirror recipient details or bearer links to disk.
+    return entry
   }
 
   const logs = await readFileLogs()
@@ -87,6 +93,7 @@ export async function listServerEmailLogs(): Promise<EmailLog[]> {
         }))
       }
     }
+    throw new Error('Email history is temporarily unavailable.')
   }
 
   return readFileLogs()

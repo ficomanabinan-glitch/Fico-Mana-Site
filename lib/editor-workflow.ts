@@ -19,6 +19,7 @@ import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 import { sendEditedPhotosEmail } from '@/lib/email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
+import { safeMetadata } from '@/lib/security/audit-metadata'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -150,7 +151,7 @@ async function audit(
     action,
     booking_id: input.bookingId || null,
     batch_id: input.batchId || null,
-    metadata: input.metadata || {},
+    metadata: safeMetadata(input.metadata),
   })
   if (error) console.error('Workflow audit write failed:', error.message)
 }
@@ -1024,11 +1025,15 @@ async function portalRecord(publicId: string) {
   const admin = adminClient()
   const { data, error } = await admin
     .from('client_portals')
-    .select('*')
+    .select('*,bookings!inner(workspace_id),workspaces!inner(slug,status)')
     .eq('public_id', publicId)
+    .eq('workspaces.slug', 'fico-mana')
+    .eq('workspaces.status', 'active')
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Portal not found.')
+  const booking = Array.isArray(data.bookings) ? data.bookings[0] : data.bookings
+  if (!data.workspace_id || booking?.workspace_id !== data.workspace_id) throw new Error('Portal not found.')
   if (hasPortalExpired(data.expires_at)) throw new Error('Portal expired.')
   if (data.status === 'expired') throw new Error('Portal expired.')
   if (data.status !== 'active') throw new Error('Portal disabled.')
@@ -1042,16 +1047,17 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   const pageSize = Math.min(MAX_PORTAL_PAGE_SIZE, Math.max(1, limit))
   const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult] =
     await Promise.all([
-      admin.from('bookings').select('*').eq('id', bookingId).single(),
-      admin.from('photo_selections').select('*').eq('booking_id', bookingId).maybeSingle(),
+      admin.from('bookings').select('*').eq('workspace_id', workspaceId).eq('id', bookingId).single(),
+      admin.from('photo_selections').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
       admin
         .from('gallery_files')
         .select('id,file_name,mime_type,drive_file_id,created_at', { count: 'exact' })
+        .eq('workspace_id', workspaceId)
         .eq('booking_id', bookingId)
         .order('created_at', { ascending: true })
         .range(Math.max(0, offset), Math.max(0, offset) + pageSize - 1),
-      admin.from('deliverable_files').select('*').eq('booking_id', bookingId).order('published_at', { ascending: false }),
-      admin.from('editing_jobs').select('status').eq('booking_id', bookingId).maybeSingle(),
+      admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).order('published_at', { ascending: false }),
+      admin.from('editing_jobs').select('status').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
       admin.from('payments').select('amount').eq('booking_id', bookingId).eq('status', 'confirmed'),
       admin
         .from('client_portal_resources')
@@ -1198,6 +1204,7 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
     .from(table)
     .select('*')
     .eq('id', fileId)
+    .eq('workspace_id', portal.workspace_id)
     .eq('booking_id', portal.booking_id)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -1244,6 +1251,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
   const { data: selection, error } = await admin
     .from('photo_selections')
     .update({ status: 'SUBMITTING', client_status: 'Selection In Progress', updated_at: nowIso() })
+    .eq('workspace_id', workspaceId)
     .eq('booking_id', bookingId)
     .in('status', ['OPEN', 'COPY_FAILED'])
     .select('*')
@@ -1287,6 +1295,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
   const { data: gallery, error: galleryError } = await admin
     .from('gallery_files')
     .select('*')
+    .eq('workspace_id', workspaceId)
     .eq('booking_id', bookingId)
     .in('id', unique)
   if (galleryError || !gallery || gallery.length !== unique.length) {
@@ -2038,6 +2047,15 @@ export async function completeDeliverableUpload(
     .eq('batch_upload_items.upload_job_id', uploadJobId)
     .single()
   if (error || !uploadFile) throw new Error(error?.message || 'Upload file state not found.')
+  // Authorize before any lookup or hash of a caller-supplied Drive file ID.
+  const { data: job } = await admin
+    .from('editing_jobs')
+    .select('id,workspace_id')
+    .eq('id', uploadFile.batch_upload_items.editing_job_id)
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', uploadFile.batch_upload_items.booking_id)
+    .single()
+  if (!job) throw new Error('Upload job is outside this workspace.')
   const driveFile = await getDriveFile(driveFileId)
   const bookingId = String(uploadFile.batch_upload_items.booking_id)
   if (
@@ -2047,13 +2065,6 @@ export async function completeDeliverableUpload(
   ) {
     throw new Error('The uploaded file does not match the selected batch. Try: select the correct folder.')
   }
-  const { data: job } = await admin
-    .from('editing_jobs')
-    .select('id,workspace_id')
-    .eq('id', uploadFile.batch_upload_items.editing_job_id)
-    .eq('workspace_id', workspaceId)
-    .single()
-  if (!job) throw new Error('Upload job is outside this workspace.')
   const { hierarchy } = await ensureBookingFolders(admin, workspaceId, bookingId)
   if (!driveFile.parents?.includes(hierarchy.edited.id)) {
     throw new Error('Google Drive uploaded the file outside the authorized client destination.')
@@ -2279,6 +2290,7 @@ export async function preparePortalDeliverables(publicId: string) {
   const { data, error } = await admin
     .from('deliverable_files')
     .select('drive_file_id,file_name')
+    .eq('workspace_id', portal.workspace_id)
     .eq('booking_id', portal.booking_id)
     .order('published_at', { ascending: true })
   if (error) throw new Error(error.message)

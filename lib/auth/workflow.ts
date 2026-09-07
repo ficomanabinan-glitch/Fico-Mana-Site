@@ -1,5 +1,4 @@
 import type { User } from '@supabase/supabase-js'
-import { isAdminUser } from '@/lib/auth/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
 export type WorkflowRole = 'owner' | 'admin' | 'editor' | 'onsite' | 'staff'
@@ -36,22 +35,24 @@ export function canUseWorkflow(access: WorkflowAccess, capability: WorkflowCapab
   return CAPABILITIES[access.role].has(capability)
 }
 
-/** Resolve server-authoritative workspace membership. Admin claims may bootstrap the default workspace. */
+/** Resolve existing membership only; a revoked member must not be recreated by a read. */
 export async function getWorkflowAccess(user: User): Promise<WorkflowAccess | null> {
   const admin = adminClient()
   const { data: membership, error } = await admin
     .from('workspace_members')
-    .select('workspace_id,role,display_name,workspaces(name,slug,status)')
+    .select('workspace_id,role,display_name,workspaces!inner(name,slug,status)')
     .eq('user_id', user.id)
+    .eq('workspaces.slug', 'fico-mana')
+    .eq('workspaces.status', 'active')
     .limit(1)
     .maybeSingle()
   if (error) throw new Error(error.message)
 
   if (membership?.workspace_id) {
     const workspace = workspaceRecord(membership.workspaces)
-    if (String(workspace?.status || '') !== 'active') return null
+    if (workspace?.status !== 'active' || workspace?.slug !== 'fico-mana') return null
     const role = String(membership.role) as WorkflowRole
-    if (!(role in CAPABILITIES)) return null
+    if (!Object.hasOwn(CAPABILITIES, role)) return null
     return {
       workspaceId: String(membership.workspace_id),
       workspaceName: String(workspace?.name || 'FICO MANA Studio'),
@@ -61,28 +62,5 @@ export async function getWorkflowAccess(user: User): Promise<WorkflowAccess | nu
     }
   }
 
-  if (!isAdminUser(user)) return null
-  const { data: workspace, error: workspaceError } = await admin
-    .from('workspaces')
-    .select('id,name,slug,status')
-    .eq('slug', 'fico-mana')
-    .eq('status', 'active')
-    .single()
-  if (workspaceError || !workspace) throw new Error('Studio workspace is not configured.')
-  const displayName = user.email?.split('@')[0] || 'Administrator'
-  const trustedRole = user.app_metadata?.role === 'owner' ? 'owner' : 'admin'
-  const { error: memberError } = await admin.from('workspace_members').insert({
-    workspace_id: workspace.id,
-    user_id: user.id,
-    role: trustedRole,
-    display_name: displayName,
-  })
-  if (memberError) throw new Error(memberError.message)
-  return {
-    workspaceId: String(workspace.id),
-    workspaceName: String(workspace.name),
-    workspaceSlug: String(workspace.slug),
-    role: trustedRole,
-    displayName,
-  }
+  return null
 }

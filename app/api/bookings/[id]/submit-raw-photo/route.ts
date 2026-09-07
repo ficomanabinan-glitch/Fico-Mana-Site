@@ -63,7 +63,6 @@ export async function POST(
       if (admin) {
         const saved = await saveBookingToDb(admin, updatedBooking)
         if (saved) {
-          await upsertBooking(saved)
           await addNotificationToDb(admin, booking.id, 'RAW_PHOTO_UPLOAD', notificationMessage)
           try {
             await sendRawPhotoSubmittedEmails(saved)
