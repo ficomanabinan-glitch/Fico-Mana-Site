@@ -9,13 +9,13 @@ import { getActiveEmailStorageReminder } from '@/lib/ops-subscriptions'
 import { getWorkflowAccess } from '@/lib/auth/workflow'
 import { canManageShootReminders } from '@/lib/shoot-reminder-settings'
 import { getShootReminderHealth, notifyShootReminderIssue } from '@/lib/shoot-reminder-alerts'
-import { SHOOT_REMINDER_NOTIFICATION_PREFIX } from '@/lib/shoot-reminder-issues'
+import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
 
 function mergeNotifications(primary: Notification[], secondary: Notification[]) {
   const map = new Map<string, Notification>()
   for (const n of [...primary, ...secondary]) {
-    const key = `${n.bookingId}:${n.type}:${n.message.slice(0, 40)}`
+    const key = n.type === SHOOT_REMINDER_NOTIFICATION_TYPE ? n.id : `${n.bookingId}:${n.type}:${n.message.slice(0, 40)}`
     const existing = map.get(key)
     if (
       !existing ||
@@ -89,7 +89,7 @@ export async function GET() {
     }
 
     notifications = await ensureOpsReminders(notifications)
-    return NextResponse.json(notifications.filter(n => reminderAdmin || !n.bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)), { headers: privateNoStoreHeaders() })
+    return NextResponse.json(notifications.filter(n => reminderAdmin || n.type !== SHOOT_REMINDER_NOTIFICATION_TYPE), { headers: privateNoStoreHeaders() })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to load notifications' }, { status: 500 })
   }
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       type: Notification['type']
       message: string
     }
-    if (typeof bookingId !== 'string' || bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)) {
+    if (typeof bookingId !== 'string' || type === SHOOT_REMINDER_NOTIFICATION_TYPE) {
       return NextResponse.json({ error: 'This notification reference is reserved for the reminder service.' }, { status: 400, headers: privateNoStoreHeaders() })
     }
 

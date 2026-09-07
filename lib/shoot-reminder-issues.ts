@@ -14,7 +14,7 @@ export const shootReminderIssues = {
 
 export type ShootReminderIssueCode = keyof typeof shootReminderIssues
 export type ShootReminderIssue = { code: ShootReminderIssueCode; message: string }
-export const SHOOT_REMINDER_NOTIFICATION_PREFIX = 'OPS-SHOOT-REMINDER-'
+export const SHOOT_REMINDER_NOTIFICATION_TYPE = 'SHOOT_REMINDER_ERROR'
 
 export function reminderIssue(code: ShootReminderIssueCode): ShootReminderIssue {
   return { code, message: shootReminderIssues[code] }

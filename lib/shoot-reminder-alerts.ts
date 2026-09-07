@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  SHOOT_REMINDER_NOTIFICATION_PREFIX, reminderDeliveryIssue, reminderIssue, reminderLocalDate,
+  SHOOT_REMINDER_NOTIFICATION_TYPE, reminderDeliveryIssue, reminderIssue, reminderLocalDate,
   reminderRunIssue, reminderScheduleIsLate, type ShootReminderIssueCode,
 } from './shoot-reminder-issues'
 
@@ -10,12 +10,14 @@ export class ShootReminderRunError extends Error {
 }
 
 export function reminderNotification(code: ShootReminderIssueCode, now = new Date()) {
-  const bookingId = `${SHOOT_REMINDER_NOTIFICATION_PREFIX}${reminderLocalDate(now)}-${code}`
-  const hash = createHash('sha256').update(`fico-mana/${bookingId}`).digest('hex')
+  const key = `fico-mana/shoot-reminder/${reminderLocalDate(now)}/${code}`
+  const hash = createHash('sha256').update(key).digest('hex')
   // Deterministic UUID works with the existing notification primary key. Concurrent retries
   // insert at most one alert per issue per GMT+8 day, without resetting an admin's read status.
   const id = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-8${hash.slice(17,20)}-${hash.slice(20,32)}`
-  return { id, booking_id: bookingId, type: 'OPS_REMINDER', is_read: false,
+  // Production permits NULL for a system notification but requires every non-null
+  // booking reference to exist. Never invent a booking or weaken that foreign key.
+  return { id, booking_id: null, type: SHOOT_REMINDER_NOTIFICATION_TYPE, is_read: false,
     message: `Shoot reminders reported a problem. ${reminderIssue(code).message} The saved enabled/disabled setting has not changed.`,
     created_at: now.toISOString() }
 }

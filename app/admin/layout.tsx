@@ -31,7 +31,7 @@ import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge } from '@/lib/admin-ui'
 import { clearSalesReadCache } from '@/lib/sales-read-cache'
 import { clearManagedPackageCache } from '@/lib/package-manager-cache'
-import { SHOOT_REMINDER_NOTIFICATION_PREFIX } from '@/lib/shoot-reminder-issues'
+import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
 import {
   DashboardSidebarNavigation,
   DashboardSidebarProfile,
@@ -349,10 +349,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     notification.type,
                                   )}`}
                                 >
-                                  {notification.bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)?'Shoot reminder':notification.type.replace(/_/g, ' ')}
+                                  {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?'Shoot reminder':notification.type.replace(/_/g, ' ')}
                                 </p>
                                 <p className="mt-1.5 text-white/70">{notification.message}</p>
-                                {notification.bookingId.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)?<Link href="/admin/shoot-reminders" onClick={()=>setShowNotifDrawer(false)} className="mt-2 mr-3 inline-block cursor-pointer text-[10px] font-semibold text-[#C4CEFF] hover:underline">Review shoot reminders</Link>:null}
+                                {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?<Link href="/admin/shoot-reminders" onClick={()=>setShowNotifDrawer(false)} className="mt-2 mr-3 inline-block cursor-pointer text-[10px] font-semibold text-[#C4CEFF] hover:underline">Review shoot reminders</Link>:null}
                                 {!notification.isRead ? (
                                   <button
                                     onClick={() => void handleMarkRead(notification.id)}

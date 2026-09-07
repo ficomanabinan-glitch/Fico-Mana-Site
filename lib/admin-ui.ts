@@ -112,6 +112,7 @@ export function notificationTypeBadge(type: string) {
     case 'RESUBMITTED':
       return 'text-amber-400'
     case 'PAYMENT_REJECTED':
+    case 'SHOOT_REMINDER_ERROR':
     case 'RAW_PHOTO_REJECTED':
       return 'text-red-400'
     case 'RAW_PHOTO_APPROVED':

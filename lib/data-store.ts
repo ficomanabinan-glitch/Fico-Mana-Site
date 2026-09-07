@@ -76,6 +76,7 @@ export interface Notification {
     | 'EDITED_PHOTOS_READY'
     | 'OPS_REMINDER'
     | 'OPS_PAID'
+    | 'SHOOT_REMINDER_ERROR'
   message: string
   isRead: boolean
   createdAt: string

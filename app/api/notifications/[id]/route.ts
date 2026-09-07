@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getWorkflowAccess } from '@/lib/auth/workflow'
 import { canManageShootReminders } from '@/lib/shoot-reminder-settings'
-import { SHOOT_REMINDER_NOTIFICATION_PREFIX } from '@/lib/shoot-reminder-issues'
+import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
 
 export async function PATCH(
   request: Request,
@@ -20,9 +20,9 @@ export async function PATCH(
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
       if (admin) {
-        const { data: notification, error: readError } = await admin.from('notifications').select('booking_id').eq('id', id).maybeSingle()
+        const { data: notification, error: readError } = await admin.from('notifications').select('type').eq('id', id).maybeSingle()
         if (readError) throw new Error('Notification unavailable')
-        if (notification?.booking_id?.startsWith(SHOOT_REMINDER_NOTIFICATION_PREFIX)
+        if (notification?.type === SHOOT_REMINDER_NOTIFICATION_TYPE
           && !canManageShootReminders(await getWorkflowAccess(user!))) {
           return NextResponse.json({ error: 'Only a Fico Mana administrator can dismiss reminder alerts.' }, { status: 403 })
         }

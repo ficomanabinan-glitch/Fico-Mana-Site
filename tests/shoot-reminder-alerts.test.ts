@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { PGlite } from '@electric-sql/pglite'
 import { loadTs } from './helpers/load-ts.ts'
 import * as issues from '../lib/shoot-reminder-issues.ts'
 
@@ -29,7 +30,8 @@ test('notifications deduplicate per issue per GMT+8 day without changing read st
   const now = new Date('2026-09-07T22:10:00Z')
   const first = alerts.reminderNotification('allowance',now)
   assert.match(first.id,/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-8[a-f0-9]{3}-[a-f0-9]{12}$/)
-  assert.match(first.booking_id,/2026-09-08-allowance$/)
+  assert.equal(first.booking_id,null)
+  assert.equal(first.type,'SHOOT_REMINDER_ERROR')
   assert.equal(first.id,alerts.reminderNotification('allowance',new Date('2026-09-08T03:00:00Z')).id)
   assert.notEqual(first.id,alerts.reminderNotification('sender',now).id)
   assert.notEqual(first.id,alerts.reminderNotification('allowance',new Date('2026-09-08T22:10:00Z')).id)
@@ -166,7 +168,29 @@ test('worker auth/probe boundaries and UI/API compatibility remain intact',()=>{
   assert.match(ui,/apply\('pause'\)/)
   const notifications=readFileSync('app/api/notifications/route.ts','utf8')
   assert.match(notifications,/canManageShootReminders\(access\)/)
-  assert.match(notifications,/reminderAdmin \|\| !n.bookingId.startsWith/)
+  assert.match(notifications,/reminderAdmin \|\| n.type !== SHOOT_REMINDER_NOTIFICATION_TYPE/)
   assert.match(notifications,/ignore|reserved/)
   assert.match(readFileSync('app/admin/layout.tsx','utf8'),/Review shoot reminders/)
+})
+
+test('system alerts satisfy the verified production booking foreign key without a fake client booking',async t=>{
+  const db=new PGlite()
+  t.after(()=>db.close())
+  await db.exec(`create table bookings(id varchar(50) primary key);
+    create table notifications(id uuid primary key,booking_id varchar(50) references bookings(id) on delete cascade,
+      type varchar(50) not null,message text,is_read boolean,created_at timestamptz);`)
+  const insert=async(code:issues.ShootReminderIssueCode)=>{
+    const n=alerts.reminderNotification(code,new Date('2026-09-07T22:00:00Z'))
+    await db.query('insert into notifications(id,booking_id,type,message,is_read,created_at) values($1,$2,$3,$4,$5,$6) on conflict(id) do nothing',
+      [n.id,n.booking_id,n.type,n.message,n.is_read,n.created_at])
+  }
+  await insert('allowance')
+  await db.exec('update notifications set is_read=true')
+  await insert('allowance')
+  await insert('queue')
+  const rows=(await db.query<{booking_id:string|null;type:string;is_read:boolean}>('select booking_id,type,is_read from notifications order by created_at,id')).rows
+  assert.equal(rows.length,2)
+  assert.ok(rows.every(row=>row.booking_id===null&&row.type==='SHOOT_REMINDER_ERROR'))
+  assert.equal(rows.filter(row=>row.is_read).length,1)
+  assert.equal((await db.query('select * from bookings')).rows.length,0)
 })
