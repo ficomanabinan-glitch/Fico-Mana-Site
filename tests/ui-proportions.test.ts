@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
+test('client portal statuses are rounded badges without pretending to be action buttons', () => {
+  const portals = source('app/admin/provisioning/page.tsx')
+  assert.match(portals, /<span className=\{`inline-flex rounded-md border px-2 py-1 text-caption font-semibold capitalize/)
+  assert.match(portals, />\{item\.portal\.status\}<\/span>\{item\.portal\.expiresAt\?/)
+  assert.match(portals, /inline-flex rounded-md border px-2 py-1 text-caption font-semibold uppercase \$\{statusClass/)
+})
+
 test('Open Folder uses the existing button wrapper and keeps direct new-tab navigation', () => {
   const portals = source('app/admin/provisioning/page.tsx')
   assert.match(portals, /<a href=\{item\.driveClientFolderUrl\} target="_blank" rel="noopener noreferrer" className=\{`\$\{actionButton\} min-h-10 whitespace-nowrap text-green-300`\}>Open folder/)
