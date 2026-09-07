@@ -42,6 +42,7 @@ type Progress = {
   currentFileLoaded: number
   currentFileTotal: number
   status: 'uploading' | 'complete' | 'partial'
+  lastError?: string | null
 }
 
 function todayKey() {
@@ -61,7 +62,14 @@ function formatBytes(bytes: number) {
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
-function uploadRawFile(
+export function snapshotOnsiteFiles(files: FileList | null, input: Pick<HTMLInputElement, 'value'> | null) {
+  // FileList may be live. Copy it BEFORE resetting the picker for same-file retries.
+  const selected = Array.from(files || [])
+  if (input) input.value = ''
+  return selected
+}
+
+export function uploadRawFile(
   bookingId: string,
   file: File,
   onProgress: (loaded: number, total: number) => void,
@@ -73,15 +81,19 @@ function uploadRawFile(
 
     request.open('POST', `/api/editor-workflow/raw/${encodeURIComponent(bookingId)}`)
     request.withCredentials = true
+    request.timeout = 120_000
     request.upload.addEventListener('progress', (event) => {
       const total = event.lengthComputable && event.total > 0 ? event.total : file.size
       onProgress(Math.min(event.loaded, total), total)
     })
     request.addEventListener('error', () => {
-      reject(new Error(`Network error while uploading ${file.name}.`))
+      reject(new Error(`Network error while uploading ${file.name}. Try: check your connection, keep this page open, and retry the failed file.`))
     })
     request.addEventListener('abort', () => {
-      reject(new Error(`${file.name} upload was cancelled.`))
+      reject(new Error(`${file.name} upload was cancelled. Try: select the file again or retry the failed upload.`))
+    })
+    request.addEventListener('timeout', () => {
+      reject(new Error(`${file.name} took too long to upload. Try: check your connection and retry the failed file.`))
     })
     request.addEventListener('load', () => {
       let body: Record<string, unknown> = {}
@@ -96,7 +108,10 @@ function uploadRawFile(
         return
       }
 
-      reject(new Error(String(body.error || `Could not upload ${file.name}.`)))
+      const message = request.status === 413
+        ? `${file.name} is too large for direct upload. Try: upload the original file to this client's RAW folder in Google Drive, then click Sync Drive.`
+        : String(body.error || `Could not upload ${file.name}.`)
+      reject(new Error(/\bTry:/i.test(message) ? message : `${message} Try: refresh the client folder, then retry the failed file. If your session expired, sign in again.`))
     })
     request.send(form)
   })
@@ -193,6 +208,7 @@ export default function OnsiteUpload({
     const failed: File[] = []
     let uploaded = 0
     let completedBytes = 0
+    let lastError: string | null = null
 
     setBusy(bookingId)
     setProgress((current) => ({
@@ -207,6 +223,7 @@ export default function OnsiteUpload({
         currentFileLoaded: 0,
         currentFileTotal: files[0]?.size || 0,
         status: 'uploading',
+        lastError: null,
       },
     }))
 
@@ -239,8 +256,10 @@ export default function OnsiteUpload({
           }))
         })
         uploaded += 1
-      } catch {
+      } catch (error) {
         failed.push(file)
+        lastError = error instanceof Error ? error.message : 'The file could not be uploaded. Try: check your connection and retry the failed file.'
+        if (!/\bTry:/i.test(lastError)) lastError += ' Try: check your connection and retry the failed file.'
       }
 
       completedBytes += file.size
@@ -255,6 +274,7 @@ export default function OnsiteUpload({
           currentFileLoaded: 0,
           currentFileTotal: 0,
           status: completedBytes >= totalBytes ? (failed.length ? 'partial' : 'complete') : 'uploading',
+          lastError,
         },
       }))
     }
@@ -262,7 +282,7 @@ export default function OnsiteUpload({
     if (failed.length) {
       toast.warning(
         'Upload partially completed',
-        `${uploaded} uploaded · ${failed.length} failed. Retry only the failed files.`,
+        `${uploaded} uploaded · ${failed.length} failed. ${lastError || 'Try: retry only the failed files.'}`,
       )
     } else {
       toast.success('RAW upload complete', `${uploaded} files uploaded to the correct client folder.`)
@@ -275,8 +295,8 @@ export default function OnsiteUpload({
   const picked = async (files: FileList | null) => {
     const bookingId = target.current
     target.current = ''
-    if (input.current) input.current.value = ''
-    if (bookingId && files?.length) await uploadFiles(bookingId, Array.from(files))
+    const selected = snapshotOnsiteFiles(files, input.current)
+    if (bookingId && selected.length) await uploadFiles(bookingId, selected)
   }
 
   const allJobs = useMemo(() => data?.batch?.jobs || [], [data])
@@ -481,6 +501,7 @@ export default function OnsiteUpload({
                         {state.failed.length ? (
                           <p className="mt-3 text-[9px] leading-relaxed text-amber-200/70">
                             Failed: {state.failed.map((file) => file.name).join(', ')}
+                            {state.lastError ? <span className="mt-1 block">{state.lastError}</span> : null}
                           </p>
                         ) : null}
                       </div>
