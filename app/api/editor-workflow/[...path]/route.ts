@@ -58,6 +58,8 @@ import {
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { scanUpload } from '@/lib/security/upload-scanner'
 import { rejectUntrustedMutation } from '@/lib/security/request-security'
+import { startRawUpload, completeRawUpload } from '@/lib/raw-upload-server'
+import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from '@/lib/raw-upload-contract'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -225,10 +227,12 @@ async function handle(request: NextRequest, path: string[]) {
       (path[0] === 'folders' && method === 'POST') ||
       (path[0] === 'raw' && method === 'POST')
     if (expensiveEditorOperation) {
-      const policy = path[0] === 'batches' && ['start-upload', 'upload-session', 'complete-file', 'finalize-client', 'finalize-upload'].includes(path[2] || '')
+      const policy = (path[0] === 'batches' && ['start-upload', 'upload-session', 'complete-file', 'finalize-client', 'finalize-upload'].includes(path[2] || '')) ||
+        (path[0] === 'raw' && ['upload-session', 'complete-file'].includes(path[2] || ''))
         ? API_RATE_LIMITS.editorUpload
         : API_RATE_LIMITS.driveOperation
-      const limited = await enforceApiRateLimit(request, policy, [user.id, workspaceId, path.join('/')])
+      const limited = await enforceApiRateLimit(request, policy, [user.id, workspaceId,
+        path[0] === 'raw' && policy === API_RATE_LIMITS.editorUpload ? 'raw-upload' : path.join('/')])
       if (limited) return limited
     }
 
@@ -418,6 +422,24 @@ async function handle(request: NextRequest, path: string[]) {
       if (denied) return denied
       const bookingId = decodeURIComponent(path[1])
       if (path[2] === 'index') return json(await indexRawFolder(workspaceId, bookingId, actorId))
+      if (path[2] === 'upload-session' || path[2] === 'complete-file') {
+        if (path.length !== 3) return json({ error: 'Unknown upload action.' }, 404)
+        // Only metadata enters the application; image bytes go straight to Google Drive.
+        const body = await request.text()
+        if (Buffer.byteLength(body, 'utf8') > 8000) return json({ error: 'Upload instructions are too large.' }, 413)
+        let value: unknown
+        try { value = JSON.parse(body) } catch { return json({ error: 'Valid upload instructions are required.' }, 400) }
+        const context = { workspaceId, bookingId, actorId }
+        if (path[2] === 'upload-session') {
+          const parsed = rawUploadMetadataSchema.safeParse(value)
+          if (!parsed.success) return json({ error: 'Choose a supported photo up to 100 MB with a filename of at most 120 characters. Try: check the file and select it again.' }, 400)
+          return json(await startRawUpload(context, parsed.data))
+        }
+        const parsed = rawUploadCompleteSchema.safeParse(value)
+        if (!parsed.success) return json({ error: 'Upload confirmation is invalid. Try: select the file again.' }, 400)
+        return json(await completeRawUpload(context, parsed.data.grant, parsed.data.driveFileId))
+      }
+      if (path.length !== 2) return json({ error: 'Unknown upload action.' }, 404)
       const form = await request.formData()
       const file = form.get('file')
       const thumbnail = form.get('thumbnail')
@@ -522,6 +544,7 @@ async function handle(request: NextRequest, path: string[]) {
     }
     return json({ error: 'Unknown editor workflow endpoint.' }, 404)
   } catch (error) {
+    if (error instanceof RawUploadError) return json({ error: error.message, requestId }, error.status)
     if (error instanceof GraduationWorkflowOnlyError) return json({ error: error.message, requestId }, 409)
     console.error(`Editor workflow ${request.method} /${path.join('/')} [${requestId}]:`, error)
     return errorResponse(error, 'Editor workflow request failed.', requestId)

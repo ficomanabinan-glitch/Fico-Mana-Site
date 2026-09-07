@@ -14,6 +14,8 @@ import {
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminInput, adminPanel } from '@/lib/admin-ui'
+import { uploadRawDirect as uploadRawFile } from '@/lib/raw-upload-client'
+export { uploadRawFile }
 
 type Job = {
   bookingId: string
@@ -67,54 +69,6 @@ export function snapshotOnsiteFiles(files: FileList | null, input: Pick<HTMLInpu
   const selected = Array.from(files || [])
   if (input) input.value = ''
   return selected
-}
-
-export function uploadRawFile(
-  bookingId: string,
-  file: File,
-  onProgress: (loaded: number, total: number) => void,
-) {
-  return new Promise<Record<string, unknown>>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    const form = new FormData()
-    form.append('file', file)
-
-    request.open('POST', `/api/editor-workflow/raw/${encodeURIComponent(bookingId)}`)
-    request.withCredentials = true
-    request.timeout = 120_000
-    request.upload.addEventListener('progress', (event) => {
-      const total = event.lengthComputable && event.total > 0 ? event.total : file.size
-      onProgress(Math.min(event.loaded, total), total)
-    })
-    request.addEventListener('error', () => {
-      reject(new Error(`Network error while uploading ${file.name}. Try: check your connection, keep this page open, and retry the failed file.`))
-    })
-    request.addEventListener('abort', () => {
-      reject(new Error(`${file.name} upload was cancelled. Try: select the file again or retry the failed upload.`))
-    })
-    request.addEventListener('timeout', () => {
-      reject(new Error(`${file.name} took too long to upload. Try: check your connection and retry the failed file.`))
-    })
-    request.addEventListener('load', () => {
-      let body: Record<string, unknown> = {}
-      try {
-        body = JSON.parse(request.responseText || '{}') as Record<string, unknown>
-      } catch {
-        body = {}
-      }
-
-      if (request.status >= 200 && request.status < 300) {
-        resolve(body)
-        return
-      }
-
-      const message = request.status === 413
-        ? `${file.name} is too large for direct upload. Try: upload the original file to this client's RAW folder in Google Drive, then click Sync Drive.`
-        : String(body.error || `Could not upload ${file.name}.`)
-      reject(new Error(/\bTry:/i.test(message) ? message : `${message} Try: refresh the client folder, then retry the failed file. If your session expired, sign in again.`))
-    })
-    request.send(form)
-  })
 }
 
 export default function OnsiteUpload({
@@ -444,7 +398,9 @@ export default function OnsiteUpload({
                                 ? 'Upload complete'
                                 : state.status === 'partial'
                                   ? 'Upload completed with failures'
-                                  : 'Uploading RAW photos'}
+                                  : state.currentFile && state.currentFileLoaded >= state.currentFileTotal
+                                    ? 'Verifying uploaded photo'
+                                    : 'Uploading RAW photos'}
                             </p>
                             <p className="mt-1 max-w-sm truncate text-[10px] text-white/35">
                               {state.currentFile || `${state.uploaded} file${state.uploaded === 1 ? '' : 's'} uploaded`}
@@ -499,10 +455,10 @@ export default function OnsiteUpload({
                           </div>
                         ) : null}
                         {state.failed.length ? (
-                          <p className="mt-3 text-[9px] leading-relaxed text-amber-200/70">
-                            Failed: {state.failed.map((file) => file.name).join(', ')}
-                            {state.lastError ? <span className="mt-1 block">{state.lastError}</span> : null}
-                          </p>
+                          <div className="mt-3 text-[9px] leading-relaxed text-amber-200/70">
+                            <p>Failed: {state.failed.map((file) => file.name).join(', ')}</p>
+                            {state.lastError ? <p className="mt-1">{state.lastError}</p> : null}
+                          </div>
                         ) : null}
                       </div>
                     ) : null}

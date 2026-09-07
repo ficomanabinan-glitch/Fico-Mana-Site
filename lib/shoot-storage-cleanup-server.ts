@@ -60,7 +60,7 @@ async function shootContext(admin: SupabaseClient, workspaceId: string, bookingI
   const resolvedFolders = [...(folders.data || [])]
   const missing = ['RAW', 'SELECTED', 'EDITED', 'DELIVERABLES'].filter(type => !resolvedFolders.some(folder => folder.folder_type === type))
   if (resolveCategories && missing.length) {
-    const names: Record<string, RegExp> = { RAW: /^RAW$/, SELECTED: /^\d+ SELECTED PHOTOS$/, EDITED: /^EDITED PHOTOS$/, DELIVERABLES: /^DELIVERABLES$/ }
+    const names: Record<string, RegExp> = { RAW: /^RAW$/, SELECTED: /^(?:\d+ SELECTED PHOTOS|SELECTED \d+ PHOTOS)$/, EDITED: /^EDITED PHOTOS$/, DELIVERABLES: /^DELIVERABLES$/ }
     const children = await listDriveCleanupChildren(chain[0])
     if (children.nextPageToken) throw new Error('Client folder is too large to resolve safely.')
     for (const type of missing) {

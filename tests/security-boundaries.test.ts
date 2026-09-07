@@ -110,6 +110,7 @@ function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolea
       getDriveFile: async (id: string) => { driveReads.push(id); throw new Error('unexpected Drive lookup') },
     },
     '@/lib/google-drive-scopes': {}, '@/lib/client-portal': {}, '@/lib/email': {},
+    '@/lib/print-manifest': {}, '@/lib/print-workflow': {},
     '@/lib/portal-expiry': { hasPortalExpired: (value: string) => Date.parse(value) < Date.now() },
     '@/lib/booking-provisioning': {}, '@/lib/security/file-validation': {},
     '@/lib/supabase/admin': { getSupabaseAdmin: () => db },

@@ -277,7 +277,7 @@ export async function upsertDriveFile(input: {
   fileName: string
   mimeType: string
   checksum: string
-  purpose?: 'raw' | 'deliverable'
+  purpose?: 'raw' | 'deliverable' | 'print-manifest'
   data: Buffer
 }): Promise<{ file: DriveFile; duplicate: boolean }> {
   const current = (await listDriveFiles(input.destinationFolderId)).find(
@@ -325,6 +325,52 @@ export async function upsertDriveFile(input: {
   return { file: data, duplicate: false }
 }
 
+/** Only verified edited uploads may be used here. Originals are never renamed or moved. */
+export async function copyEnhancedPrint(input: {
+  source: DriveFile
+  destinationFolderId: string
+  bookingId: string
+  selectionId: string
+  printKey: string
+  checksum: string
+  fileName: string
+}) {
+  const properties = {
+    bookingId: input.bookingId,
+    selectionId: input.selectionId,
+    purpose: 'enhanced-print',
+    printKey: input.printKey,
+    sourceDriveFileId: input.source.id,
+    checksum: input.checksum,
+  }
+  const previous = (await listDriveFiles(input.destinationFolderId)).filter(file =>
+    file.appProperties?.bookingId === input.bookingId &&
+    file.appProperties?.selectionId === input.selectionId &&
+    file.appProperties?.purpose === 'enhanced-print' &&
+    file.appProperties?.printKey === input.printKey,
+  )
+  const reusable = previous.find(file =>
+    file.appProperties?.sourceDriveFileId === input.source.id &&
+    file.appProperties?.checksum === input.checksum &&
+    file.name === input.fileName &&
+    file.size === input.source.size && file.md5Checksum === input.source.md5Checksum,
+  )
+  const result = reusable || await driveFetch<DriveFile>(
+    `/files/${encodeURIComponent(input.source.id)}/copy?fields=${encodeURIComponent(DRIVE_FILE_FIELDS)}&supportsAllDrives=true`,
+    { method: 'POST', body: JSON.stringify({ name: input.fileName, parents: [input.destinationFolderId], appProperties: properties }) },
+  )
+  if (!result.parents?.includes(input.destinationFolderId) || result.name !== input.fileName ||
+    result.size !== input.source.size || !input.source.md5Checksum || result.md5Checksum !== input.source.md5Checksum) {
+    throw new Error('The enhanced print copy could not be verified. Try: retry this client upload.')
+  }
+  // Replace only earlier system-generated copies of this exact print slot, after a verified copy exists.
+  // Unrelated/manual files and both RAW and enhanced originals are untouched; replacement is recoverable.
+  for (const old of previous) {
+    if (old.id !== result.id && old.id !== input.source.id) await trashDriveFile(old.id)
+  }
+  return result
+}
+
 export async function createDriveResumableUpload(input: {
   destinationFolderId: string
   existingDriveFileId?: string | null
@@ -334,6 +380,8 @@ export async function createDriveResumableUpload(input: {
   mimeType: string
   fileSize: number
   checksum: string
+  purpose?: 'raw' | 'deliverable'
+  uploadKey?: string
 }): Promise<string> {
   const token = await getGoogleDriveAccessToken()
   const metadata = {
@@ -343,7 +391,8 @@ export async function createDriveResumableUpload(input: {
       bookingId: input.bookingId,
       relativePath: input.relativePath,
       checksum: input.checksum,
-      purpose: 'deliverable',
+      purpose: input.purpose || 'deliverable',
+      ...(input.purpose === 'raw' ? { rawUploadKey: input.uploadKey || '', rawVerification: 'pending' } : {}),
     },
   }
   const filePath = input.existingDriveFileId
@@ -370,6 +419,24 @@ export async function createDriveResumableUpload(input: {
   const location = response.headers.get('location')
   if (!location) throw new Error('Google Drive did not return a resumable upload URL.')
   return location
+}
+
+/** Promote a newly verified original from its isolated upload folder. No existing original is replaced. */
+export async function promoteRawUpload(file: DriveFile, incomingFolderId: string, rawFolderId: string) {
+  const inRaw = file.parents?.length === 1 && file.parents[0] === rawFolderId
+  if (!inRaw && !(file.parents?.length === 1 && file.parents[0] === incomingFolderId)) {
+    throw new Error('The pending photo is outside its authorized upload folder.')
+  }
+  const params = new URLSearchParams({ fields: DRIVE_FILE_FIELDS, supportsAllDrives: 'true',
+    ...(!inRaw ? { addParents: rawFolderId, removeParents: incomingFolderId } : {}),
+  })
+  const promoted = await driveFetch<DriveFile>(`/files/${encodeURIComponent(file.id)}?${params}`, {
+    method: 'PATCH', body: JSON.stringify({ appProperties: { ...file.appProperties, rawVerification: 'verified' } }),
+  })
+  if (!promoted.parents?.includes(rawFolderId) || promoted.appProperties?.rawVerification !== 'verified') {
+    throw new Error('Drive did not confirm the verified photo destination.')
+  }
+  return promoted
 }
 
 export async function getDriveFolder(id: string): Promise<DriveFolder> {
@@ -504,7 +571,11 @@ export async function ensureShootHierarchy(input: {
   }
 
   const raw = await findOrCreateFolder(client.id, 'RAW')
-  const selected = await findOrCreateFolder(client.id, `${Math.max(0, input.selectionLimit ?? 5)} SELECTED PHOTOS`)
+  const selectedName = `SELECTED ${Math.max(0, input.selectionLimit ?? 5)} PHOTOS`
+  const legacySelected = await findFolder(client.id, `${Math.max(0, input.selectionLimit ?? 5)} SELECTED PHOTOS`)
+  const selected = await findFolder(client.id, selectedName) || (legacySelected
+    ? await renameFolder(legacySelected.id, selectedName)
+    : await createFolder(client.id, selectedName))
   const edited = await findOrCreateFolder(client.id, 'EDITED PHOTOS')
   const deliverables = await findOrCreateFolder(client.id, 'DELIVERABLES')
 

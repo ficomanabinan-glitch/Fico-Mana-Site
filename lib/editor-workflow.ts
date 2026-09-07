@@ -22,6 +22,8 @@ import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
 import { safeMetadata } from '@/lib/security/audit-metadata'
 import { assertGraduationBooking, graduationBookingIds, graduationPackageIds } from '@/lib/package-workflow-server'
 import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
+import { buildPrintManifest, type PrintManifest } from '@/lib/print-manifest'
+import { fulfillBookingPrints, savePrintManifest } from '@/lib/print-workflow'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -779,7 +781,7 @@ async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingI
   return data
 }
 
-async function ensureBookingFolders(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+export async function ensureBookingFolders(admin: SupabaseClient, workspaceId: string, bookingId: string) {
   await assertGraduationBooking(admin, bookingId, workspaceId)
   let { data: booking, error } = await admin
     .from('bookings')
@@ -998,7 +1000,7 @@ export async function saveRawFile(input: {
 export async function indexRawFolder(workspaceId: string, bookingId: string, actorId: string) {
   const admin = adminClient()
   const { hierarchy, batch, booking } = await ensureBookingFolders(admin, workspaceId, bookingId)
-  const files = await listDriveFiles(hierarchy.raw.id)
+  const files = (await listDriveFiles(hierarchy.raw.id)).filter(file => file.appProperties?.rawVerification !== 'pending')
   if (!files.length) {
     const { data: settings } = await admin
       .from('google_drive_settings')
@@ -1398,16 +1400,8 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     }
     const allocationRows: Record<string, unknown>[] = []
     for (const allocation of printAllocations) {
-      const folder = await findOrCreateFolder(hierarchy.selected.id, PRINT_CATEGORY_LABELS[allocation.category])
       const file = gallery.find((item) => String(item.id) === allocation.fileId)
       if (!file) throw new Error('A print allocation references an unknown photo.')
-      const copy = await copyDriveFile({
-        fileId: String(file.drive_file_id),
-        destinationFolderId: folder.id,
-        bookingId,
-        galleryFileId: String(file.id),
-        purpose: `print-${allocation.category.toLowerCase()}`,
-      })
       allocationRows.push({
         workspace_id: workspaceId,
         booking_id: bookingId,
@@ -1416,7 +1410,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         category: allocation.category,
         quantity: allocation.quantity,
         label_snapshot: PRINT_CATEGORY_LABELS[allocation.category],
-        drive_file_id: copy.id,
+        drive_file_id: null,
       })
     }
     await admin.from('photo_selection_items').delete().eq('selection_id', selection.id)
@@ -1428,6 +1422,16 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       const { error: allocationError } = await admin.from('print_allocations').insert(allocationRows)
       if (allocationError) throw new Error(allocationError.message)
     }
+    // PRINTS remains empty until enhanced uploads are verified. JSON is outside PRINTS.
+    await findOrCreateFolder(hierarchy.selected.id, 'PRINTS')
+    await savePrintManifest(hierarchy.selected.id, buildPrintManifest({
+      bookingId,
+      selectionId: String(selection.id),
+      allocations: printAllocations.map(allocation => ({
+        category: allocation.category, gallery_file_id: allocation.fileId, quantity: allocation.quantity,
+      })),
+      gallery: gallery.map(file => ({ id: String(file.id), file_name: String(file.file_name) })),
+    }))
     if (addonOrders.length) {
       const { error: addonOrderError } = await admin.from('client_addon_orders').insert(addonOrders)
       if (addonOrderError) throw new Error(addonOrderError.message)
@@ -1469,7 +1473,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     await audit(admin, workspaceId, { type: 'system' }, 'SELECTED_FILES_COPIED', {
       bookingId,
       batchId: batch.id,
-        metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, printFolders: allocationRows.length, destructive: false },
+        metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, printsAwaitingEnhancedUpload: true, destructive: false },
     })
     return getPortalData(publicId)
   } catch (copyError) {
@@ -1775,6 +1779,20 @@ export async function prepareBatchDownload(
   const portalMap = new Map((portals || []).map((portal) => [String(portal.booking_id), String(portal.public_id)]))
   const foldersResult = await admin.from('drive_folders').select('*').in('booking_id', bookingIds)
   const folderMap = new Map((foldersResult.data || []).map((folder) => [`${folder.booking_id}:${folder.folder_type}`, folder]))
+  // One scoped query for the batch, including week/month collections; no per-client read loop.
+  const { data: savedPrints, error: printsError } = await admin.from('print_allocations')
+    .select('selection_id,category,gallery_file_id,quantity').eq('workspace_id', workspaceId)
+    .in('selection_id', selectionIds).order('category')
+  if (printsError) throw new Error('The print instructions could not be loaded. Try: download this batch again.')
+  const printManifests = new Map<string, PrintManifest>()
+  for (const bookingId of bookingIds) {
+    const selectionId = selectionMap.get(bookingId)
+    if (!selectionId) throw new Error('A client selection is missing. Try: refresh the editing queue, then download again.')
+    printManifests.set(bookingId, buildPrintManifest({
+      bookingId, selectionId, allocations: (savedPrints || []).filter(row => String(row.selection_id) === selectionId),
+      gallery: (gallery || []).filter(file => (items || []).some(item => item.selection_id === selectionId && item.gallery_file_id === file.id)),
+    }))
+  }
   const manifest = {
     schema_version: 1,
     workspace_id: workspaceId,
@@ -1795,6 +1813,7 @@ export async function prepareBatchDownload(
         deliverables_folder_drive_id: folderMap.get(`${job.booking_id}:DELIVERABLES`)?.drive_folder_id || null,
         portal_id: portalMap.get(String(job.booking_id)) || null,
         customer_name: String(booking?.customer_name || job.booking_id),
+        print_manifest: printManifests.get(String(job.booking_id)),
       }
     }),
   }
@@ -1810,6 +1829,11 @@ export async function prepareBatchDownload(
     })
     entries.push({ name: `${batch.shoot_date}/${folderName}/EDITED/`, data: Buffer.alloc(0) })
     const selectionId = selectionMap.get(String(job.booking_id))
+    entries.push({
+      name: `${batch.shoot_date}/${folderName}/SELECTED/manifest.json`,
+      data: Buffer.from(JSON.stringify(printManifests.get(String(job.booking_id)), null, 2), 'utf8'),
+    })
+    entries.push({ name: `${batch.shoot_date}/${folderName}/SELECTED/PRINTS/`, data: Buffer.alloc(0) })
     for (const item of (items || []).filter((row) => String(row.selection_id) === selectionId)) {
       const file = galleryMap.get(String(item.gallery_file_id))
       if (!file) continue
@@ -2198,6 +2222,37 @@ export async function finalizeClientUpload(
       metadata: { expected, uploaded, missing: Math.max(0, expected - uploaded), uploadJobId },
     })
     return { bookingId, status: 'UPLOAD_FAILED', expected, uploaded, error: message }
+  }
+  // Reuse the existing exclusive editor-work lock, so concurrent finalization cannot duplicate prints.
+  const printLockUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  const { data: printLock, error: printLockError } = await admin.from('editing_jobs')
+    .update({ download_locked_by: actorId, download_lock_expires_at: printLockUntil })
+    .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+    .or(`download_lock_expires_at.is.null,download_lock_expires_at.lte.${nowIso()}`)
+    .select('id').maybeSingle()
+  if (printLockError || !printLock) {
+    throw new Error('This client is already being processed. Try: wait for the current upload or download to finish, then retry. An interrupted print run unlocks after 10 minutes.')
+  }
+  try {
+    const { hierarchy } = await ensureBookingFolders(admin, workspaceId, bookingId)
+    await fulfillBookingPrints({
+      admin, workspaceId, bookingId, editingJobId: String(item.editing_job_id), uploadItemId: String(item.id),
+      selectedFolderId: hierarchy.selected.id, editedFolderId: hierarchy.edited.id,
+    })
+  } catch (printError) {
+    const detail = printError instanceof Error ? printError.message : 'The print copies could not be prepared.'
+    const message = `Enhanced photos uploaded, but prints are not ready. ${detail}${/Try:/i.test(detail) ? '' : ' Try: check the Drive connection, then retry this client upload.'}`
+    await Promise.all([
+      admin.from('batch_upload_items').update({ status: 'FAILED', uploaded_files: uploaded, last_error: message, updated_at: timestamp }).eq('id', item.id),
+      admin.from('editing_jobs').update({ status: 'UPLOAD_FAILED', last_error: message, updated_at: timestamp }).eq('id', item.editing_job_id),
+    ])
+    await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'PRINT_PREPARATION_FAILED', {
+      bookingId, batchId: batch.id, metadata: { uploadJobId, error: message },
+    })
+    return { bookingId, status: 'UPLOAD_FAILED', expected, uploaded, error: message }
+  } finally {
+    await admin.from('editing_jobs').update({ download_locked_by: null, download_lock_expires_at: null })
+      .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('download_lock_expires_at', printLockUntil)
   }
   const portal = await ensurePortal(admin, workspaceId, bookingId)
   const url = portalUrl(String(portal.public_id))

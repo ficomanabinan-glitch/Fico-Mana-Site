@@ -87,6 +87,21 @@ try {
   assert.equal(anonymousStorageReview.status, 401)
   assertPrivateResponse(anonymousStorageReview, 'anonymous storage review')
 
+  for (const action of ['upload-session', 'complete-file']) {
+    const endpoint = `${baseUrl}/api/editor-workflow/raw/FM-SYNTHETIC/${action}`
+    const anonymous = await fetch(endpoint, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://admin.ficomana.com' }, body: '{}',
+    })
+    assert.equal(anonymous.status, 401)
+    assertPrivateResponse(anonymous, `anonymous raw ${action}`)
+    const hostile = await fetch(endpoint, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://attacker.example' }, body: '{}',
+    })
+    assert.equal(hostile.status, 403)
+    assertPrivateResponse(hostile, `hostile raw ${action}`)
+  }
+  assert.match(home.headers.get('content-security-policy') || '', /https:\/\/www\.googleapis\.com\/upload\/drive\/v3\//)
+
   console.log('Production HTTP security checks passed.')
 } finally {
   child.kill()
