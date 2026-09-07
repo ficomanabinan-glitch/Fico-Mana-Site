@@ -167,7 +167,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
     <div className={adminPage}>
       <AdminPageHeader
         title="Filtering Dashboard"
-        subtitle="Gallery → client 5-pick → review → editor delivery. Track every booking through the post-shoot pipeline."
+        subtitle="Review photo selections and check editing progress."
         onRefresh={() => fetchData()}
         refreshing={refreshing}
       >

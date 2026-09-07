@@ -154,7 +154,7 @@ export default function EditorDashboard() {
           <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#C4CEFF]">Editor Dashboard</p>
           <h1 className="mt-2 font-serif text-3xl font-bold">Today’s upload and editing work</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/40">
-            See today’s onsite clients, download each day batch, upload finished folders, and retry failures.
+            Check today’s clients, downloads, and uploads.
           </p>
         </div>
         <span className="inline-flex w-fit items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-[9px] font-bold uppercase text-emerald-300">

@@ -311,8 +311,7 @@ export default function OnsiteUpload({
             </p>
             <h1 className="mt-1 text-xl font-semibold">Send every shoot to its assigned Drive folder</h1>
             <p className="mt-2 max-w-2xl text-xs leading-relaxed text-white/40">
-              Choose the shoot date, prepare a client folder if needed, then upload photos without
-              browsing Google Drive. Live progress remains visible until every file is processed.
+              Choose a date and client, then upload their shoot photos.
             </p>
           </div>
           <label className="space-y-1">

@@ -191,7 +191,7 @@ export default function DashboardOverview() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Console Dashboard"
-        subtitle="Live operational overview for FICO MANA Studio"
+        subtitle="An overview of your bookings, payments, and shoots."
         onRefresh={() => fetchStats()}
         refreshing={refreshing}
       >

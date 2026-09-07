@@ -46,7 +46,7 @@ export default function ReportsPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Reports"
-        subtitle="Live booking, client, session, and collected-payment overview."
+        subtitle="View booking and payment summaries."
       />
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">

@@ -34,7 +34,7 @@ export default function ClientsPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Clients"
-        subtitle="Client directory generated from the live booking records."
+        subtitle="Find client details and booking history."
       />
 
       <div className={`${adminPanel} p-4`}>

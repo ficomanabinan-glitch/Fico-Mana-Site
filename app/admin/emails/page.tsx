@@ -73,7 +73,7 @@ export default function EmailLogsConsole() {
     <div className={adminPage}>
       <AdminPageHeader
         title="System Email Logs"
-        subtitle="Live feed of emails dispatched by the booking and verification system."
+        subtitle="Check sent emails and delivery status."
         onRefresh={() => fetchLogs()}
         refreshing={refreshing}
       />

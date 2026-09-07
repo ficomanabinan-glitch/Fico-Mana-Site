@@ -178,7 +178,7 @@ export default function BusinessExpensesPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Business Expenses"
-        subtitle="The single source of truth for fixed, variable, one-time, and recurring operating costs."
+        subtitle="Track your business expenses."
         onRefresh={() => void fetchExpenses()}
         refreshing={loading}
       />
@@ -391,8 +391,7 @@ export default function BusinessExpensesPage() {
       </section>
 
       <div className="border border-amber-400/15 bg-amber-400/[0.04] p-4 text-[10px] leading-relaxed text-amber-100/60">
-        Monthly Storage Subscription now lives only in Business Expenses. It still contributes to Sales Management totals,
-        profitability, margin, break-even, and revenue-target calculations.
+        Add storage subscriptions and other running costs here. These expenses are included in your sales and profit reports.
       </div>
     </div>
   )

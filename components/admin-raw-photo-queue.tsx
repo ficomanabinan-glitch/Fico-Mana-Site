@@ -207,7 +207,7 @@ export default function AdminRawPhotoQueue({
       {!embedded && (
         <AdminPageHeader
           title="Raw Photo Filtering"
-          subtitle="Review client photo selections — each client submits a Drive folder with their 5 chosen raw photos. Approve for editing or reject with feedback."
+          subtitle="Review selected photos and send feedback."
           onRefresh={() => fetchQueue()}
           refreshing={refreshing}
         >

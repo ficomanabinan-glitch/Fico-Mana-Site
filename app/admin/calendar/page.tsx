@@ -59,7 +59,7 @@ export default function AdminCalendarPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Session Calendar"
-        subtitle="Pick a date, then adjust FICO capacity or MANA slots."
+        subtitle="View shoot dates and manage available slots."
         onRefresh={() => fetchData()}
         refreshing={refreshing}
       />

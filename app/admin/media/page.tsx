@@ -392,7 +392,7 @@ export default function WebsiteMediaPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Website Media"
-        subtitle="Manage up to 10 optimized graduation gallery photos and one featured reel on the public FICO MANA website."
+        subtitle="Update the photos and video on your website."
         onRefresh={() => void load({ refresh: true })}
         refreshing={refreshing}
       >

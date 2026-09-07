@@ -12,14 +12,8 @@ type Props = {
   children?: React.ReactNode
 }
 
-const subtitleOverrides: Record<string, string> = {
-  'Sales Management': 'Track revenue, expenses, profit, and sales targets for FICO MANA Studio.',
-  'Filtering Dashboard': 'Track client selections, review status, and editor delivery for every booking.',
-}
-
 export default function AdminPageHeader({ title, subtitle, onRefresh, refreshing, children }: Props) {
   const { syncing, syncNow } = useAdminAutoSync()
-  const resolvedSubtitle = subtitleOverrides[title] ?? subtitle
 
   const handleRefresh = async () => {
     await syncNow()
@@ -31,7 +25,7 @@ export default function AdminPageHeader({ title, subtitle, onRefresh, refreshing
       <div className="space-y-1">
         <p className="text-[10px] font-bold tracking-[0.2em] text-[#C4CEFF] uppercase">FICO Mana</p>
         <h1 className={adminTitle}>{title}</h1>
-        {resolvedSubtitle && <p className={adminSubtitle}>{resolvedSubtitle}</p>}
+        {subtitle && <p className={adminSubtitle}>{subtitle}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {onRefresh && (

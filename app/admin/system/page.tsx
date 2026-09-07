@@ -53,7 +53,7 @@ export default function SystemPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="System"
-        subtitle="Production health and settings for storage, notifications, and automated shoot reminders."
+        subtitle="Manage Google Drive, email, and reminder settings."
         onRefresh={() => void load()}
         refreshing={loading}
       />

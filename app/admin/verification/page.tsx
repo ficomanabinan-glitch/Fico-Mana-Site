@@ -242,7 +242,7 @@ export default function PaymentVerificationQueue() {
     <div className={adminPage}>
       <AdminPageHeader
         title="Payment Verification"
-        subtitle="Review uploaded GCash screenshots and approve or reject sessions."
+        subtitle="Review receipts and confirm client payments."
         onRefresh={() => fetchQueue()}
         refreshing={refreshing}
       />

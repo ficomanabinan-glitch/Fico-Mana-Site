@@ -177,7 +177,7 @@ export default function SalesManagementPage() {
   const pageHeader = (
     <AdminPageHeader
       title="Sales Management"
-      subtitle="Revenue, profitability, break-even, and target planning. Expense editing lives only in Business Expenses."
+      subtitle="Track sales, expenses, and profit."
       onRefresh={() => void load({ force: true })}
       refreshing={refreshing}
     >

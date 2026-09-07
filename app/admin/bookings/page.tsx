@@ -736,7 +736,7 @@ function BookingsManagement() {
       <ReceiptUploadEnhancer />
       <AdminPageHeader
         title="Booking Management"
-        subtitle="Search, filter, edit, reschedule, or cancel client portrait appointments."
+        subtitle="View and manage client bookings."
         onRefresh={() => fetchBookings()}
         refreshing={refreshing}
       >

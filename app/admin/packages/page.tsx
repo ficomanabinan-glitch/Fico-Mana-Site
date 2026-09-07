@@ -200,7 +200,7 @@ export default function PackageManagerPage() {
   const pageHeader = (
     <AdminPageHeader
       title="Package Manager"
-      subtitle="Manage live website packages, prices, inclusions, scheduling, and the exact number of photos each client must select."
+      subtitle="Update your packages, prices, and photo limits."
       onRefresh={() => void load({ force: true })}
       refreshing={refreshing}
     >

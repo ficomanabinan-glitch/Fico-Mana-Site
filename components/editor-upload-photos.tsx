@@ -222,8 +222,7 @@ export default function EditorUploadPhotos({
         <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#C4CEFF]">Upload Photos</p>
         <h1 className="mt-2 font-serif text-3xl font-bold">Return edited batches to Google Drive</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/40">
-          Drop the extracted batch folder. Fico Mana reads its trusted manifest, matches every client,
-          and sends only photos inside each EDITED folder to the correct Drive destination.
+          Drop the unzipped batch folder to upload each client’s EDITED photos to Google Drive.
         </p>
       </div>
 
