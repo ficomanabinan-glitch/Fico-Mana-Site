@@ -83,7 +83,7 @@ export default function ProvisioningPage(){
   </div>
 }
 
-function Metric({label,value}:{label:string;value:number}){return <div className="border border-white/10 bg-white/[0.02] p-5"><p className="text-caption uppercase tracking-wider text-white/40">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div>}
+function Metric({label,value}:{label:string;value:number}){return <div className="rounded-card border border-white/10 bg-white/[0.02] p-5"><p className="text-caption uppercase tracking-wider text-white/40">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div>}
 
 function PortalQrDialog({portal,onClose}:{portal:QrPortal;onClose:()=>void}){
   return <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-black/85 p-4 backdrop-blur-sm" onClick={onClose}>

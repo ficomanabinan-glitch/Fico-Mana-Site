@@ -11,6 +11,13 @@ test('client portal statuses are rounded badges without pretending to be action 
   assert.match(portals, /inline-flex rounded-md border px-2 py-1 text-caption font-semibold uppercase \$\{statusClass/)
 })
 
+test('all three client portal summary cards use the shared rounded card style', () => {
+  const portals = source('app/admin/provisioning/page.tsx')
+  const metric = portals.slice(portals.indexOf('function Metric('), portals.indexOf('function PortalQrDialog('))
+  assert.match(metric, /className="rounded-card border border-white\/10 bg-white\/\[0\.02\] p-5"/)
+  assert.equal((portals.match(/<Metric label=/g) || []).length, 3)
+})
+
 test('Open Folder uses the existing button wrapper and keeps direct new-tab navigation', () => {
   const portals = source('app/admin/provisioning/page.tsx')
   assert.match(portals, /<a href=\{item\.driveClientFolderUrl\} target="_blank" rel="noopener noreferrer" className=\{`\$\{actionButton\} min-h-10 whitespace-nowrap text-green-300`\}>Open folder/)
