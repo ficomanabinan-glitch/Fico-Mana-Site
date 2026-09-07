@@ -33,7 +33,15 @@ Reads run independently in parallel and stay in the authenticated layout's memor
 
 ## Design system and accessibility
 
-All new styling is scoped to `components/new-admin/new-admin.module.css`. Existing global CSS, root theme, old admin/editor components and shared visual primitives are not modified. The new shell supplies light variables locally; modal Sheet content receives the same tokens through its own scoped wrapper.
+All new styling is scoped to `components/new-admin/new-admin.module.css`. Existing global CSS, root theme, old admin/editor components and shared visual primitives are not modified. The new shell supplies theme variables locally; modal Sheet content receives the same tokens through its own scoped wrapper.
+
+### Light and dark appearance
+
+The header's moon/sun button switches the entire preview between its original light palette and a charcoal dark palette, including navigation, forms, tables, status labels, charts, skeletons and the portalled mobile Sheet. It is available on desktop and mobile, has a 44px target and an accessible action label. Layout, business data and selection state are not reset by toggling.
+
+Light remains the default. A cosmetic `fico-newadmin-theme` cookie stores only `light` or `dark` for one year, with host-local scope, `Path=/newadmin`, `SameSite=Lax` and `Secure` on HTTPS. The server validates and renders the saved mode on the first response, avoiding a client-only preference flash. Invalid values fall back to light. If storage is blocked, switching still works for the current visit. No auth cookie, global HTML class, database setting, API contract or existing console theme is changed; no reload or data request is required to toggle. Preferences on the old admin hostname and the new subdomain are intentionally separate.
+
+125 local tests pass, including both palettes' text/control/hover/status contrast, validated cookie scope and server initialization/mobile Sheet wiring. Typecheck, build and targeted lint passed; full lint has zero errors and 35 pre-existing warnings. Authenticated live desktop/mobile verification follows deployment.
 
 - Typography: 12, 14, 16, 20, 26, 42px. Body 16 × 1.618 ≈ 26px line box; heading hierarchy 16 × 1.618 ≈ 26 and 26 × 1.618 ≈ 42. Shared 1.2/1.3 heading and 1.5/1.618 body line-height tokens.
 - Spacing: 4, 8, 12, 16, 24, 32, 40, 48, 64px. Controls ≥44px; mobile sidebar uses the existing accessible Sheet primitive.

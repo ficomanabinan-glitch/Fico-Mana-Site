@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { newAdminSections, type NewAdminSection } from '@/lib/new-admin/routing'
 import { Button } from './ui'
 import { NewAdminDataProvider } from './data-provider'
+import { ThemeToggle, useNewAdminTheme } from './theme-provider'
 import styles from './new-admin.module.css'
 
 const navigation = [
@@ -32,6 +33,7 @@ export function NewAdminAccessDenied() {
   return <div className={styles.access}><ShieldCheck size={40} className="mx-auto" aria-hidden="true" /><h1>Administrator access required</h1><p>This preview uses the same secure staff access as the existing console.</p><div className={styles.actions}><Link href="/admin" className={styles.action}>Sign in</Link><Button onClick={() => void reset()}>Use another account</Button></div>{error && <p role="alert">{error}</p>}</div>
 }
 export function NewAdminShell({ userId, email, children }: { userId: string; email: string; children: React.ReactNode }) {
+  const { theme } = useNewAdminTheme()
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -48,9 +50,9 @@ export function NewAdminShell({ userId, email, children }: { userId: string; ema
   return <NewAdminDataProvider key={userId} userId={userId}><a href="#newadmin-content" className={styles.skip}>Skip to main content</a><div className={styles.shell}>
     <aside className={styles.sidebar}><Brand /><Nav /><div className={styles.profile}><p className={styles.muted}>Studio administrator<br />{email}</p><Button disabled={signingOut} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />{signingOut ? 'Signing out…' : 'Sign out'}</Button><a className={styles.textLink} href="https://admin.ficomana.com/admin/dashboard" target="_blank" rel="noopener noreferrer">Original console <ArrowUpRight size={14} className="inline" aria-hidden="true" /></a></div></aside>
     <div className={styles.workspace}><header className={styles.topbar}>
-      <div className={styles.mobileMenu}><Sheet open={open} onOpenChange={setOpen}><SheetTrigger render={<Button aria-label="Open navigation" />}><Menu size={20} aria-hidden="true" /></SheetTrigger><SheetContent side="left" className={`${styles.theme} ${styles.drawer}`}><SheetTitle>FICO MANA</SheetTitle><SheetDescription>Studio console preview</SheetDescription><Nav close={() => setOpen(false)} /><Button disabled={signingOut} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />Sign out</Button></SheetContent></Sheet></div>
+      <div className={styles.mobileMenu}><Sheet open={open} onOpenChange={setOpen}><SheetTrigger render={<Button aria-label="Open navigation" />}><Menu size={20} aria-hidden="true" /></SheetTrigger><SheetContent side="left" data-theme={theme} className={`${styles.theme} ${styles.drawer}`}><SheetTitle>FICO MANA</SheetTitle><SheetDescription>Studio console preview</SheetDescription><Nav close={() => setOpen(false)} /><Button disabled={signingOut} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />Sign out</Button></SheetContent></Sheet></div>
       <div className={styles.breadcrumb}><span className={styles.muted}>Workspace</span><ChevronRight size={14} aria-hidden="true" /><span>{title}</span></div>
-      <form role="search" onSubmit={event => { event.preventDefault(); const term = new FormData(event.currentTarget).get('search'); router.push(`/newadmin/bookings?search=${encodeURIComponent(String(term ?? ''))}`) }}><input name="search" aria-label="Search clients and bookings" placeholder="Search clients or bookings…" /><Button type="submit" aria-label="Search"><Search size={18} aria-hidden="true" /></Button></form><span className={styles.muted}>Design preview</span>
+      <form role="search" onSubmit={event => { event.preventDefault(); const term = new FormData(event.currentTarget).get('search'); router.push(`/newadmin/bookings?search=${encodeURIComponent(String(term ?? ''))}`) }}><input name="search" aria-label="Search clients and bookings" placeholder="Search clients or bookings…" /><Button type="submit" aria-label="Search"><Search size={18} aria-hidden="true" /></Button></form><div className={styles.topbarActions}><span className={`${styles.muted} ${styles.previewLabel}`}>Design preview</span><ThemeToggle /></div>
     </header><main id="newadmin-content" tabIndex={-1} className={styles.content}>{error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}{children}</main></div>
   </div></NewAdminDataProvider>
 }
