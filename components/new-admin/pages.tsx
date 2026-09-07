@@ -1,5 +1,7 @@
 'use client'
 
+import { WorkspaceRefresh } from '@/components/workspace-refresh'
+
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -25,7 +27,7 @@ export default function NewAdminPage({ section }: { section: NewAdminSection }) 
 function ConsolePage({ section }: { section: NewAdminSection }) {
   const { data, loading, refreshing, errors, sample, setSample, refresh } = useConsoleData()
   const title = newAdminSections[section]
-  return <div className={styles.stack}><header className={styles.header}><div><div className={styles.eyebrow}>FICO MANA / Studio console</div><h1>{title.title}</h1><p>{title.description}</p></div><div className={styles.actions}><Button aria-pressed={sample} onClick={() => setSample(!sample)}><FlaskConical size={16} aria-hidden="true" />{sample ? 'Use live data' : 'Show sample data'}</Button><Button disabled={refreshing || sample} onClick={() => void refresh()}><RefreshCw size={16} aria-hidden="true" />{refreshing ? 'Refreshing…' : 'Refresh'}</Button></div></header>
+  return <div className={styles.stack}><header className={styles.header}><div><div className={styles.eyebrow}>FICO MANA / Studio console</div><h1>{title.title}</h1><p>{title.description}</p></div><div className={styles.actions}><Button aria-pressed={sample} onClick={() => setSample(!sample)}><FlaskConical size={16} aria-hidden="true" />{sample ? 'Use live data' : 'Show sample data'}</Button><WorkspaceRefresh><Button aria-label={refreshing ? 'Refreshing…' : 'Refresh'} disabled={refreshing || sample} onClick={() => void refresh()}><RefreshCw size={16} aria-hidden="true" /><span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh'}</span></Button></WorkspaceRefresh></div></header>
     <div className={styles.notice}><ShieldCheck size={18} aria-hidden="true" /><p>{sample ? 'Sample view — fictional records for presentation only. Nothing here is saved to your studio.' : 'Design preview · Live records. Search, filters and reports work here. Changes and uploads open the existing console in a new tab.'}</p></div>
     {errors.length > 0 && <div className={`${styles.notice} ${styles.error}`} role="alert"><CircleAlert size={18} aria-hidden="true" /><div><strong>Some records are unavailable</strong>{errors.map(error => <p key={error}>{error}</p>)}<p>Previously loaded records stay visible until a successful refresh.</p></div></div>}
     {loading ? <Loading /> : <>

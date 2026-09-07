@@ -27,6 +27,7 @@ import { getBookings, getNotifications, markNotificationRead, type Notification 
 import { AdminToastProvider } from '@/components/admin-toast-provider'
 import { AdminAutoSyncProvider } from '@/components/admin-auto-sync'
 import AdminSyncStatus from '@/components/admin-sync-status'
+import { WorkspaceRefreshProvider, WorkspaceRefreshTarget } from '@/components/workspace-refresh'
 import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge } from '@/lib/admin-ui'
 import { clearSalesReadCache } from '@/lib/sales-read-cache'
@@ -261,6 +262,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <AdminToastProvider>
       <AdminAutoSyncProvider enabled={isLoggedIn}>
+        <WorkspaceRefreshProvider>
         <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">
           <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">
             <div className="shrink-0 border-b border-white/[0.08] p-6">
@@ -287,19 +289,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
                   onClick={() => setMobileMenuOpen((previous) => !previous)}
                   className="rounded-lg p-1.5 text-white/65 hover:bg-white/5 md:hidden"
                 >
                   {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
                 </button>
-                <div>
-                  <p className="text-xs font-semibold text-white/55">{pageTitle}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-white/55">{pageTitle}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                <WorkspaceRefreshTarget />
                 <AdminSyncStatus />
                 <div className="relative">
                   <button
@@ -383,6 +386,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <main ref={mainRef} className="relative min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">{children}</main>
           </div>
         </div>
+        </WorkspaceRefreshProvider>
       </AdminAutoSyncProvider>
     </AdminToastProvider>
   )

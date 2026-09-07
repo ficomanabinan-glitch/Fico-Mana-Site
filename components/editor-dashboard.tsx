@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -242,9 +243,7 @@ export default function EditorDashboard() {
             <h2 className="mt-1 text-lg font-semibold">Download and upload per day batch</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void load(true, true)} disabled={refreshing} className={`${adminBtnGhost} inline-flex items-center gap-2 px-3 py-2 disabled:opacity-50`}>
-              <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />{refreshing ? 'Refreshing…' : 'Refresh'}
-            </button>
+            <WorkspaceRefreshButton onRefresh={() => void load(true, true)} refreshing={refreshing} />
             <Link href="/editor/upload" className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5`}>
               <FolderUp className="size-4" />Upload Photos
             </Link>

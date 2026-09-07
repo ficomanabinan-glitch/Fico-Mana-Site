@@ -58,13 +58,12 @@ function QueueSkeleton() {
   return (
     <div className="space-y-5 animate-pulse" aria-label="Loading editing queue">
       <div className={`${adminPanel} grid min-w-0 gap-4 p-4`}>
-        <div className="grid min-w-0 gap-3 2xl:grid-cols-[minmax(16rem,1fr)_auto_auto]">
+        <div className="grid min-w-0 gap-3 2xl:grid-cols-[minmax(16rem,1fr)_auto]">
           <SkeletonBar className="h-11 w-full" />
           <div className="grid min-w-0 gap-2 sm:flex sm:flex-wrap">
             <SkeletonBar className="h-[70px] w-full sm:h-11 sm:w-64" />
             <SkeletonBar className="h-[70px] w-full sm:h-11 sm:w-72" />
           </div>
-          <SkeletonBar className="h-11 w-full 2xl:w-28" />
         </div>
         <div className="grid min-w-0 gap-2"><SkeletonBar className="h-[18px] w-20" /><SkeletonBar className="h-11 w-full" /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <SkeletonBar key={index} className="h-[76px] w-full rounded-control" />)}</div>

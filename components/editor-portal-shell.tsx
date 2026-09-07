@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { AdminToastProvider } from '@/components/admin-toast-provider'
+import { WorkspaceRefreshProvider, WorkspaceRefreshTarget } from '@/components/workspace-refresh'
 import {
   DashboardSidebarNavigation,
   DashboardSidebarProfile,
@@ -168,6 +169,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
   return (
     <EditorSessionContext.Provider value={session}>
       <AdminToastProvider>
+        <WorkspaceRefreshProvider>
         <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">
           <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">
             <div className="shrink-0 border-b border-white/[0.08] p-6">
@@ -204,7 +206,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
 
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setMenu((value) => !value)}
@@ -213,11 +215,11 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
                 >
                   {menu ? <X className="size-5" /> : <Menu className="size-5" />}
                 </button>
-                <div>
-                  <p className="text-xs font-semibold text-white/55">{pageTitle}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-white/55">{pageTitle}</p>
                 </div>
               </div>
-              <p className="hidden text-caption text-white/35 sm:block">{session.workspace.name}</p>
+              <div className="flex shrink-0 items-center gap-3"><WorkspaceRefreshTarget /><p className="hidden text-caption text-white/35 sm:block">{session.workspace.name}</p></div>
             </header>
 
             {menu ? (
@@ -236,6 +238,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
             </main>
           </div>
         </div>
+        </WorkspaceRefreshProvider>
       </AdminToastProvider>
     </EditorSessionContext.Provider>
   )

@@ -1,5 +1,7 @@
 'use client'
 
+import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -7,7 +9,6 @@ import {
   FileCheck2,
   FolderOpen,
   FolderUp,
-  RefreshCw,
   UploadCloud,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
@@ -376,14 +377,7 @@ export default function EditorUploadPhotos({
               {failedReports ? ` · ${failedReports} failed client${failedReports === 1 ? '' : 's'} in recent runs` : ''}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadReports()}
-            disabled={reportsLoading}
-            className={`${adminBtnGhost} inline-flex items-center gap-2 px-3 py-2 disabled:opacity-40`}
-          >
-            <RefreshCw className={`size-3.5 ${reportsLoading ? 'animate-spin' : ''}`} />Refresh
-          </button>
+          <WorkspaceRefreshButton onRefresh={() => void loadReports()} refreshing={reportsLoading} />
         </div>
         {reportsLoading ? (
           <EditorPageSkeleton variant="queue" />

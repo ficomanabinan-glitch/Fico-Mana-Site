@@ -43,7 +43,7 @@ test('queue sections have real grid gaps and rounded metrics without changing fi
   assert.match(queue, /rounded-control border border-white\/\[0\.07\] bg-black\/10 p-3/)
   assert.match(queue, /rounded-control border border-\[#C4CEFF\]\/15/)
   assert.match(queue, /flex min-w-0 flex-wrap items-center/)
-  assert.match(queue, /2xl:grid-cols-\[minmax\(16rem,1fr\)_auto_auto\]/)
+  assert.match(queue, /2xl:grid-cols-\[minmax\(16rem,1fr\)_auto\]/)
   assert.match(source('components/editor-page-skeleton.tsx'), /grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 xl:grid-cols-7/)
 })
 

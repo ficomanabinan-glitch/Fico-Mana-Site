@@ -1,8 +1,8 @@
 'use client'
 
-import { RefreshCw } from 'lucide-react'
-import { adminBtnGhost, adminSubtitle, adminTitle } from '@/lib/admin-ui'
+import { adminSubtitle, adminTitle } from '@/lib/admin-ui'
 import { useAdminAutoSync } from '@/components/admin-auto-sync'
+import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 
 type Props = {
   title: string
@@ -27,17 +27,9 @@ export default function AdminPageHeader({ title, subtitle, onRefresh, refreshing
         <h1 className={adminTitle}>{title}</h1>
         {subtitle && <p className={adminSubtitle}>{subtitle}</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 empty:hidden">
         {onRefresh && (
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={refreshing || syncing}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 ${adminBtnGhost}`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing || syncing ? 'animate-spin' : ''}`} />
-            {refreshing || syncing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <WorkspaceRefreshButton onRefresh={handleRefresh} refreshing={refreshing || syncing} />
         )}
         {children}
       </div>

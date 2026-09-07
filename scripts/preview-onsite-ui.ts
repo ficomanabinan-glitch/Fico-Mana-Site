@@ -31,6 +31,7 @@ const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initial
   '@/lib/raw-upload-client': {}, '@/lib/raw-upload-queue': {},
 })
 const { default: EditorQueue } = loadTs<{ default: React.ComponentType<{basePath:string}> }>('components/editor-queue.tsx', {
+  '@/components/workspace-refresh': { WorkspaceRefreshButton: () => createElement('button', {className:'rounded-control border border-white/10 px-3 py-2'}, 'Refresh') },
   react: { ...React, useState: (value:unknown) => [typeof value === 'function' ? value() : value, () => {}], useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn },
   'next/link': (props:React.AnchorHTMLAttributes<HTMLAnchorElement>) => createElement('a',props),
   '@/components/admin-toast-provider': {useAdminToast:()=>({})}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': ui,

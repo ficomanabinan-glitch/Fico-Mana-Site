@@ -171,7 +171,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
       <AdminPageHeader
         title="Filtering Dashboard"
         subtitle="Review photo selections and check editing progress."
-        onRefresh={() => fetchData()}
+        onRefresh={activeTab === 'editor' || activeTab === 'queue' ? undefined : () => fetchData()}
         refreshing={refreshing}
       >
         <Link

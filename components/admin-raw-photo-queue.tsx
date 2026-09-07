@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getBookings, dismissBookingNotifications, Booking } from '@/lib/data-store'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AdminPageHeader from '@/components/admin-page-header'
+import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import {
   Check,
@@ -225,14 +226,7 @@ export default function AdminRawPhotoQueue({
           <p className="text-xs text-white/50">
             Review client 5-pick folders — approve for editing or reject with feedback.
           </p>
-          <button
-            type="button"
-            onClick={() => fetchQueue()}
-            disabled={refreshing}
-            className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline disabled:opacity-50"
-          >
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <WorkspaceRefreshButton onRefresh={() => fetchQueue()} refreshing={refreshing} />
         </div>
       )}
 
