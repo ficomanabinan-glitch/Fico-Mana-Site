@@ -46,13 +46,13 @@ test('mouse wheel zooms around the cursor and normalizes line, page and trackpad
   assert.equal(zoomPhotoWithWheel(FIT_PHOTO, 0, 0, cursor, bounds).scale, 1)
 })
 
-test('preview handlers support two-finger pinch, one-finger drag, cancellation and existing buttons', () => {
+for (const kind of ['gallery', 'deliverable']) test(`${kind} preview handlers support two-finger pinch, one-finger drag, cancellation and existing buttons`, () => {
   const hooks = componentHarness()
   const loaded = loadTs<typeof import('../components/portal-photo-preview.tsx')>('components/portal-photo-preview.tsx', {
     react: { ...hooks.react, useCallback: <T,>(fn: T) => fn }, '@/lib/photo-pan-zoom': gestures,
   })
   let closed = 0
-  const file = { id: 'synthetic', fileName: 'sample.jpg', mimeType: 'image/jpeg', previewUrl: '/api/editor-workflow/portal/private/file/synthetic?kind=gallery' }
+  const file = { id: 'synthetic', fileName: 'sample.jpg', mimeType: 'image/jpeg', previewUrl: `/api/editor-workflow/portal/private/file/synthetic?kind=${kind}` }
   const render = () => hooks.render(() => loaded.PortalPhotoPreview({ file, onClose: () => { closed++ } }))
   let tree = render()
   let viewport = elements(tree, el => el.props.role === 'region')[0]

@@ -5,8 +5,8 @@ import { X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
 import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, zoomPhotoWithWheel, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
 
-export function PhotoSelectButton({ file, locked, onSelect, onPreview, children }: {
-  file: ClientGalleryFile; locked: boolean; onSelect: () => void; onPreview: (file: ClientGalleryFile) => void; children: ReactNode
+export function PhotoSelectButton({ file, locked, onSelect, onPreview, children, className = '' }: {
+  file: ClientGalleryFile; locked: boolean; onSelect: () => void; onPreview: (file: ClientGalleryFile) => void; children: ReactNode; className?: string
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const press = useRef<{ id: number; x: number; y: number } | null>(null)
@@ -14,7 +14,7 @@ export function PhotoSelectButton({ file, locked, onSelect, onPreview, children 
   const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; press.current = null }
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
   return <button type="button" aria-label={`${locked ? 'Preview' : 'Select'} ${file.fileName}. Hold to preview.`}
-    className="relative block w-full cursor-pointer select-none text-left" style={{ WebkitTouchCallout: 'none' }}
+    className={`relative block w-full cursor-pointer select-none text-left ${className}`} style={{ WebkitTouchCallout: 'none' }}
     onPointerDown={event => {
       if (!event.isPrimary || event.button !== 0) return
       clear(); suppressClick.current = false

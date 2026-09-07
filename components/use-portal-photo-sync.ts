@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef } from 'react'
 
-type Revision = { generation: number; reopenedAt: string | null; galleryCount: number }
+type Revision = { generation: number; reopenedAt: string | null; galleryCount: number; expiresAt?: string | null; firstDownloadAt?: string | null }
 export function usePortalPhotoSync(publicId: string, revision: Revision | null, onReset: () => void, onChange: () => Promise<void>) {
   const latest = useRef({ revision, onReset, onChange })
   latest.current = { revision, onReset, onChange }
@@ -19,7 +19,8 @@ export function usePortalPhotoSync(publicId: string, revision: Revision | null, 
         if (disposed) return
         if (next.resetting) { wasResetting = true; latest.current.onReset(); return }
         const old = latest.current.revision
-        if (wasResetting || old && (old.generation !== next.generation || old.reopenedAt !== next.reopenedAt || old.galleryCount !== next.galleryCount)) {
+        if (wasResetting || old && (old.generation !== next.generation || old.reopenedAt !== next.reopenedAt || old.galleryCount !== next.galleryCount ||
+          (old.expiresAt || null) !== (next.expiresAt || null) || (old.firstDownloadAt || null) !== (next.firstDownloadAt || null))) {
           await latest.current.onChange()
           wasResetting = false
         }

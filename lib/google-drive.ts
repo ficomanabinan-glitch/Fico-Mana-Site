@@ -632,7 +632,8 @@ export async function ensureShootHierarchy(input: {
     ? await renameFolder(legacySelected.id, selectedName)
     : await createFolder(client.id, selectedName))
   const edited = await findOrCreateFolder(client.id, 'EDITED PHOTOS')
-  const deliverables = await findOrCreateFolder(client.id, 'DELIVERABLES')
+  // Edited uploads are the portal's final files. Do not create a second destination.
+  // Keep the response field for existing callers; legacy folders are left untouched.
 
   return {
     root,
@@ -642,7 +643,7 @@ export async function ensureShootHierarchy(input: {
     raw,
     selected,
     edited,
-    deliverables,
+    deliverables: null as DriveFolder | null,
     clientUrl: client.webViewLink || `https://drive.google.com/drive/folders/${client.id}`,
   }
 }

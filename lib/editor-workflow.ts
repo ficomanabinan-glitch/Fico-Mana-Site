@@ -14,7 +14,6 @@ import {
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
 import { portalUrl } from '@/lib/client-portal'
 import { hasPortalExpired } from '@/lib/portal-expiry'
-import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 import { sendEditedPhotosEmail } from '@/lib/email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
@@ -899,7 +898,7 @@ export async function reconcileBookingFolders(
         rawFolderId: prepared.hierarchy.raw.id,
         selectedFolderId: prepared.hierarchy.selected.id,
         editedFolderId: prepared.hierarchy.edited.id,
-        deliverablesFolderId: prepared.hierarchy.deliverables.id,
+        deliverablesFolderId: prepared.hierarchy.deliverables?.id || null,
       },
     },
   )
@@ -911,7 +910,7 @@ export async function reconcileBookingFolders(
     rawFolderId: prepared.hierarchy.raw.id,
     selectedFolderId: prepared.hierarchy.selected.id,
     editedFolderId: prepared.hierarchy.edited.id,
-    deliverablesFolderId: prepared.hierarchy.deliverables.id,
+    deliverablesFolderId: prepared.hierarchy.deliverables?.id || null,
   }
 }
 
@@ -1061,7 +1060,16 @@ export async function getPortalPhotoRevision(publicId: string) {
     .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id).order('created_at', { ascending: false }).limit(1)
   if (gallery.error) throw gallery.error
   return { generation: Number(photoState?.raw_upload_generation || 0), resetting: Boolean(photoState?.raw_reset_id), reopenedAt: photoState?.reopened_at || null,
-    galleryCount: gallery.count || 0, lastUploadAt: gallery.data?.[0]?.created_at || null }
+    galleryCount: gallery.count || 0, lastUploadAt: gallery.data?.[0]?.created_at || null,
+    expiresAt: portal.expires_at || null, firstDownloadAt: portal.first_download_at || null }
+}
+
+export async function recordPortalFirstDownload(publicId: string) {
+  const { admin, portal } = await portalRecord(publicId)
+  const { error } = await admin.rpc('record_portal_first_download', {
+    p_workspace: portal.workspace_id, p_public_id: portal.public_id,
+  })
+  if (error) throw new PortalSelectionError('The download expiry could not be saved. Try: download again. If it continues, ask the studio to check the portal expiry setup.', 'PORTAL_DOWNLOAD_UPDATE_FAILED', 503)
 }
 
 export async function getPortalData(publicId: string, offset = 0, limit = 48) {
@@ -1069,7 +1077,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
   const pageSize = Math.min(MAX_PORTAL_PAGE_SIZE, Math.max(1, limit))
-  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult] =
+  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult, expirySettings] =
     await Promise.all([
       admin.from('bookings').select('*').eq('workspace_id', workspaceId).eq('id', bookingId).single(),
       admin.from('photo_selections').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
@@ -1096,6 +1104,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .eq('status', 'active')
         .order('display_order', { ascending: true })
         .order('name', { ascending: true }),
+      admin.from('google_drive_settings').select('portal_expiry_days').eq('workspace_id', workspaceId).eq('id', 1).maybeSingle(),
     ])
   if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
   const warnings: string[] = []
@@ -1107,6 +1116,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     ['payments', paymentsResult],
     ['project resources', resourcesResult],
     ['add-ons', catalogResult],
+    ['portal expiry', expirySettings],
   ] as const) {
     if (result.error) {
       warnings.push(label)
@@ -1161,6 +1171,11 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     },
     portalId: String(portal.public_id),
     shareUrl: portalUrl(publicId),
+    expiry: expirySettings.error && !portal.download_expiry_days ? null : {
+      days: Number(portal.download_expiry_days || expirySettings.data?.portal_expiry_days || 30),
+      firstDownloadAt: portal.first_download_at || null,
+      expiresAt: portal.expires_at || null,
+    },
     warnings: [...new Set(warnings)],
     selection: selectionResult.data
       ? {
@@ -2350,7 +2365,6 @@ export async function finalizeClientUpload(
       .update({ edited_photo_link: url, edited_photo_delivered_at: timestamp })
       .eq('id', bookingId),
   ])
-  await setPortalExpiryFromDelivery(bookingId, timestamp)
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'DELIVERY_COMPLETED', {
     bookingId,
     batchId: batch.id,

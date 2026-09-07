@@ -34,6 +34,7 @@ function fixture() {
   let limited = false
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     '@/lib/onsite-photo-reset': {},
+    "@/lib/portal-download-stream": {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {},
     '@/lib/editor-workflow': workflow, '@/lib/google-drive': {},

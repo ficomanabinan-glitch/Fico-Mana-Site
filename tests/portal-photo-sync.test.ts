@@ -25,3 +25,25 @@ test('portal quietly retains healthy/offline content, blocks reset galleries and
   pending=true;poll();const count=reads;poll();poll();assert.equal(reads,count,'Only one request at a time');release();await tick()
   h.unmount();assert.equal(listeners.size,0)
 })
+
+test('first download on another device quietly refreshes the expiry notice without resetting choices',async t=>{
+  const original={fetch:globalThis.fetch,window:globalThis.window,document:globalThis.document,setInterval:globalThis.setInterval,clearInterval:globalThis.clearInterval}
+  t.after(()=>Object.assign(globalThis,original))
+  const listeners=new Map<string,()=>void>()
+  const target={addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)}
+  Object.assign(globalThis,{window:target,document:{...target,visibilityState:'visible'}})
+  let poll:()=>void=()=>{},changes=0,resets=0
+  let current={generation:0,reopenedAt:null,galleryCount:2,expiresAt:null as string|null,firstDownloadAt:null as string|null}
+  let next={...current,resetting:false}
+  globalThis.setInterval=((callback:()=>void)=>{poll=callback;return 1}) as never
+  globalThis.clearInterval=(()=>{}) as never
+  globalThis.fetch=async()=>Response.json(next)
+  const h=componentHarness()
+  const {usePortalPhotoSync}=loadTs<typeof import('../components/use-portal-photo-sync.ts')>('components/use-portal-photo-sync.ts',{react:h.react})
+  const render=()=>h.render(()=>usePortalPhotoSync('private',current,()=>{resets++},async()=>{changes++;current={...next}}))
+  render();await tick();assert.equal(changes,0)
+  next={...next,firstDownloadAt:'2026-09-08T00:00:00Z',expiresAt:'2026-10-08T00:00:00Z'}
+  poll();await tick();assert.equal(changes,1);assert.equal(resets,0)
+  render();poll();await tick();assert.equal(changes,1)
+  h.unmount();assert.equal(listeners.size,0)
+})

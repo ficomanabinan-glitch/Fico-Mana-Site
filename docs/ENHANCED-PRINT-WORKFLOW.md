@@ -4,7 +4,7 @@
 
 Client submission continues to copy selected originals into the selected-photo folder for the editor. It no longer copies RAW images into free-print category folders. It creates an empty `PRINTS` folder and writes `manifest.json` beside that folder, not inside it.
 
-The selected folder uses `SELECTED N PHOTOS`, where N is the current package selection limit. A legacy `N SELECTED PHOTOS` folder is renamed in place when provisioning next runs, preserving its Drive ID. Existing uploaded originals and existing category folders are not deleted by this change. The RAW, EDITED PHOTOS and DELIVERABLES destinations remain unchanged; moving RAW into the client root is a separate, unexecuted migration requiring a confirmed scope.
+The selected folder uses `SELECTED N PHOTOS`, where N is the current package selection limit. A legacy `N SELECTED PHOTOS` folder is renamed in place when provisioning next runs, preserving its Drive ID. Existing uploaded originals and existing category folders are not deleted by this change. RAW and EDITED PHOTOS remain the upload destinations. New client setups no longer create DELIVERABLES: the portal uses the registered files in EDITED PHOTOS directly. Existing DELIVERABLES folders are preserved for recovery/cleanup. Moving RAW into the client root is a separate, unexecuted migration requiring a confirmed scope.
 
 Example after a successful editor upload:
 
@@ -24,7 +24,6 @@ Client folder/
       WALLET SIZE 3 - 0923.JPG
       WALLET SIZE 4 - 0923.JPG
   EDITED PHOTOS/              (verified enhanced uploads, unchanged)
-  DELIVERABLES/               (existing destination, unchanged)
 ```
 
 The filename spelling `ALAMBAY BARONG` follows the requested file naming; the existing portal category label and enum remain unchanged. The current portal chooses one photo for the wallet category and quantity four. Four different wallet choices are not silently inferred from filename examples; changing that selection behavior requires a separate confirmed change to its UI and persistence.

@@ -27,6 +27,7 @@ import {
   prepareBatchDownload,
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
+  recordPortalFirstDownload,
   reconcileBookingFolders,
   recordMatchReviews,
   reopenPhotoSelection,
@@ -39,6 +40,7 @@ import {
   type EditingJobStatus,
 } from '@/lib/editor-workflow'
 import { openDriveFile } from '@/lib/google-drive'
+import { trackCompletedPortalDownload } from '@/lib/portal-download-stream'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/lib/security/file-validation'
 import {
@@ -101,20 +103,29 @@ function zipResponse(
   entries: ZipEntry[],
   fileName: string,
   onComplete?: () => Promise<void>,
+  beforeDownloadEnd?: () => Promise<void>,
 ) {
   const output = new PassThrough()
   const archive = archiver('zip', { zlib: { level: 0 } })
+  const sources: Readable[] = []
   archive.on('error', (error) => output.destroy(error))
   archive.pipe(output)
   for (const entry of entries) {
-    if (entry.driveFileId) archive.append(lazyDriveStream(entry.driveFileId), { name: entry.name })
+    if (entry.driveFileId) {
+      const source = lazyDriveStream(entry.driveFileId)
+      source.once('error', (error) => output.destroy(error))
+      sources.push(source)
+      archive.append(source, { name: entry.name })
+    }
     else archive.append(entry.data || Buffer.alloc(0), { name: entry.name })
   }
-  void archive.finalize()
+  output.once('close', () => { if (!output.readableEnded) { archive.abort(); sources.forEach(source => source.destroy()) } })
+  void archive.finalize().catch((error) => output.destroy(error))
   if (onComplete) {
     output.once('end', () => void onComplete().catch((error) => console.error('ZIP completion update failed:', error)))
   }
-  return new Response(Readable.toWeb(output) as ReadableStream, {
+  const body = Readable.toWeb(output) as ReadableStream
+  return new Response(beforeDownloadEnd ? trackCompletedPortalDownload(body, beforeDownloadEnd) : body, {
     headers: {
       'content-type': 'application/zip',
       'content-disposition': `attachment; filename="${safeDownloadName(fileName)}"`,
@@ -228,7 +239,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
   if (path[2] === 'deliverables.zip' && method === 'GET') {
     const files = await preparePortalDeliverables(publicId)
     if (!files.length) return json({ error: 'No delivered photos are available yet.' }, 404)
-    return zipResponse(files, `${publicId}-FICO-MANA-PHOTOS.zip`)
+    return zipResponse(files, `${publicId}-FICO-MANA-PHOTOS.zip`, undefined, () => recordPortalFirstDownload(publicId))
   }
   return json({ error: 'Unknown client portal workflow endpoint.' }, 404)
 }

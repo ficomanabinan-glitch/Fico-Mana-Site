@@ -7,7 +7,6 @@ import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { saveBookingToDb, addNotificationToDb } from '@/lib/supabase-store'
 import { sendEditedPhotosEmail } from '@/lib/email'
-import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
 type Body = {
@@ -102,7 +101,6 @@ export async function POST(
       }
 
       await addNotificationToDb(admin, booking.id, 'EDITED_PHOTOS_READY', notificationMessage)
-      await setPortalExpiryFromDelivery(booking.id, deliveredAt)
     } else {
       saved = await upsertBooking(updatedBooking)
       await addServerNotification(booking.id, 'EDITED_PHOTOS_READY', notificationMessage)

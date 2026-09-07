@@ -66,6 +66,8 @@ test('root change builds a new hierarchy without reading/moving old client folde
   assert.equal(f.calls.some(call => call.id === 'missing-old-client' || call.method === 'PATCH'), false)
   assert.deepEqual(first.client.parents, [first.day.id])
   assert.equal(first.client.appProperties?.bookingId, 'FM-TEST')
+  assert.equal(first.deliverables, null)
+  assert.equal(f.folders.some(folder => folder.name === 'DELIVERABLES'), false)
 })
 
 test('partial child creation recovers by booking identity without creating another client folder', async t => {
@@ -133,7 +135,7 @@ test('folder mappings publish before retiring stale destinations, are repeat-saf
   assert.equal(db.tables.drive_folders.find(row => row.id === 'other-client')?.booking_id, 'FM-OTHER')
   assert.equal(db.tables.editing_batches[0].drive_day_folder_id, 'new-day')
   const links = db.tables.drive_folders.filter(row => row.workspace_id === 'studio' && row.booking_id === 'FM-TEST')
-  assert.deepEqual(links.map(row => row.folder_type), ['CLIENT', 'RAW', 'SELECTED', 'EDITED', 'DELIVERABLES'])
+  assert.deepEqual(links.map(row => row.folder_type), ['CLIENT', 'RAW', 'SELECTED', 'EDITED'])
   const writes = db.operations.filter(op => op.table === 'drive_folders' && op.action !== 'select')
   assert.deepEqual(writes.map(op => op.action), ['upsert', 'update'])
   const count = db.tables.drive_folders.length
@@ -150,6 +152,14 @@ test('mapping read/save failures and concurrent root changes do not retire exist
   const db = mappingDb(); db.tables.google_drive_settings[0].root_folder_id = 'newer-root'
   await assert.rejects(saveShootFolderMappings(db as never, 'studio', 'FM-TEST', hierarchy), /root changed/)
   assert.equal(db.operations.some(op => op.action !== 'select'), false)
+})
+
+test('same-client legacy Deliverables folder mappings remain available for recovery without creating a new one', async () => {
+  const db = mappingDb()
+  db.tables.drive_folders.push({id:'legacy-delivery',workspace_id:'studio',booking_id:'FM-TEST',folder_type:'DELIVERABLES',drive_folder_id:'legacy-final-files',parent_drive_folder_id:'new-client'})
+  await saveShootFolderMappings(db as never,'studio','FM-TEST',hierarchy)
+  assert.equal(db.tables.drive_folders.find(row=>row.id==='legacy-delivery')?.booking_id,'FM-TEST')
+  assert.equal(db.tables.drive_folders.filter(row=>row.folder_type==='DELIVERABLES').length,1)
 })
 
 test('provisioning a new client preserves the shared day batch link', async () => {

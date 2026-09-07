@@ -331,7 +331,7 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const now = new Date()
   const { data: portal, error: portalError } = await admin
     .from('client_portals')
-    .select('id,status,expires_at')
+    .select('id,status,expires_at,first_download_at')
     .eq('booking_id', bookingId)
     .maybeSingle()
   if (portalError) throw new Error(portalError.message)
@@ -346,7 +346,9 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
     const days = Math.max(1, Number(settings?.portal_expiry_days || 30))
     const renewedUntil = new Date(now)
     renewedUntil.setUTCDate(renewedUntil.getUTCDate() + days)
-    patch.expires_at = renewedUntil.toISOString()
+    // An explicit renewal after downloading grants a new admin-controlled period.
+    // A client who has never downloaded still waits for their first download.
+    patch.expires_at = portal.first_download_at ? renewedUntil.toISOString() : null
   }
   const { data, error } = await admin
     .from('client_portals')
@@ -355,20 +357,6 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
     .select('id')
   if (error) throw new Error(error.message)
   if (data?.length) await audit(admin, bookingId, 'portal_enabled', actor, {
-    metadata: { expiresAt: typeof patch.expires_at === 'string' ? patch.expires_at : portal.expires_at },
+    metadata: { expiresAt: 'expires_at' in patch ? patch.expires_at : portal.expires_at },
   })
-}
-
-export async function setPortalExpiryFromDelivery(bookingId: string, deliveredAt: string) {
-  const admin = getSupabaseAdmin()
-  if (!admin) return
-  const { data: settings } = await admin.from('google_drive_settings').select('portal_expiry_days').eq('id', 1).maybeSingle()
-  const days = Math.max(1, Number(settings?.portal_expiry_days || 30))
-  const expires = new Date(deliveredAt)
-  expires.setUTCDate(expires.getUTCDate() + days)
-  await admin
-    .from('client_portals')
-    .update({ expires_at: expires.toISOString(), updated_at: new Date().toISOString() })
-    .eq('booking_id', bookingId)
-  await audit(admin, bookingId, 'portal_expiration_scheduled', { type: 'system' }, { metadata: { expiresAt: expires.toISOString(), days } })
 }

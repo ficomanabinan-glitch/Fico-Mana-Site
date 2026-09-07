@@ -92,6 +92,7 @@ test('Drive access route shares the exact IP-only PIN policy, blocks origins/lim
   class PortalSelectionError extends Error {}
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     '@/lib/onsite-photo-reset': {},
+    "@/lib/portal-download-stream": {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/editor-workflow': { PortalSelectionError, submitPhotoSelection: async () => ({ selection: { status: 'SUBMITTED' } }), getPortalDrivePhotos: async () => { reads++; if (driveFails) throw new Error('Private provider failure'); return { url: driveUrl } } },
     '@/lib/package-workflow': {}, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},

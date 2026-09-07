@@ -6,7 +6,7 @@ type Hierarchy = Awaited<ReturnType<typeof ensureShootHierarchy>>
 export async function saveShootFolderMappings(admin: SupabaseClient, workspaceId: string, bookingId: string, hierarchy: Hierarchy, batchId?: string) {
   if (!workspaceId || !bookingId) throw new Error('The booking workspace is missing. Try: refresh and retry provisioning.')
   const { data: current, error: readError } = await admin.from('drive_folders')
-    .select('id,drive_folder_id,folder_type,batch_id').eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+    .select('id,drive_folder_id,folder_type,batch_id,parent_drive_folder_id').eq('workspace_id', workspaceId).eq('booking_id', bookingId)
   if (readError) throw new Error('The saved folder links could not be loaded. Try: retry provisioning.')
   let resolvedBatchId = batchId || current?.find(row => row.batch_id)?.batch_id || null
   if (!resolvedBatchId) {
@@ -31,7 +31,6 @@ export async function saveShootFolderMappings(admin: SupabaseClient, workspaceId
     { folder_type: 'RAW', folder: hierarchy.raw, booking_id: bookingId, batch_id: resolvedBatchId },
     { folder_type: 'SELECTED', folder: hierarchy.selected, booking_id: bookingId, batch_id: resolvedBatchId },
     { folder_type: 'EDITED', folder: hierarchy.edited, booking_id: bookingId, batch_id: resolvedBatchId },
-    { folder_type: 'DELIVERABLES', folder: hierarchy.deliverables, booking_id: bookingId, batch_id: resolvedBatchId },
   ]
   const { error } = await admin.from('drive_folders').upsert(records.map(record => ({
     workspace_id: workspaceId, booking_id: record.booking_id, batch_id: record.batch_id, folder_type: record.folder_type,
@@ -40,7 +39,9 @@ export async function saveShootFolderMappings(admin: SupabaseClient, workspaceId
   })), { onConflict: 'workspace_id,drive_folder_id' })
   if (error) throw new Error('The new folder links could not be saved. Try: retry provisioning; the folders will be reused.')
   const ids = new Set(records.map(record => record.folder.id))
-  const obsolete = (current || []).filter(row => !ids.has(String(row.drive_folder_id)))
+  const obsolete = (current || []).filter(row => !ids.has(String(row.drive_folder_id)) &&
+    // Preserve same-client legacy folders for recovery/cleanup without recreating them.
+    !(row.folder_type === 'DELIVERABLES' && row.parent_drive_folder_id === hierarchy.client.id))
   // Retain old index records for recovery but remove stale destinations from current-client reads.
   for (const row of obsolete) {
     const { error: retireError } = await admin.from('drive_folders')
