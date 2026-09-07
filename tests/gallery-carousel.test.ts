@@ -9,6 +9,8 @@ test('graduation carousel supports swipe and continuous automatic movement', asy
   ])
 
   assert.match(gallery, /gallery-swipe-carousel overflow-x-auto/)
+  assert.match(gallery, /aspect-\[4\/5\]/)
+  assert.match(gallery, /className="object-cover/)
   assert.match(gallery, /onPointerMove=\{handlePointerMove\}/)
   assert.match(gallery, /scrollPositionRef\.current \+ pixelsPerMillisecond \* elapsed/)
   assert.match(gallery, /const pixelsPerMillisecond = 72 \/ 1000/)
@@ -16,9 +18,6 @@ test('graduation carousel supports swipe and continuous automatic movement', asy
   assert.match(gallery, /window\.requestAnimationFrame\(advance\)/)
   assert.match(gallery, /scrollPositionRef\.current %=/)
   assert.match(gallery, /resumeAfterInteraction\(\)/)
-  assert.match(gallery, /autoplayPaused/)
-  assert.match(gallery, /Pause automatic gallery movement/)
-  assert.match(gallery, /Start automatic gallery movement/)
   assert.match(gallery, /useWebsiteMedia\(\)/)
   assert.match(gallery, /slot\.kind === 'image'/)
   assert.match(gallery, /aria-hidden=\{sequence === 1 \? true : undefined\}/)
@@ -26,6 +25,8 @@ test('graduation carousel supports swipe and continuous automatic movement', asy
   assert.doesNotMatch(gallery, /onMouseEnter=\{/)
   assert.doesNotMatch(gallery, /onFocusCapture=\{/)
   assert.doesNotMatch(gallery, /useReducedMotion/)
+  assert.doesNotMatch(gallery, /Pause automatic gallery movement/)
+  assert.doesNotMatch(gallery, /Start automatic gallery movement/)
   assert.doesNotMatch(gallery, /gallery-marquee-track/)
 
   assert.match(styles, /\.gallery-swipe-carousel \{/)

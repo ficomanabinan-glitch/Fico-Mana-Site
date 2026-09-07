@@ -61,6 +61,8 @@ test('admin media uploads are authorized, optimized, dynamic, resumable, and fin
   assert.match(page, /Maximum 10 Photos/)
   assert.match(page, /optimizeWebsiteGalleryImage/)
   assert.match(optimizer, /MAX_GALLERY_EDGE = 2560/)
+  assert.match(optimizer, /TARGET_ASPECT_RATIO = 4 \/ 5/)
+  assert.match(optimizer, /cropWidth/)
   assert.match(optimizer, /canvas\.toBlob/)
   assert.match(optimizer, /'image\/webp'/)
   assert.match(page, /Try:/)

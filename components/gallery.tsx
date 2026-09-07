@@ -3,14 +3,14 @@
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
-import { Pause, Play, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import SectionHeader from '@/components/section-header'
 import SectionShell from '@/components/section-shell'
 import { cn } from '@/lib/utils'
 import { useWebsiteMedia } from '@/lib/website-media-client'
 
-const IMAGE_WIDTH = 2040
-const IMAGE_HEIGHT = 2560
+const LIGHTBOX_IMAGE_WIDTH = 2040
+const LIGHTBOX_IMAGE_HEIGHT = 2560
 
 type GalleryItem = {
   id: string
@@ -35,17 +35,16 @@ function GalleryImage({
       type="button"
       onClick={() => onOpen(item)}
       tabIndex={isClone ? -1 : undefined}
-      className={`relative overflow-hidden rounded-2xl md:rounded-3xl group cursor-pointer text-left ${className}`}
+      className={`relative aspect-[4/5] overflow-hidden rounded-2xl md:rounded-3xl group cursor-pointer text-left ${className}`}
     >
-      <div className="overflow-hidden">
+      <div className="relative h-full overflow-hidden">
         <Image
           src={item.image}
           alt={item.alt}
-          width={IMAGE_WIDTH}
-          height={IMAGE_HEIGHT}
+          fill
           draggable={false}
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-          className="w-full h-auto block transition-transform duration-700 ease-out will-change-transform group-hover:scale-110"
+          className="object-cover transition-transform duration-700 ease-out will-change-transform group-hover:scale-110"
         />
       </div>
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-500 pointer-events-none" />
@@ -75,7 +74,6 @@ function GalleryCarousel({
     moved: boolean
   } | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [autoplayPaused, setAutoplayPaused] = useState(false)
 
   const pauseIndefinitely = () => {
     pauseUntilRef.current = Number.POSITIVE_INFINITY
@@ -142,7 +140,6 @@ function GalleryCarousel({
       const shouldAdvance = (
         scroller &&
         sequenceWidth > 0 &&
-        !autoplayPaused &&
         !document.hidden &&
         time >= pauseUntilRef.current
       )
@@ -166,7 +163,7 @@ function GalleryCarousel({
     return () => {
       window.cancelAnimationFrame(animationFrame)
     }
-  }, [autoplayPaused, items.length])
+  }, [items.length])
 
   return (
     <div
@@ -174,16 +171,6 @@ function GalleryCarousel({
     >
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 md:w-16 bg-gradient-to-r from-black via-black/80 to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 md:w-20 bg-gradient-to-l from-black via-black/80 to-transparent" />
-      <button
-        type="button"
-        onClick={() => setAutoplayPaused((current) => !current)}
-        className="absolute right-4 top-4 z-20 inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-black/65 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-white/70 backdrop-blur transition hover:border-white/35 hover:bg-black/80 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:right-6 md:right-8 lg:right-12"
-        aria-pressed={autoplayPaused}
-        aria-label={autoplayPaused ? 'Start automatic gallery movement' : 'Pause automatic gallery movement'}
-      >
-        {autoplayPaused ? <Play className="size-3" /> : <Pause className="size-3" />}
-        {autoplayPaused ? 'Play' : 'Pause'}
-      </button>
 
       <div
         ref={scrollerRef}
@@ -290,8 +277,8 @@ export default function Gallery() {
             <Image
               src={lightbox.image}
               alt={lightbox.alt}
-              width={IMAGE_WIDTH}
-              height={IMAGE_HEIGHT}
+              width={LIGHTBOX_IMAGE_WIDTH}
+              height={LIGHTBOX_IMAGE_HEIGHT}
               className="w-full h-auto max-h-[85vh] object-contain"
               sizes="90vw"
               priority

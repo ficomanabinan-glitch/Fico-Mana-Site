@@ -407,7 +407,7 @@ export default function WebsiteMediaPage() {
           <div>
             <p className="text-xs font-semibold text-white">Changes publish after each upload finishes</p>
             <p className="mt-1 text-[11px] leading-relaxed text-white/50">
-              Photos: JPG, PNG, WebP, or AVIF up to 40 MB. Photos are resized and converted to WebP before upload. Video: MP4 or WebM up to 250 MB.
+              Photos: JPG, PNG, WebP, or AVIF up to 40 MB. Photos are cropped to 4:5, resized, and converted to WebP before upload. Video: MP4 or WebM up to 250 MB.
             </p>
           </div>
         </div>

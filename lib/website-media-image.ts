@@ -1,5 +1,6 @@
 const MAX_GALLERY_EDGE = 2560
 const WEBP_QUALITY = 0.84
+const TARGET_ASPECT_RATIO = 4 / 5
 
 type DecodedImage = {
   source: CanvasImageSource
@@ -49,9 +50,18 @@ export async function optimizeWebsiteGalleryImage(file: File): Promise<File> {
   const decoded = await decodeImage(file)
   try {
     if (!decoded.width || !decoded.height) throw new Error('The selected image has invalid dimensions.')
-    const scale = Math.min(1, MAX_GALLERY_EDGE / Math.max(decoded.width, decoded.height))
-    const width = Math.max(1, Math.round(decoded.width * scale))
-    const height = Math.max(1, Math.round(decoded.height * scale))
+    const sourceAspectRatio = decoded.width / decoded.height
+    const cropWidth = sourceAspectRatio > TARGET_ASPECT_RATIO
+      ? decoded.height * TARGET_ASPECT_RATIO
+      : decoded.width
+    const cropHeight = sourceAspectRatio > TARGET_ASPECT_RATIO
+      ? decoded.height
+      : decoded.width / TARGET_ASPECT_RATIO
+    const cropX = (decoded.width - cropWidth) / 2
+    const cropY = (decoded.height - cropHeight) / 2
+    const scale = Math.min(1, MAX_GALLERY_EDGE / Math.max(cropWidth, cropHeight))
+    const width = Math.max(1, Math.round(cropWidth * scale))
+    const height = Math.max(1, Math.round(width / TARGET_ASPECT_RATIO))
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
@@ -59,7 +69,7 @@ export async function optimizeWebsiteGalleryImage(file: File): Promise<File> {
     if (!context) throw new Error('Image optimization is unavailable in this browser.')
     context.imageSmoothingEnabled = true
     context.imageSmoothingQuality = 'high'
-    context.drawImage(decoded.source, 0, 0, width, height)
+    context.drawImage(decoded.source, cropX, cropY, cropWidth, cropHeight, 0, 0, width, height)
 
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
