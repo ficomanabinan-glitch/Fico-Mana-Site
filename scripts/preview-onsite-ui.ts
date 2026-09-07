@@ -30,13 +30,24 @@ const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initial
   '@/components/admin-toast-provider': {useAdminToast:()=>({})}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': ui,
   '@/lib/raw-upload-client': {}, '@/lib/raw-upload-queue': {},
 })
+const { default: EditorQueue } = loadTs<{ default: React.ComponentType<{basePath:string}> }>('components/editor-queue.tsx', {
+  react: { ...React, useState: (value:unknown) => [typeof value === 'function' ? value() : value, () => {}], useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn },
+  'next/link': (props:React.AnchorHTMLAttributes<HTMLAnchorElement>) => createElement('a',props),
+  '@/components/admin-toast-provider': {useAdminToast:()=>({})}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': ui,
+  '@/lib/editor-read-cache': {
+    getRememberedEditorQueueUi: () => ({groupMode:'day',dateSortOrder:'asc',filter:'ALL',search:'',packageFilter:'ALL'}),
+    getCachedEditorBatches: () => [{id:'FM-BATCH-2026-09-08-MAIN',shootDate:'2026-09-08',totalClients:1,totalSelectedPhotos:0,driveDayFolderUrl:'#',
+      clients:[{clientName:'Sample Client',bookingId:'FM-EXAMPLE',clientId:'example',packageName:'MANA PACKAGE'}],
+      counts:{waitingForSelection:1,readyForEditing:0,downloaded:0,editing:0,readyToUpload:0,uploading:0,delivered:0,failed:0}}],
+  },
+})
 createServer((request,response)=>{
   const font = request.url?.startsWith('/media/') ? request.url.slice(7) : ''
   if(fontFiles.has(font)) { response.writeHead(200, {'Content-Type':'font/woff2'}); response.end(readFileSync(resolve('.next/static/media',font))); return }
   if(request.url==='/styles.css') { response.writeHead(200, {'Content-Type':'text/css','Cache-Control':'no-store'}); response.end(fontCss+'\n'+styles.css); return }
-  if(request.url!=='/') { response.writeHead(404); response.end(); return }
+  if(request.url!=='/' && request.url!=='/queue') { response.writeHead(404); response.end(); return }
   stateIndex=0
-  const html=renderToStaticMarkup(createElement(OnsiteUpload,{initialDate:'2026-09-08'}))
+  const html=renderToStaticMarkup(request.url==='/queue' ? createElement(EditorQueue,{basePath:'/editor'}) : createElement(OnsiteUpload,{initialDate:'2026-09-08'}))
   response.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'})
   response.end(`<!doctype html><html class="dark" style="--font-geist-sans:Geist;--font-geist-mono:'Geist Mono';--font-cormorant:Georgia"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Onsite mobile spacing — synthetic preview</title><link rel="stylesheet" href="/styles.css"></head><body class="admin-console font-sans antialiased"><main class="w-full min-w-0 p-5 md:p-8">${html}</main></body></html>`)
 }).listen(4282,'127.0.0.1',()=>console.log('Read-only onsite UI fixture: http://127.0.0.1:4282'))

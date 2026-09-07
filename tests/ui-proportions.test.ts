@@ -4,6 +4,27 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
+test('queue sections have real grid gaps and rounded metrics without changing filter behavior', () => {
+  const queue = source('components/editor-queue.tsx')
+  assert.match(queue, /adminPanel\} grid min-w-0 gap-4 p-4/)
+  assert.match(queue, /<label className="grid min-w-0 gap-2">/)
+  assert.match(queue, /rounded-control border border-white\/\[0\.07\] bg-black\/10 p-3/)
+  assert.match(queue, /rounded-control border border-\[#C4CEFF\]\/15/)
+  assert.match(queue, /flex min-w-0 flex-wrap items-center/)
+  assert.match(queue, /2xl:grid-cols-\[minmax\(16rem,1fr\)_auto_auto\]/)
+  assert.match(source('components/editor-page-skeleton.tsx'), /grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 xl:grid-cols-7/)
+})
+
+test('booking panels and quick actions share the established corner tokens', () => {
+  const bookings = source('app/admin/bookings/page.tsx')
+  assert.match(bookings, /rounded-card border border-white\/10 bg-white\/\[0\.02\] overflow-x-auto/)
+  assert.match(bookings, /rounded-card border border-white\/10 p-4 space-y-3/)
+  for (const color of ['bg-amber-600', 'bg-primary', 'bg-green-600', 'bg-white/10', 'bg-red-600', 'bg-red-950/80']) {
+    assert.ok(bookings.includes(`className="rounded-control ${color} hover:`), color)
+  }
+  assert.equal((source('components/admin-receipt-actions.tsx').match(/rounded-control/g) || []).length, 2)
+})
+
 test('shared typography is rounded and responsive without a forced phi multiplier', () => {
   const css = source('app/globals.css')
   for (const [name, value] of Object.entries({caption:'0.75rem',small:'0.875rem',body:'1rem',large:'1.125rem','card-title':'1.25rem',h3:'1.5rem'})) {

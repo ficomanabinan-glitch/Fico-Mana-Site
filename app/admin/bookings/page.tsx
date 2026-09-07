@@ -747,7 +747,7 @@ function BookingsManagement() {
         <button
           type="button"
           onClick={() => setShowWalkIn((v) => !v)}
-          className="bg-primary text-white px-4 py-2.5 text-caption font-semibold uppercase tracking-wider hover:bg-[#03008F] transition-colors"
+          className="rounded-control bg-primary text-white px-4 py-2.5 text-caption font-semibold uppercase tracking-wider hover:bg-[#03008F] transition-colors"
         >
           {showWalkIn ? 'Close Walk-in' : '+ Walk-in Booking'}
         </button>
@@ -774,7 +774,7 @@ function BookingsManagement() {
                         setWalkInCategory(category)
                         setWalkInSlotId('')
                       }}
-                      className={`px-3 py-2 text-caption font-semibold uppercase tracking-wider border transition-colors ${
+                      className={`rounded-control px-3 py-2 text-caption font-semibold uppercase tracking-wider border transition-colors ${
                         walkInCategory === category
                           ? 'border-primary bg-primary text-white'
                           : 'border-white/15 text-white/60 hover:border-white/30 hover:text-white'
@@ -868,7 +868,7 @@ function BookingsManagement() {
       )}
 
       {/* FILTER BAR */}
-      <div className="border border-white/10 bg-[#222222] p-5 shadow-sm space-y-4">
+      <div className="rounded-card border border-white/10 bg-[#222222] p-5 shadow-sm space-y-4">
         {/* Search & Date */}
         <div className="grid md:grid-cols-12 gap-4">
           <div className="md:col-span-8 relative">
@@ -964,7 +964,7 @@ function BookingsManagement() {
       </div>
 
       {/* TABLE */}
-      <div className="border border-white/10 bg-white/[0.02] overflow-x-auto">
+      <div className="rounded-card border border-white/10 bg-white/[0.02] overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[1020px]">
           <thead>
             <tr className="bg-white/[0.03] border-b border-white/10 text-caption font-semibold tracking-label text-white/40 uppercase">
@@ -1058,7 +1058,7 @@ function BookingsManagement() {
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Contact Info Card */}
-              <div className="border border-white/10 p-4 space-y-3">
+              <div className="rounded-card border border-white/10 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-1.5 gap-2">
                   <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase">
                     Contact Information
@@ -1108,7 +1108,7 @@ function BookingsManagement() {
                       <input
                         value={editContactName}
                         onChange={(e) => setEditContactName(e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                        className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -1118,7 +1118,7 @@ function BookingsManagement() {
                         value={editContactEmail}
                         onChange={(e) => setEditContactEmail(e.target.value)}
                         placeholder="client@email.com"
-                        className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                        className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -1127,14 +1127,14 @@ function BookingsManagement() {
                         value={editContactPhone}
                         onChange={(e) => setEditContactPhone(e.target.value)}
                         placeholder="09XXXXXXXXX"
-                        className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                        className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                       />
                     </div>
                     <button
                       type="button"
                       disabled={saveLoading}
                       onClick={handleSaveContact}
-                      className="bg-primary text-white text-caption font-semibold uppercase tracking-wider px-4 py-2.5 hover:bg-[#03008F] disabled:opacity-50"
+                      className="rounded-control bg-primary text-white text-caption font-semibold uppercase tracking-wider px-4 py-2.5 hover:bg-[#03008F] disabled:opacity-50"
                     >
                       Save Contact
                     </button>
@@ -1185,7 +1185,7 @@ function BookingsManagement() {
               </div>
 
               {/* Booking Info Card */}
-              <form onSubmit={handleSaveDetails} className="border border-white/10 p-4 space-y-4">
+              <form onSubmit={handleSaveDetails} className="rounded-card border border-white/10 p-4 space-y-4">
                 <div className="flex justify-between items-center border-b border-white/10 pb-1.5">
                   <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase">
                     Session & Schedule Details
@@ -1230,7 +1230,7 @@ function BookingsManagement() {
                           required
                           value={editDate}
                           onChange={(e) => setEditDate(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                          className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -1238,7 +1238,7 @@ function BookingsManagement() {
                         <select
                           value={editTime}
                           onChange={(e) => setEditTime(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                          className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                         >
                           {(usesMakeupSlots(selectedBooking.packageId, packageSlotTypeFor(selectedBooking.packageId))
                             ? ALL_MANA_SLOTS.map((slot) => formatSlotBookingTime(slot))
@@ -1270,7 +1270,7 @@ function BookingsManagement() {
                           value={editDriveLink}
                           onChange={(e) => setEditDriveLink(e.target.value)}
                           placeholder="https://drive.google.com/drive/folders/..."
-                          className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                          className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                         />
                       </div>
                     </>
@@ -1331,7 +1331,7 @@ function BookingsManagement() {
                       value={editStaffNotes}
                       onChange={(e) => setEditStaffNotes(e.target.value)}
                       placeholder="Add private staff notes, backdrop choices, or check-in records here..."
-                      className="w-full bg-black/40 border border-white/10 p-2.5 text-xs font-semibold focus:border-primary focus:outline-none resize-none leading-relaxed"
+                      className="rounded-control w-full bg-black/40 border border-white/10 p-2.5 text-xs font-semibold focus:border-primary focus:outline-none resize-none leading-relaxed"
                     />
                     <button
                       type="button"
@@ -1348,7 +1348,7 @@ function BookingsManagement() {
                       <button
                         type="submit"
                         disabled={saveLoading}
-                        className="bg-primary text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-[#03008F] flex items-center gap-1.5"
+                        className="rounded-control bg-primary text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-[#03008F] flex items-center gap-1.5"
                       >
                         <Save className="w-3.5 h-3.5" /> Save Changes
                       </button>
@@ -1358,7 +1358,7 @@ function BookingsManagement() {
             </form>
 
             {/* Payment History Ledger */}
-            <div className="border border-white/10 p-4 space-y-3">
+            <div className="rounded-card border border-white/10 p-4 space-y-3">
               <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase border-b border-white/10 pb-1.5">
                 Payment History Ledger
               </h4>
@@ -1367,7 +1367,7 @@ function BookingsManagement() {
               ) : (
                 <div className="space-y-2 text-xs">
                   {(selectedBooking.paymentHistory || []).map((pay) => (
-                    <div key={pay.id} className="flex justify-between items-start gap-3 bg-white/[0.03] p-2.5 border border-white/10">
+                    <div key={pay.id} className="rounded-control flex justify-between items-start gap-3 bg-white/[0.03] p-2.5 border border-white/10">
                       <div>
                         <p className="font-semibold text-white/90">{pay.type}</p>
                         <p className="text-caption text-white/40 font-mono mt-0.5">{new Date(pay.date).toLocaleDateString()} via {pay.method}</p>
@@ -1402,12 +1402,12 @@ function BookingsManagement() {
               if (outstanding <= 0 || selectedBooking.bookingStatus === 'Cancelled') return null
               
               return (
-                <form onSubmit={handleRecordStudioPayment} className="border border-white/10 p-4 space-y-4">
+                <form onSubmit={handleRecordStudioPayment} className="rounded-card border border-white/10 p-4 space-y-4">
                   <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase border-b border-white/10 pb-1.5">
                     Record Studio Payment
                   </h4>
                   
-                  <div className="bg-amber-500/10 border border-amber-500/30 p-3 text-caption text-amber-300">
+                  <div className="rounded-control bg-amber-500/10 border border-amber-500/30 p-3 text-caption text-amber-300">
                     Outstanding Balance: <strong className="text-sm font-bold text-amber-400">₱{outstanding.toFixed(2)}</strong>
                   </div>
 
@@ -1417,7 +1417,7 @@ function BookingsManagement() {
                       <select
                         value={studioPayMethod}
                         onChange={(e) => setStudioPayMethod(e.target.value as any)}
-                        className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                        className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                       >
                         <option value="Cash">Cash</option>
                         <option value="GCash">GCash</option>
@@ -1436,7 +1436,7 @@ function BookingsManagement() {
                         max={outstanding}
                         value={studioPayAmount}
                         onChange={(e) => setStudioPayAmount(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                        className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                       />
                     </div>
                   </div>
@@ -1448,14 +1448,14 @@ function BookingsManagement() {
                       value={studioPayRef}
                       onChange={(e) => setStudioPayRef(e.target.value)}
                       placeholder="e.g. GCash Ref / Card Slip Code"
-                      className="w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
+                      className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={saveLoading}
-                    className="w-full bg-primary text-white text-caption font-semibold uppercase tracking-wider py-3 hover:bg-[#03008F]"
+                    className="rounded-control w-full bg-primary text-white text-caption font-semibold uppercase tracking-wider py-3 hover:bg-[#03008F]"
                   >
                     Record In-Studio Payment
                   </button>
@@ -1465,12 +1465,12 @@ function BookingsManagement() {
 
             {/* Receipt Preview if exists */}
               {selectedBooking.receiptUrl && (
-                <div className="border border-white/10 p-4 space-y-3">
+                <div className="rounded-card border border-white/10 p-4 space-y-3">
                   <h4 className="text-caption font-semibold tracking-label text-white/40 uppercase border-b border-white/10 pb-1.5">
                     Uploaded GCash Receipt
                   </h4>
                   <div className="flex gap-4 items-center">
-                    <div className="w-20 h-20 bg-white/[0.05] border border-white/10 relative overflow-hidden flex-shrink-0">
+                    <div className="rounded-control w-20 h-20 bg-white/[0.05] border border-white/10 relative overflow-hidden flex-shrink-0">
                       {selectedBooking.receiptUrl.endsWith('.pdf') ? (
                         <div className="w-full h-full flex items-center justify-center text-white/50">
                           <FileText className="w-8 h-8" />
@@ -1519,7 +1519,7 @@ function BookingsManagement() {
                     saveLoading ||
                     isPlaceholderCustomerEmail(selectedBooking.customerEmail)
                   }
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 col-span-2 sm:col-span-3"
+                  className="rounded-control bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 col-span-2 sm:col-span-3"
                 >
                   <Bell className="w-3.5 h-3.5" /> Send Shoot Reminder
                 </button>
@@ -1527,7 +1527,7 @@ function BookingsManagement() {
                   type="button"
                   onClick={() => openGalleryLinkModal(selectedBooking, 'gallery')}
                   disabled={selectedBooking.bookingStatus === 'Cancelled' || saveLoading}
-                  className="bg-primary hover:bg-[#03008F] text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 col-span-2 sm:col-span-3"
+                  className="rounded-control bg-primary hover:bg-[#03008F] text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 col-span-2 sm:col-span-3"
                 >
                   <Link2 className="w-3.5 h-3.5" /> Send Google Drive Link
                 </button>
@@ -1539,7 +1539,7 @@ function BookingsManagement() {
                     selectedBooking.bookingStatus === 'Cancelled' ||
                     saveLoading
                   }
-                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className="rounded-control bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
                   <CheckCircle className="w-3.5 h-3.5" /> Complete
                 </button>
@@ -1547,7 +1547,7 @@ function BookingsManagement() {
                   type="button"
                   onClick={() => handleUpdateStatus(selectedBooking, 'No Show')}
                   disabled={selectedBooking.bookingStatus === 'No Show' || selectedBooking.bookingStatus === 'Cancelled' || saveLoading}
-                  className="bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className="rounded-control bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
                   <Clock className="w-3.5 h-3.5" /> No Show
                 </button>
@@ -1555,7 +1555,7 @@ function BookingsManagement() {
                   type="button"
                   onClick={() => handleUpdateStatus(selectedBooking, 'Cancelled')}
                   disabled={selectedBooking.bookingStatus === 'Cancelled' || selectedBooking.bookingStatus === 'Completed' || saveLoading}
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className="rounded-control bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                 >
                   <XCircle className="w-3.5 h-3.5" /> Cancel
                 </button>
@@ -1563,7 +1563,7 @@ function BookingsManagement() {
                   type="button"
                   onClick={() => openDeleteModal(selectedBooking)}
                   disabled={saveLoading || deleteLoading}
-                  className="bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed col-span-2 sm:col-span-3"
+                  className="rounded-control bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed col-span-2 sm:col-span-3"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Delete booking
                 </button>
@@ -1579,7 +1579,7 @@ function BookingsManagement() {
       {/* Complete + Gallery Link Modal */}
       {showCompleteModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-          <div className="border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
+          <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white text-lg">
@@ -1611,7 +1611,7 @@ function BookingsManagement() {
                 value={completeClientName}
                 onChange={(e) => setCompleteClientName(e.target.value)}
                 placeholder="Full name"
-                className="w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
+                className="rounded-control w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
             </div>
 
@@ -1625,7 +1625,7 @@ function BookingsManagement() {
                 value={completeClientEmail}
                 onChange={(e) => setCompleteClientEmail(e.target.value)}
                 placeholder="client@email.com"
-                className="w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
+                className="rounded-control w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
               <p className="text-caption text-white/40">
                 Required to email the raw gallery. Saved on the booking for filtering / editor later.
@@ -1642,7 +1642,7 @@ function BookingsManagement() {
                 value={completeDriveLink}
                 onChange={(e) => setCompleteDriveLink(e.target.value)}
                 placeholder="https://drive.google.com/drive/folders/..."
-                className="w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
+                className="rounded-control w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
               <p className="text-caption text-white/40">
                 Share the folder as <strong className="text-white/60">Anyone with the link</strong> (Viewer).

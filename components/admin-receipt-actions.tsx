@@ -45,7 +45,7 @@ export default function AdminReceiptActions({ booking, payment, disabled, onResu
           onClick={handlePrint}
           disabled={disabled}
           title="Print official receipt"
-          className="inline-flex items-center gap-1 px-2 py-1 text-caption font-semibold uppercase tracking-wider border border-white/15 text-white/80 hover:border-white/30 disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-caption font-semibold uppercase tracking-wider border border-white/15 text-white/80 hover:border-white/30 disabled:opacity-40"
         >
           <Printer className="w-3 h-3" /> Print
         </button>
@@ -54,7 +54,7 @@ export default function AdminReceiptActions({ booking, payment, disabled, onResu
           onClick={handleResend}
           disabled={disabled}
           title="Resend receipt email"
-          className="inline-flex items-center gap-1 px-2 py-1 text-caption font-semibold uppercase tracking-wider border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-caption font-semibold uppercase tracking-wider border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-40"
         >
           <Mail className="w-3 h-3" /> Email
         </button>
