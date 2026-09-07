@@ -71,6 +71,22 @@ Namecheap access currently requires the owner to sign in. Do not change root, ww
 
 ## Validation and release status
 
-122 tests passed; typecheck passed; targeted new-console lint passed; production build passed with the added dynamic routes. Source/security scans passed. Authenticated online visual QA and final production/DNS verification are in progress; do not claim the new subdomain is live until confirmed.
+Implementation commit `3a5f578f2e68b3da64cc6ca2d75c3a3c8b6860bc` was pushed to main and the presentation branch. Vercel deployment `GGZALWxN6C5TeWn42as1fc4vMxpU` completed successfully. GitHub Actions run `34086053819` passed all three jobs: verification/build, full-history secret scan and CodeQL. The deployed preview is available at `https://admin.ficomana.com/newadmin` through the existing administrator session.
+
+122 tests passed; typecheck passed; targeted new-console lint passed; production build passed with the added dynamic routes. Source/security scans passed.
+
+Authenticated online checks used the owner's existing Chrome sessions, not a localhost login:
+
+- Live overview, Drive connection and package values loaded without an application error. The existing studio root and 30-day portal expiry were displayed correctly.
+- Explicit sample mode displayed eight fictional clients. Search by sample booking reference, Completed status filtering, oldest-first sorting and client detail navigation worked. Package-dependent selection counts and TOGA PICTURE text were verified.
+- Editing groups changed between day, week and month. Whole-collection download wiring is covered by source tests; no real download/upload was triggered during this review.
+- The chart initially selected the latest date. Selecting another date set its pressed state and retained that selection within the view.
+- Desktop screenshots were reviewed at 1440 × 900. Mobile screenshots were reviewed at 390 × 844; the dashboard and bookings page had no document-level horizontal overflow. Wide tables scroll within their own region.
+- The mobile Sheet opened, closed on navigation and Escape, and returned focus to Open navigation after Escape. No browser errors were reported during these checks.
+- Original admin/editor screenshots were compared with their existing release baselines at 1920 × 1080 and 390 × 843, using matching classic-scrollbar conditions. The loaded layout, colors, spacing and navigation remained visually unchanged. Admin booking/balance figures changed with live records; this is not a claim of byte-identical images or frozen data. No records were created or edited for this comparison.
+
+Screenshots are kept locally under ignored `artifacts/preservation/`: `newadmin-live-desktop-1440x900.png`, `newadmin-sample-desktop-1440x900.png`, `newadmin-sample-mobile-390x844.png`, `newadmin-mobile-navigation-390x844.png`, `newadmin-bookings-mobile-390x844.png`, and the four `post-security-newadmin-original-*` images. Browser viewport emulation was cleared after testing.
+
+The separate hostname is still pending its Namecheap CNAME and subsequent Vercel DNS/TLS verification. Namecheap remains at the sign-in screen; do not claim `newadmin.ficomana.com` is live until that step is completed. No login/MFA bypass or cookie sharing was used. This is a checked presentation preview, not full redesigned mutation/upload parity or a WCAG/security certification.
 
 Commands: `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm security:check`, `pnpm security:secrets`, `pnpm security:http`. Build checks use synthetic CI environment values locally; only the normal Vercel Git integration builds with production credentials. Never upload the local synthetic build.
