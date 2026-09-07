@@ -39,6 +39,7 @@ export function memoryDb(tables: Record<string, Row[]>, fail?: (table: string, a
       limit(count: number) { end = count; return query },
       range(first: number, last: number) { offset = first; end = last + 1; return query },
       eq(key: string, expected: unknown) { predicates.push(row => field(row, key) === expected); return query },
+      neq(key: string, expected: unknown) { predicates.push(row => field(row, key) !== expected); return query },
       is(key: string, expected: unknown) { predicates.push(row => (field(row, key) ?? null) === expected); return query },
       in(key: string, values: unknown[]) { predicates.push(row => values.includes(field(row, key))); return query },
       update(patch: Row) { action = 'update'; value = patch; return query },

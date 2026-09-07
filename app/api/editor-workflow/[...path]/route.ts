@@ -19,6 +19,7 @@ import {
   getUploadReport,
   getPortalData,
   getPortalDrivePhotos,
+  getPortalPhotoRevision,
   getPortalFile,
   getWorkflowMembers,
   indexRawFolder,
@@ -57,6 +58,7 @@ import { scanUpload } from '@/lib/security/upload-scanner'
 import { rejectUntrustedMutation } from '@/lib/security/request-security'
 import { startRawUpload, completeRawUpload } from '@/lib/raw-upload-server'
 import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from '@/lib/raw-upload-contract'
+import { beginOnsitePhotoReset, continueOnsitePhotoReset } from '@/lib/onsite-photo-reset'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -141,6 +143,9 @@ async function handlePortal(request: NextRequest, path: string[]) {
       : API_RATE_LIMITS.portalRead
   const limited = await enforceApiRateLimit(request, policy, [publicId, path[2]])
   if (limited) return limited
+  if (path.length === 3 && path[2] === 'photo-revision' && method === 'GET') {
+    return json(await getPortalPhotoRevision(publicId))
+  }
   if (path.length === 2 && method === 'GET') {
     const offset = Number(request.nextUrl.searchParams.get('offset') || 0)
     const limit = Number(request.nextUrl.searchParams.get('limit') || 48)
@@ -444,6 +449,16 @@ async function handle(request: NextRequest, path: string[]) {
       const denied = requireCapability('onsite')
       if (denied) return denied
       const bookingId = decodeURIComponent(path[1])
+      if (path[2] === 'reset' && path.length === 3) {
+        const text = await request.text()
+        if (text.length > 1000) return json({ error: 'Invalid reset request.' }, 400)
+        let body: { confirmBookingId?: string; resetId?: string }
+        try { body = JSON.parse(text) } catch { return json({ error: 'Confirm the client before deleting photos.' }, 400) }
+        if (!body || typeof body !== 'object' || body.confirmBookingId !== bookingId) return json({ error: 'Confirm the client before deleting photos.' }, 400)
+        const context = { workspaceId, bookingId, actorId }
+        if (body.resetId !== undefined && (typeof body.resetId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.resetId))) return json({ error: 'Invalid reset reference.' }, 400)
+        return json(body.resetId ? await continueOnsitePhotoReset(context, body.resetId) : await beginOnsitePhotoReset(context))
+      }
       if (path[2] === 'index') return json(await indexRawFolder(workspaceId, bookingId, actorId))
       if (path[2] === 'upload-session' || path[2] === 'complete-file') {
         if (path.length !== 3) return json({ error: 'Unknown upload action.' }, 404)

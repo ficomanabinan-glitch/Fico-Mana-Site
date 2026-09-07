@@ -6,17 +6,19 @@ import {
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
-  FolderCog,
   FolderSync,
   ImagePlus,
   RefreshCw,
   Search,
+  Trash2,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminInput, adminPanel } from '@/lib/admin-ui'
 import { uploadRawDirect as uploadRawFile } from '@/lib/raw-upload-client'
 import { uploadRawQueue, type RawQueueProgress } from '@/lib/raw-upload-queue'
+import { notifyOnsitePhotosChanged } from '@/lib/onsite-refresh'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'
 export { uploadRawFile }
 
 type Job = {
@@ -28,6 +30,7 @@ type Job = {
   lastUploadAt?: string | null
   rawFolderDriveId?: string | null
   lastError?: string | null
+  resetId?: string | null
 }
 
 type OnsiteResponse = {
@@ -75,6 +78,10 @@ export default function OnsiteUpload({
   const [data, setData, loading, setLoading] = useCachedPageRead<OnsiteResponse | null>(`editor:onsite:${date}`, null)
   const [busy, setBusy] = useState('')
   const [progress, setProgress] = useState<Record<string, Progress>>({})
+  const [deleteJob, setDeleteJob] = useState<Job | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const target = useRef('')
   const input = useRef<HTMLInputElement | null>(null)
   const uploading = useRef(new Set<string>())
@@ -82,7 +89,7 @@ export default function OnsiteUpload({
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const response = await fetch(`/api/editor-workflow/onsite?date=${encodeURIComponent(date)}`, {
+      const response = await fetch(`/api/editor-workflow/onsite?date=${encodeURIComponent(date)}${silent ? '&fast=1' : ''}`, {
         cache: 'no-store',
         credentials: 'include',
       })
@@ -102,30 +109,9 @@ export default function OnsiteUpload({
 
   usePageBackgroundSync(() => uploading.current.size ? undefined : load(true))
 
-  const folders = async (bookingId: string, repair = false) => {
-    setBusy(bookingId)
-    try {
-      const response = await fetch(`/api/editor-workflow/folders/${encodeURIComponent(bookingId)}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repair }),
-      })
-      const body = await responseJson(response)
-      if (!response.ok) throw new Error(String(body.error || 'Drive folder action failed.'))
-      toast.success(
-        repair ? 'Folder repaired' : 'Folder ready',
-        'Fico Mana saved the verified Drive folder IDs.',
-      )
-      await load(true)
-    } catch (error) {
-      toast.error('Drive folder action failed', error instanceof Error ? error.message : 'Try again.')
-    } finally {
-      setBusy('')
-    }
-  }
-
   const sync = async (bookingId: string) => {
+    if (uploading.current.has(bookingId)) return
+    uploading.current.add(bookingId)
     setBusy(bookingId)
     try {
       const response = await fetch(`/api/editor-workflow/raw/${encodeURIComponent(bookingId)}/index`, {
@@ -134,16 +120,21 @@ export default function OnsiteUpload({
       })
       const body = await responseJson(response)
       if (!response.ok) throw new Error(String(body.error || 'Could not sync the RAW folder.'))
-      toast.success('RAW folder synchronized', `${Number(body.indexed || 0)} photos indexed.`)
+      const detail = `${Number(body.indexed || 0)} photos indexed · ${Number(body.removed || 0)} unavailable records removed.${body.recovered ? ' The missing or outdated folder link was repaired.' : ''}`
+      if (body.warning) toast.warning('Drive synced — review needed', String(body.warning))
+      else toast.success('RAW folder synchronized', detail)
       await load(true)
+      notifyOnsitePhotosChanged()
     } catch (error) {
       toast.error('RAW sync failed', error instanceof Error ? error.message : 'Try again.')
     } finally {
-      setBusy('')
+      uploading.current.delete(bookingId)
+      setBusy(current => current === bookingId ? '' : current)
     }
   }
 
   const choose = (bookingId: string) => {
+    if (uploading.current.has(bookingId)) return
     target.current = bookingId
     input.current?.click()
   }
@@ -166,6 +157,41 @@ export default function OnsiteUpload({
       uploading.current.delete(bookingId)
       setBusy(current => current === bookingId ? '' : current)
       await load(true)
+      notifyOnsitePhotosChanged()
+    }
+  }
+
+  const deleteFiles = async () => {
+    if (!deleteJob || uploading.current.has(deleteJob.bookingId)) return
+    const job = deleteJob
+    uploading.current.add(job.bookingId) // Also blocks duplicate clicks before React re-renders.
+    setBusy(job.bookingId); setDeleting(true); setDeleteError(''); setDeleteProgress('Checking uploaded files…')
+    let resetId = job.resetId
+    try {
+      for (let step = 0; step < 501; step++) {
+        const response = await fetch(`/api/editor-workflow/raw/${encodeURIComponent(job.bookingId)}/reset`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmBookingId: job.bookingId, ...(resetId ? { resetId } : {}) }),
+        })
+        const body = await responseJson(response)
+        if (!response.ok) throw new Error(String(body.error || 'Files could not be cleared. Try: retry Delete Files.'))
+        if (typeof body.resetId === 'string') { resetId = body.resetId; setDeleteJob(current => current ? { ...current, resetId } : current) }
+        setDeleteProgress(`${Number(body.cleared || 0)} of ${Number(body.total || 0)} files cleared`)
+        if (body.complete === true) {
+          setProgress(current => { const next = { ...current }; delete next[job.bookingId]; return next })
+          toast.success('Uploaded files cleared', 'The indexed gallery and unfinished choices have been reset. You can upload the correct photos now.')
+          setDeleteJob(null)
+          return
+        }
+      }
+      throw new Error('Deletion paused. Try: press Resume Delete Files to continue from saved progress.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Try: retry Delete Files.'
+      setDeleteError(message); toast.error('Files not fully cleared', message)
+    } finally {
+      uploading.current.delete(job.bookingId); setBusy(current => current === job.bookingId ? '' : current); setDeleting(false)
+      await load(true)
+      notifyOnsitePhotosChanged()
     }
   }
 
@@ -263,8 +289,8 @@ export default function OnsiteUpload({
             const overallPercent = state
               ? Math.min(100, Math.round((state.bytesProcessed / Math.max(1, state.totalBytes)) * 100))
               : 0
-            const isBusy = busy === job.bookingId || state?.status === 'uploading'
-            const driveStatus = job.rawFolderDriveId
+            const isBusy = busy === job.bookingId || uploading.current.has(job.bookingId) || state?.status === 'uploading'
+            const driveStatus = job.resetId ? 'Deletion pending' : job.rawFolderDriveId
               ? 'Ready'
               : job.lastError && /permission/i.test(job.lastError)
                 ? 'Permission Error'
@@ -396,35 +422,7 @@ export default function OnsiteUpload({
                   <div className="onsite-actions">
                     <button
                       type="button"
-                      disabled={isBusy}
-                      onClick={() => void folders(job.bookingId, false)}
-                      className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}
-                    >
-                      <FolderCog className="size-3.5" />
-                      {job.rawFolderDriveId ? 'Refresh Folder' : 'Create Folder'}
-                    </button>
-                    {job.rawFolderDriveId ? (
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              'Repair this saved Drive mapping? Existing Drive files will not be deleted.',
-                            )
-                          ) {
-                            void folders(job.bookingId, true)
-                          }
-                        }}
-                        className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}
-                      >
-                        <RefreshCw className="size-3.5" />
-                        Repair
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={isBusy || !job.rawFolderDriveId}
+                      disabled={isBusy || Boolean(job.resetId)}
                       onClick={() => choose(job.bookingId)}
                       className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
                     >
@@ -433,17 +431,21 @@ export default function OnsiteUpload({
                     </button>
                     <button
                       type="button"
-                      disabled={isBusy || !job.rawFolderDriveId}
+                      disabled={isBusy || Boolean(job.resetId)}
                       onClick={() => void sync(job.bookingId)}
                       className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
                     >
                       <FolderSync className="size-3.5" />
                       Sync Drive
                     </button>
+                    <button type="button" disabled={isBusy} onClick={() => { setDeleteJob(job); setDeleteError(''); setDeleteProgress('') }}
+                      className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 text-red-300 hover:border-red-400/40 hover:bg-red-500/10`}>
+                      <Trash2 className="size-3.5" />{job.resetId ? 'Resume Delete Files' : 'Delete Files'}
+                    </button>
                     {state?.failed.length ? (
                       <button
                         type="button"
-                        disabled={isBusy}
+                        disabled={isBusy || Boolean(job.resetId)}
                         onClick={() => void uploadFiles(job.bookingId, state.failed)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-caption font-semibold uppercase text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20 disabled:opacity-35"
                       >
@@ -458,6 +460,29 @@ export default function OnsiteUpload({
           })}
         </div>
       )}
+      <Sheet open={Boolean(deleteJob)} onOpenChange={open => { if (!open && !deleting) setDeleteJob(null) }}>
+        <SheetContent className="data-[side=right]:w-full overflow-y-auto bg-[#222222] text-white data-[side=right]:sm:max-w-lg" showCloseButton={!deleting}>
+          <SheetHeader>
+            <SheetTitle className="text-white">Delete uploaded files?</SheetTitle>
+            <SheetDescription className="mt-3 text-white/60">
+              {deleteJob?.customerName} · {deleteJob?.bookingId}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 px-4 text-small leading-relaxed text-white/65">
+            <p>This clears this client’s indexed gallery, previews, and unfinished photo choices. Uploads in their RAW folder and system-generated selection copies go to Google Drive Trash.</p>
+            <p>The booking, payments, folders, and edited deliverables are kept. Files moved outside these folders are not deleted. Submitted selections and clients already being edited cannot be cleared here.</p>
+            <p>Keep this page open while clearing files. If interrupted, use Resume Delete Files. Clients cannot submit choices until deletion finishes.</p>
+            {deleteProgress ? <p role="status" aria-live="polite" className="text-[#C4CEFF]">{deleteProgress}</p> : null}
+            {deleteError ? <p role="alert" className="text-red-300">{deleteError}</p> : null}
+          </div>
+          <SheetFooter>
+            <button type="button" disabled={deleting} onClick={() => void deleteFiles()} className={`${adminBtnGhost} border-red-400/30 bg-red-500/10 px-4 py-3 text-red-200 hover:bg-red-500/20`}>
+              {deleting ? 'Deleting files…' : deleteJob?.resetId ? 'Resume Delete Files' : 'Delete Files for This Client'}
+            </button>
+            <button type="button" disabled={deleting} onClick={() => setDeleteJob(null)} className={`${adminBtnGhost} px-4 py-3`}>Cancel</button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

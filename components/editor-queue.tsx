@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
+import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Download, ExternalLink, FolderOpen, Search } from 'lucide-react'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
@@ -36,6 +37,7 @@ export default function EditorQueue({basePath='/admin/filtering',driveSettingsHr
   const load=useCallback(async(forceSync=false)=>{const hasCachedData=getCachedEditorBatches()!==null;if(hasCachedData)setRefreshing(true);try{const current=await fetchEditorBatches({force:forceSync});setBatches(current);setLoading(false);if(forceSync||shouldSynchronizeEditorBatches()){setRefreshing(true);const synchronized=await fetchEditorBatches({force:true,synchronize:true});setBatches(synchronized)}}catch(error){toast.error('Editor workflow unavailable',error instanceof Error?error.message:'Try again.')}finally{setLoading(false);setRefreshing(false)}},[toast])
   useEffect(()=>{const saved=localStorage.getItem('fico-editor-group-mode');if(saved==='day'||saved==='week'||saved==='month')setGroupMode(saved);const savedOrder=localStorage.getItem('fico-editor-date-sort-order');if(savedOrder==='asc'||savedOrder==='desc')setDateSortOrder(savedOrder);void load()},[load])
   useEffect(()=>{rememberEditorQueueUi({groupMode,dateSortOrder,filter,search,packageFilter})},[dateSortOrder,filter,groupMode,packageFilter,search])
+  usePageBackgroundSync(async()=>{if(downloading)return;const current=await fetchEditorBatches({force:true});setBatches(current)})
   const packageOptions=useMemo(()=>[...new Set(batches.flatMap((batch)=>batch.clients).map((client)=>client.packageName).filter(Boolean))].sort(),[batches])
   const chooseGrouping=(mode:GroupMode)=>{setGroupMode(mode);localStorage.setItem('fico-editor-group-mode',mode)}
   const chooseDateSortOrder=(order:DateSortOrder)=>{setDateSortOrder(order);localStorage.setItem('fico-editor-date-sort-order',order)}

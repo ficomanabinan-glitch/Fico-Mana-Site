@@ -28,6 +28,7 @@ function database(tables: Record<string, Array<Record<string, any>>>) {
     const builder = {
       select() { return builder }, order() { return builder }, range() { return builder }, limit() { return builder },
       eq(key: string, value: unknown) { query.filters.push([key, value]); predicates.push(row => field(row, key) === value); return builder },
+      is(key: string, value: unknown) { query.filters.push([key, value]); predicates.push(row => (field(row, key) ?? null) === value); return builder },
       in(key: string, values: unknown[]) { predicates.push(row => values.includes(field(row, key))); return builder },
       update() { query.mutation = 'update'; return builder },
       insert() { query.mutation = 'insert'; return builder },
@@ -106,6 +107,7 @@ function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolea
   })
   const driveReads: string[] = []
   const workflow = loadTs<typeof import('../lib/editor-workflow.ts')>('lib/editor-workflow.ts', {
+    '@/lib/raw-upload-generation': {}, '@/lib/onsite-drive-sync': {},
     '@/lib/portal-selection-source': { PortalSelectionError: class extends Error {} },
     '@/lib/google-drive': {
       downloadDriveFile: async (id: string) => { driveReads.push(id); return Buffer.from('synthetic') },

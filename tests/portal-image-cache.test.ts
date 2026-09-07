@@ -4,6 +4,7 @@ import { loadTs } from './helpers/load-ts.ts'
 import { memoryDb } from './helpers/memory-db.ts'
 import * as packageWorkflow from '../lib/package-workflow.ts'
 class RawUploadError extends Error {}
+const { PortalSelectionError } = loadTs<typeof import('../lib/portal-selection-source.ts')>('lib/portal-selection-source.ts', { '@/lib/google-drive': {} })
 
 function fixture() {
   let failedTable = ''
@@ -20,6 +21,7 @@ function fixture() {
   let reads = 0
   const admin = { ...db, storage: { from: () => ({ download: async () => { reads++; return { data: new Blob(['private-preview']), error: null } } }) } }
   const workflow = loadTs<typeof import('../lib/editor-workflow.ts')>('lib/editor-workflow.ts', {
+    '@/lib/raw-upload-generation': {}, '@/lib/onsite-drive-sync': {},
     '@/lib/supabase/admin': { getSupabaseAdmin: () => admin },
     '@/lib/google-drive': { downloadDriveFile: async () => { reads++; return Buffer.from('private-deliverable') } },
     '@/lib/google-drive-scopes': {}, '@/lib/client-portal': {}, '@/lib/email': {},
@@ -27,10 +29,11 @@ function fixture() {
     '@/lib/booking-provisioning': {}, '@/lib/security/file-validation': {}, '@/lib/security/audit-metadata': {},
     '@/lib/package-workflow': packageWorkflow, '@/lib/package-workflow-server': {},
     '@/lib/print-manifest': {}, '@/lib/print-workflow': {}, '@/lib/drive-folder-mappings': {},
-    '@/lib/portal-selection-source': { PortalSelectionError: class extends Error {} },
+    '@/lib/portal-selection-source': { PortalSelectionError },
   })
   let limited = false
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
+    '@/lib/onsite-photo-reset': {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {},
     '@/lib/editor-workflow': workflow, '@/lib/google-drive': {},
@@ -85,6 +88,19 @@ test('edited delivery images reuse bytes too, with distinct versions and correct
   const next = await f.request('edited', first.headers.get('etag')!, 'deliverable')
   assert.equal(next.status, 304)
   assert.equal(f.reads, 1)
+})
+
+test('reset blocks conditional cached previews before provider reads and exposes only a read-only photo revision', async () => {
+  const f = fixture()
+  const first = await f.request()
+  f.db.tables.photo_selections = [{workspace_id:'studio',booking_id:'booking',raw_reset_id:'private-reset-id',raw_upload_generation:1,reopened_at:null}]
+  const response = await f.request('own', first.headers.get('etag')!)
+  assert.equal(response.status,409)
+  assert.equal((await response.json()).code,'PHOTOS_RESETTING')
+  assert.equal(f.reads,1)
+  const revision = await f.workflow.getPortalPhotoRevision('00000000-0000-4000-8000-000000000042')
+  assert.equal(revision.resetting,true);assert.equal(revision.generation,1);assert.equal(revision.galleryCount,1)
+  assert.ok(!JSON.stringify(revision).includes('private-reset-id'))
 })
 
 test('cookie-free viewing keeps expiry, disabled state, workspace/file ownership, database failure and rate limits', async t => {

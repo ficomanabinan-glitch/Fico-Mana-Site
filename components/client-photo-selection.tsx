@@ -19,6 +19,7 @@ export type ClientSelection = {
   noRevisionAcknowledged: boolean
   submittedAt?: string | null
   reopenedAt?: string | null
+  rawUploadGeneration?: number
   selectedIds: string[]
   selectedItems: Array<{ fileId: string; preference: 'standard' | 'less' | 'raw'; extraEdit: boolean }>
   printAllocations: Array<{ category: PrintCategory; fileId: string; quantity: number; label: string }>

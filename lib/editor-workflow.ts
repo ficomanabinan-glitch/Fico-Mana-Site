@@ -9,7 +9,6 @@ import {
   findOrCreateFolder,
   getDriveFile,
   hashDriveFileSha256,
-  listDriveFiles,
   upsertDriveFile,
 } from '@/lib/google-drive'
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
@@ -27,6 +26,8 @@ import { fulfillBookingPrints, savePrintManifest } from '@/lib/print-workflow'
 import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
 import { PortalSelectionError, resolvePortalSelectionSources } from '@/lib/portal-selection-source'
 export { PortalSelectionError } from '@/lib/portal-selection-source'
+import { rawUploadGeneration } from '@/lib/raw-upload-generation'
+import { readOnsiteDrivePhotos } from '@/lib/onsite-drive-sync'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -356,7 +357,7 @@ export async function getOnsiteBatchSummary(
     return { id: String(batches[0].display_id), shootDate, jobs: [] }
   }
 
-  const [bookingsResult, galleryResult, foldersResult] = await Promise.all([
+  const [bookingsResult, galleryResult, foldersResult, resetResult] = await Promise.all([
     admin
       .from('bookings')
       .select('id,customer_name,package_name,booking_time,booking_status')
@@ -372,6 +373,8 @@ export async function getOnsiteBatchSummary(
       .select('booking_id,drive_folder_id')
       .in('booking_id', bookingIds)
       .eq('folder_type', 'RAW'),
+    admin.from('photo_selections').select('booking_id,raw_reset_id,status')
+      .eq('workspace_id', workspaceId).in('booking_id', bookingIds),
   ])
   if (bookingsResult.error) throw new Error(bookingsResult.error.message)
   if (galleryResult.error) {
@@ -417,6 +420,7 @@ export async function getOnsiteBatchSummary(
         lastUploadAt: gallery?.lastUploadAt || null,
         rawFolderDriveId: rawFolderByBooking.get(bookingId) || null,
         lastError: job.last_error ? String(job.last_error) : null,
+        resetId: resetResult.data?.find(row => row.booking_id === bookingId)?.raw_reset_id || null,
       }
     })
     .filter((job): job is NonNullable<typeof job> => Boolean(job))
@@ -922,6 +926,7 @@ export async function saveRawFile(input: {
 }) {
   const admin = adminClient()
   const { hierarchy, batch, booking } = await ensureBookingFolders(admin, input.workspaceId, input.bookingId)
+  const generation = await rawUploadGeneration(admin, input.workspaceId, input.bookingId)
   const checksum = sha256(input.data)
   const relativePath = `RAW/${safeSegment(input.fileName) || `photo-${checksum.slice(0, 8)}`}`
   const uploaded = await upsertDriveFile({
@@ -933,6 +938,7 @@ export async function saveRawFile(input: {
     checksum,
     data: input.data,
     purpose: 'raw',
+    rawGeneration: generation,
   })
   let thumbnailReference: string | null = uploaded.file.thumbnailLink || null
   if (input.thumbnail?.length) {
@@ -950,6 +956,7 @@ export async function saveRawFile(input: {
         booking_id: input.bookingId,
         client_id: booking.client_id,
         drive_file_id: uploaded.file.id,
+        upload_generation: generation,
         file_name: uploaded.file.name,
         mime_type: uploaded.file.mimeType || input.mimeType,
         file_size: Number(uploaded.file.size || input.data.length),
@@ -972,8 +979,21 @@ export async function saveRawFile(input: {
 
 export async function indexRawFolder(workspaceId: string, bookingId: string, actorId: string) {
   const admin = adminClient()
-  const { hierarchy, batch, booking } = await ensureBookingFolders(admin, workspaceId, bookingId)
-  const files = (await listDriveFiles(hierarchy.raw.id)).filter(file => file.appProperties?.rawVerification !== 'pending')
+  const generation = await rawUploadGeneration(admin, workspaceId, bookingId)
+  const scopes = await admin.from('google_drive_settings').select('granted_scopes').eq('workspace_id', workspaceId).eq('id', 1).single()
+  if (scopes.error || !hasRequiredGoogleDriveScopes(scopes.data?.granted_scopes)) throw new PortalSelectionError('Drive cannot read the complete folder. Try: ask the administrator to reconnect Google Drive, then click Sync Drive again.', 'DRIVE_SCOPE_REQUIRED', 409)
+  // Capture the index before reading Drive; the database rejects concurrent uploads/resets.
+  const snapshot = await admin.from('gallery_files').select('id').eq('workspace_id', workspaceId).eq('booking_id', bookingId).limit(5001)
+  if (snapshot.error || (snapshot.data?.length || 0) > 5000) throw new PortalSelectionError('The photo index could not be checked. Try: retry Sync Drive or ask the administrator to review this client.', 'PHOTO_SYNC_UNAVAILABLE', 503)
+  const source = await readOnsiteDrivePhotos(admin, workspaceId, bookingId, async () => {
+    const prepared = await ensureBookingFolders(admin, workspaceId, bookingId)
+    return { rawFolderId: prepared.hierarchy.raw.id, clientId: String(prepared.booking.client_id), batchId: String(prepared.batch.id) }
+  })
+  const files = source.files.filter(file => !file.trashed && !file.mimeType.startsWith('application/vnd.google-apps.') &&
+    /\.(jpe?g|png|gif|webp|tiff?|heic|heif|dng|cr2|cr3|nef|arw|orf|rw2|raf)$/i.test(file.name) &&
+    (!file.appProperties?.bookingId || file.appProperties.bookingId === bookingId) && file.appProperties?.rawVerification !== 'pending'
+    // Directly placed Drive photos have no upload key. Old in-flight app uploads must not reappear after a reset.
+    && (!(file.appProperties?.rawUploadKey || file.appProperties?.rawGeneration != null) || Number(file.appProperties.rawGeneration || 0) === generation))
   if (!files.length) {
     const { data: settings } = await admin
       .from('google_drive_settings')
@@ -987,9 +1007,10 @@ export async function indexRawFolder(workspaceId: string, bookingId: string, act
     }
   }
   const rows = files.map((file) => ({
+    upload_generation: generation,
     workspace_id: workspaceId,
     booking_id: bookingId,
-    client_id: booking.client_id,
+    client_id: source.clientId,
     drive_file_id: file.id,
     file_name: file.name,
     mime_type: file.mimeType || 'application/octet-stream',
@@ -998,19 +1019,20 @@ export async function indexRawFolder(workspaceId: string, bookingId: string, act
     thumbnail_reference: file.thumbnailLink || null,
     preview_reference: file.thumbnailLink || null,
   }))
-  if (rows.length) {
-    const { error } = await admin.from('gallery_files').upsert(rows, { onConflict: 'workspace_id,drive_file_id' })
-    if (error) throw new Error(error.message)
-  }
+  const { data: reconciled, error: syncError } = await admin.rpc('sync_onsite_photo_index', {
+    p_workspace: workspaceId, p_booking: bookingId, p_actor: actorId, p_generation: generation,
+    p_gallery_ids: (snapshot.data || []).map(row => row.id), p_rows: rows,
+  })
+  if (syncError) throw new PortalSelectionError('The photo index changed or could not be saved. Try: finish any uploads, then click Sync Drive again. If it continues, ask the administrator to check the photo-reset setup.', 'PHOTO_SYNC_UNAVAILABLE', 409)
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'GALLERY_INDEXED', {
     bookingId,
-    batchId: batch.id,
-    metadata: { rawFolderDriveId: hierarchy.raw.id, indexedFiles: rows.length },
+    batchId: source.batchId,
+    metadata: { rawFolderDriveId: source.rawFolderId, indexedFiles: rows.length, removed: Number(reconciled?.removed || 0), recovered: source.recovered },
   })
-  return { indexed: rows.length }
+  return { indexed: rows.length, removed: Number(reconciled?.removed || 0), recovered: source.recovered, warning: reconciled?.warning || null }
 }
 
-async function portalRecord(publicId: string) {
+async function portalRecord(publicId: string, allowReset = false) {
   const admin = adminClient()
   const { data, error } = await admin
     .from('client_portals')
@@ -1026,7 +1048,20 @@ async function portalRecord(publicId: string) {
   if (hasPortalExpired(data.expires_at)) throw new Error('Portal expired.')
   if (data.status === 'expired') throw new Error('Portal expired.')
   if (data.status !== 'active') throw new Error('Portal disabled.')
-  return { admin, portal: data }
+  const state = await admin.from('photo_selections').select('raw_reset_id,raw_upload_generation,reopened_at')
+    .eq('workspace_id', data.workspace_id).eq('booking_id', data.booking_id).maybeSingle()
+  if (state.error) throw new Error('Photo status could not be checked.')
+  if (state.data?.raw_reset_id && !allowReset) throw new PortalSelectionError('The studio is replacing your uploaded photos. Try: check this portal again after the upload finishes.', 'PHOTOS_RESETTING')
+  return { admin, portal: data, photoState: state.data }
+}
+
+export async function getPortalPhotoRevision(publicId: string) {
+  const { admin, portal, photoState } = await portalRecord(publicId, true)
+  const gallery = await admin.from('gallery_files').select('created_at', { count: 'exact' })
+    .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id).order('created_at', { ascending: false }).limit(1)
+  if (gallery.error) throw gallery.error
+  return { generation: Number(photoState?.raw_upload_generation || 0), resetting: Boolean(photoState?.raw_reset_id), reopenedAt: photoState?.reopened_at || null,
+    galleryCount: gallery.count || 0, lastUploadAt: gallery.data?.[0]?.created_at || null }
 }
 
 export async function getPortalData(publicId: string, offset = 0, limit = 48) {
@@ -1137,6 +1172,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
           noRevisionAcknowledged: Boolean(selectionResult.data.no_revision_acknowledged),
           submittedAt: selectionResult.data.submitted_at || null,
           reopenedAt: selectionResult.data.reopened_at || null,
+          rawUploadGeneration: Number(selectionResult.data.raw_upload_generation || 0),
           selectedIds: selectedItems.map((item) => item.fileId),
           selectedItems,
           printAllocations: (allocationsResult.data || []).map((row) => ({
@@ -1303,6 +1339,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     .update({ status: 'SUBMITTING', client_status: 'Selection In Progress', updated_at: nowIso() })
     .eq('workspace_id', workspaceId)
     .eq('booking_id', bookingId)
+    .is('raw_reset_id', null)
     .in('status', ['OPEN', 'COPY_FAILED'])
     .select('*')
     .maybeSingle()

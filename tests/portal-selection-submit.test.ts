@@ -12,6 +12,7 @@ test('fresh devices can load the bare portal URL and legacy signed URLs without 
   const f = fixture()
   const seenQuotas: string[][] = []
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
+    '@/lib/onsite-photo-reset': {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/editor-workflow': f.workflow, '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},
     '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async (_request: Request, _policy: unknown, dimensions: string[]) => { seenQuotas.push(dimensions); return null } },
@@ -133,6 +134,7 @@ function fixture() {
   }
   const resolver = loadTs<typeof import('../lib/portal-selection-source.ts')>('lib/portal-selection-source.ts', { '@/lib/google-drive': drive })
   const workflow = loadTs<typeof import('../lib/editor-workflow.ts')>('lib/editor-workflow.ts', {
+    '@/lib/raw-upload-generation': {}, '@/lib/onsite-drive-sync': {},
     '@/lib/supabase/admin': { getSupabaseAdmin: () => db }, '@/lib/google-drive': drive,
     '@/lib/google-drive-scopes': {}, '@/lib/client-portal': { portalUrl: (id: string) => `/portal/${id}` }, '@/lib/email': {},
     '@/lib/portal-expiry': { hasPortalExpired: (date: string) => Date.parse(date) <= Date.now() },
@@ -369,6 +371,7 @@ test('production API exposes only safe selection errors with no-store, preserves
   const previous = testEnv.NODE_ENV; testEnv.NODE_ENV = 'production'
   t.after(() => { if (previous === undefined) delete testEnv.NODE_ENV; else testEnv.NODE_ENV = previous })
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
+    '@/lib/onsite-photo-reset': {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/editor-workflow': f.workflow, '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},
     '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async () => limited ? Response.json({}, { status: 429 }) : null },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import {
   CalendarDays, CheckCircle2, Download, ExternalLink, FileText, Package, WalletCards,
@@ -8,6 +8,8 @@ import {
 import PortalQrCode from '@/components/portal-qr-code'
 import PortalSidebar from '@/components/portal-sidebar'
 import PortalDrivePhotos from '@/components/portal-drive-photos'
+import { usePortalPhotoSync } from '@/components/use-portal-photo-sync'
+import { clearPortalDraft, portalDraftKey } from '@/lib/portal-selection-draft'
 import { portalPaymentSummary, type AddonPreview } from '@/lib/client-selection-summary'
 import {
   ClientPhotoSelection,
@@ -44,25 +46,36 @@ export default function ClientPortalPage(){
   const [data,setData]=useState<PortalData|null>(null);const [loading,setLoading]=useState(true);const [loadingMore,setLoadingMore]=useState(false);const [error,setError]=useState('')
   const [draftPricing,setDraftPricing]=useState<AddonPreview|null>(null)
   const [driveAccess,setDriveAccess]=useState<{publicId:string;url?:string;warning?:string}|null>(null)
-  const load=async(offset=0)=>{
-    if(offset===0){setLoading(true);setError('');setDraftPricing(null)}else setLoadingMore(true)
+  const [resetting,setResetting]=useState(false)
+  const readSequence=useRef(0)
+  const load=async(offset=0,silent=false)=>{
+    const sequence=++readSequence.current
+    if(offset===0){if(!silent)setLoading(true);setError('');if(!silent)setDraftPricing(null)}else setLoadingMore(true)
     try{
       const response=await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}?offset=${offset}&limit=48`,{cache:'no-store',credentials:'include'})
       const body=(await response.json().catch(()=>({}))) as PortalData&{error?:string}
+      if(sequence!==readSequence.current)return
       if(!response.ok){const reason=body.error||'This client portal is unavailable.';throw new Error(`${reason} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)}
       setData((previous)=>offset===0?body:{...body,gallery:[...(previous?.gallery||[]),...body.gallery]})
-    }catch(loadError){const message=loadError instanceof Error?loadError.message:'This client portal is unavailable.';setError(message.includes('Try:')?message:`${message} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)}
-    finally{setLoading(false);setLoadingMore(false)}
+      setResetting(false)
+    }catch(loadError){if(sequence!==readSequence.current)return;const message=loadError instanceof Error?loadError.message:'This client portal is unavailable.';setError(message.includes('Try:')?message:`${message} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`);if(silent)throw loadError}
+    finally{if(sequence===readSequence.current){setLoading(false);setLoadingMore(false)}}
   }
   useEffect(()=>{if(publicId)void load();else setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[publicId])
+  usePortalPhotoSync(publicId,data?{generation:data.selection?.rawUploadGeneration||0,reopenedAt:data.selection?.reopenedAt||null,galleryCount:data.galleryTotal}:null,()=>{
+    readSequence.current++
+    if(data?.selection)clearPortalDraft(portalDraftKey(publicId,data.selection.id,data.selection.reopenedAt,data.selection.includedLimit))
+    setResetting(true);setLoading(false);setLoadingMore(false);setDraftPricing(null);setDriveAccess(null)
+  },async()=>{setDriveAccess(null);await load(0,true)})
 
   const addonAmount=draftPricing?.total ?? Number(data?.selection?.totalAddonAmount || 0)
   const payment=portalPaymentSummary(data?.booking.price || 0,data?.booking.amountPaid || 0,addonAmount)
   const selectionLocked=data?.selection?.status==='SUBMITTED'||data?.selection?.status==='SUBMITTING'
 
   if(loading)return <main className="flex min-h-screen items-center justify-center bg-[#171717] text-sm text-white/40">Preparing your portal, no files were harmed in the process. ;)</main>
+  if(resetting)return <AccessMessage title="Your photos are being updated" message="The studio is clearing the previous uploads. This portal will refresh automatically when it is ready."/>
   if(error&&!data)return <AccessMessage title="Portal unavailable" message={error} onRetry={()=>void load(0)}/>
   if(!data)return <AccessMessage title="Portal unavailable" message="This project could not be loaded. Try: refresh this page or ask FICO MANA staff to reopen your private portal link." onRetry={()=>void load(0)}/>
 

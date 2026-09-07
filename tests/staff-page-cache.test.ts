@@ -45,7 +45,7 @@ function mount(cache: Cache) {
     },
     useCallback<T>(fn: T) { return fn },
   }
-  const hooks = loadTs<Hooks>('components/use-cached-page-read.ts', { react, '@/lib/staff-page-cache': cache })
+  const hooks = loadTs<Hooks>('components/use-cached-page-read.ts', { react, '@/lib/staff-page-cache': cache, '@/lib/editor-read-cache': {} })
   return {
     render(key = 'page:a') { cursor = 0; return hooks.useCachedPageRead<string[]>(key, []) },
     unmount() { cleanups.forEach(cleanup => cleanup()) },

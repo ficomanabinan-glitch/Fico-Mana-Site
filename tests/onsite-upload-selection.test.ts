@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { loadTs } from './helpers/load-ts.ts'
 
 const onsite = loadTs<typeof import('../components/onsite-upload.tsx')>('components/onsite-upload.tsx', {
+  '@/lib/onsite-refresh': {}, '@/components/ui/sheet': {},
   '@/components/use-cached-page-read': {},
   '@/components/admin-toast-provider': {}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': {},
   '@/lib/raw-upload-client': { uploadRawDirect: () => {} },

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import { readStaffPage, staffPageCacheGeneration, writeStaffPage } from '@/lib/staff-page-cache'
+import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
 
 /** Cache successful read results, not form drafts, File objects, or upload state. */
 export function useCachedPageRead<T>(key: string, fallback: T) {
@@ -56,11 +57,19 @@ export function usePageBackgroundSync(refresh: () => void | Promise<unknown>) {
       finally { inFlight = false }
     }
     const timer = setInterval(() => void run(), 3 * 60_000)
+    const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('fico-workflow-refresh')
+    if (channel) channel.onmessage = event => {
+      if (event.data !== 'photos-changed') return
+      invalidateEditorBatchCache(true)
+      lastStarted = 0
+      void run()
+    }
     window.addEventListener('focus', run)
     window.addEventListener('admin:db-synced', run)
     document.addEventListener('visibilitychange', run)
     return () => {
       clearInterval(timer)
+      channel?.close()
       window.removeEventListener('focus', run)
       window.removeEventListener('admin:db-synced', run)
       document.removeEventListener('visibilitychange', run)

@@ -116,14 +116,14 @@ export async function fetchEditorBatches({
   }
 }
 
-export function invalidateEditorBatchCache() {
+export function invalidateEditorBatchCache(preserveUi = false) {
   cacheGeneration += 1
   if (batchCache) batchCache = { ...batchCache, cachedAt: 0 }
   batchCache = null
   batchRequest = null
   synchronizedBatchRequest = null
   lastSynchronizedAt = 0
-  rememberedQueueUi = {
+  if (!preserveUi) rememberedQueueUi = {
     groupMode: 'day',
     dateSortOrder: 'desc',
     filter: 'ALL',

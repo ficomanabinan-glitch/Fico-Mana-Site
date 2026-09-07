@@ -6,6 +6,7 @@ const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/)
 const schema = rawUploadMetadataSchema.extend({
   version: z.literal(1), workspaceId: z.string().uuid(), actorId: z.string().uuid(), bookingId: id,
   rawFolderId: id, incomingFolderId: id, uploadKey: z.string().regex(/^[a-f0-9]{64}$/), expiresAt: z.number().int(),
+  generation: z.number().int().nonnegative().optional(),
 }).strict()
 export type RawUploadGrant = z.infer<typeof schema>
 

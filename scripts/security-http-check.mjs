@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { createServer } from 'node:net'
 import { fileURLToPath } from 'node:url'
 
-const port = 4100 + (process.pid % 1000)
+// Avoid probing an unrelated local app when a fixed test port is already occupied.
+const reservation = createServer()
+await new Promise((resolve, reject) => { reservation.once('error', reject); reservation.listen(0, '127.0.0.1', resolve) })
+const port = reservation.address().port
+await new Promise((resolve, reject) => reservation.close(error => error ? reject(error) : resolve()))
 const baseUrl = `http://127.0.0.1:${port}`
 const nextBin = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url))
 const child = spawn(process.execPath, [nextBin, 'start', '--hostname', '127.0.0.1', '--port', String(port)], {
@@ -87,7 +92,7 @@ try {
   assert.equal(anonymousStorageReview.status, 401)
   assertPrivateResponse(anonymousStorageReview, 'anonymous storage review')
 
-  for (const action of ['upload-session', 'complete-file']) {
+  for (const action of ['upload-session', 'complete-file', 'reset', 'index']) {
     const endpoint = `${baseUrl}/api/editor-workflow/raw/FM-SYNTHETIC/${action}`
     const anonymous = await fetch(endpoint, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://admin.ficomana.com' }, body: '{}',

@@ -1,7 +1,8 @@
 // Read-only visual fixture: renders the real component with synthetic records.
 // It never connects to production, uploads files, or invokes staff actions.
 import { createServer } from 'node:http'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import React, { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -12,7 +13,8 @@ import { loadTs } from '../tests/helpers/load-ts.ts'
 async function main() {
 const root = process.cwd()
 const styles = await postcss([tailwind({ base: root })]).process(readFileSync('app/globals.css', 'utf8'), { from: resolve('app/globals.css') })
-const builtCss = readdirSync('.next/static/chunks').filter(name=>name.endsWith('.css')).map(name=>readFileSync(resolve('.next/static/chunks',name),'utf8')).join('\n')
+const staticRoot = existsSync('.next/static/immutable/chunks') ? '.next/static/immutable' : '.next/static'
+const builtCss = readdirSync(`${staticRoot}/chunks`).filter(name=>name.endsWith('.css')).map(name=>readFileSync(resolve(`${staticRoot}/chunks`,name),'utf8')).join('\n')
 const fontCss = [...builtCss.matchAll(/@font-face\{font-family:Geist[^}]*\}/g)].map(match=>match[0].replaceAll('../media/','/media/')).join('\n')
 const fontFiles = new Set([...fontCss.matchAll(/\/media\/([a-zA-Z0-9._-]+\.woff2)/g)].map(match=>match[1]))
 const ui = loadTs('lib/admin-ui.ts', {})
@@ -26,7 +28,7 @@ const onsiteReact = { ...React, useState(value: unknown) {
     }] } }
     return [index === 2 ? schedule : index === 3 ? false : value, () => {}]
   }, useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn, useRef: (value:unknown)=>({current:value}) }
-const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initialDate:string}> }>('components/onsite-upload.tsx', {
+const onsiteStubs = {
   react: onsiteReact,
   '@/components/use-cached-page-read': {
     useCachedPageRead: () => { const [data,setData] = onsiteReact.useState(null); const [loading,setLoading] = onsiteReact.useState(true); return [data,setData,loading,setLoading,loading] },
@@ -34,8 +36,12 @@ const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initial
   },
   '@/components/admin-toast-provider': {useAdminToast:()=>({})}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': ui,
   '@/lib/raw-upload-client': {}, '@/lib/raw-upload-queue': {},
-})
+  '@/lib/onsite-refresh': {}, '@/components/ui/sheet': { Sheet: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null, SheetFooter: () => null },
+}
+const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initialDate:string}> }>('components/onsite-upload.tsx', onsiteStubs)
+const { default: BeforeOnsiteUpload } = loadTs<{ default: React.ComponentType<{initialDate:string}> }>('components/onsite-upload.tsx', onsiteStubs, execFileSync('git',['show','HEAD:components/onsite-upload.tsx'],{encoding:'utf8'}))
 const { default: EditorQueue } = loadTs<{ default: React.ComponentType<{basePath:string}> }>('components/editor-queue.tsx', {
+  '@/components/use-cached-page-read': { usePageBackgroundSync() {} },
   '@/components/workspace-refresh': { WorkspaceRefreshButton: () => createElement('button', {className:'rounded-control border border-white/10 px-3 py-2'}, 'Refresh') },
   react: { ...React, useState: (value:unknown) => [typeof value === 'function' ? value() : value, () => {}], useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn },
   'next/link': (props:React.AnchorHTMLAttributes<HTMLAnchorElement>) => createElement('a',props),
@@ -49,11 +55,11 @@ const { default: EditorQueue } = loadTs<{ default: React.ComponentType<{basePath
 })
 createServer((request,response)=>{
   const font = request.url?.startsWith('/media/') ? request.url.slice(7) : ''
-  if(fontFiles.has(font)) { response.writeHead(200, {'Content-Type':'font/woff2'}); response.end(readFileSync(resolve('.next/static/media',font))); return }
+  if(fontFiles.has(font)) { response.writeHead(200, {'Content-Type':'font/woff2'}); response.end(readFileSync(resolve(`${staticRoot}/media`,font))); return }
   if(request.url==='/styles.css') { response.writeHead(200, {'Content-Type':'text/css','Cache-Control':'no-store'}); response.end(fontCss+'\n'+styles.css); return }
-  if(request.url!=='/' && request.url!=='/queue') { response.writeHead(404); response.end(); return }
+  if(request.url!=='/' && request.url!=='/before' && request.url!=='/queue') { response.writeHead(404); response.end(); return }
   stateIndex=0
-  const html=renderToStaticMarkup(request.url==='/queue' ? createElement(EditorQueue,{basePath:'/editor'}) : createElement(OnsiteUpload,{initialDate:'2026-09-08'}))
+  const html=renderToStaticMarkup(request.url==='/queue' ? createElement(EditorQueue,{basePath:'/editor'}) : createElement(request.url==='/before' ? BeforeOnsiteUpload : OnsiteUpload,{initialDate:'2026-09-08'}))
   response.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'})
   response.end(`<!doctype html><html class="dark" style="--font-geist-sans:Geist;--font-geist-mono:'Geist Mono';--font-cormorant:Georgia"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Onsite mobile spacing — synthetic preview</title><link rel="stylesheet" href="/styles.css"></head><body class="admin-console font-sans antialiased"><main class="w-full min-w-0 p-5 md:p-8">${html}</main></body></html>`)
 }).listen(4282,'127.0.0.1',()=>console.log('Read-only onsite UI fixture: http://127.0.0.1:4282'))

@@ -10,6 +10,7 @@ import { scanUpload } from '@/lib/security/upload-scanner'
 import { MAX_RAW_UPLOAD_BYTES, RawUploadError, rawUploadMetadataSchema, validateRawSessionUrl } from '@/lib/raw-upload-contract'
 import { signRawUploadGrant, verifyRawUploadGrant } from '@/lib/raw-upload-grant'
 import type { RawUploadMetadata } from '@/lib/raw-upload-contract'
+import { rawUploadGeneration } from '@/lib/raw-upload-generation'
 
 type Context = { workspaceId: string; bookingId: string; actorId: string }
 const sha256 = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
@@ -30,12 +31,13 @@ export async function startRawUpload(context: Context, supplied: RawUploadMetada
   metadata.fileName = normalizeDriveFolderName(metadata.fileName)
   const admin = adminClient()
   const { hierarchy } = await ensureBookingFolders(admin, context.workspaceId, context.bookingId)
+  const generation = await rawUploadGeneration(admin, context.workspaceId, context.bookingId)
   // Quarantine is inside Drive, not Vercel Blob. Pending files are not exposed in the client portal.
   const incoming = await findOrCreateFolder(hierarchy.raw.id, '_UPLOADS')
-  const uploadKey = sha256(JSON.stringify([context.workspaceId, context.bookingId, metadata.fileName, metadata.fileSize, metadata.checksum]))
+  const uploadKey = sha256(JSON.stringify([context.workspaceId, context.bookingId, metadata.fileName, metadata.fileSize, metadata.checksum, generation]))
   const expiresAt = Date.now() + 60 * 60 * 1000
   const grant = signRawUploadGrant({ ...context, ...metadata, version: 1,
-    rawFolderId: hierarchy.raw.id, incomingFolderId: incoming.id, uploadKey, expiresAt })
+    rawFolderId: hierarchy.raw.id, incomingFolderId: incoming.id, uploadKey, expiresAt, generation })
   const candidates = [...await listDriveFiles(hierarchy.raw.id), ...await listDriveFiles(incoming.id)]
   const completed = candidates.find(file => file.appProperties?.rawUploadKey === uploadKey &&
     file.appProperties?.bookingId === context.bookingId && file.appProperties?.purpose === 'raw' &&
@@ -44,7 +46,7 @@ export async function startRawUpload(context: Context, supplied: RawUploadMetada
   if (completed) return { grant, expiresAt, mimeType, driveFileId: completed.id }
   const uploadUrl = validateRawSessionUrl(await createDriveResumableUpload({
     destinationFolderId: incoming.id, bookingId: context.bookingId, relativePath: `RAW/${metadata.fileName}`,
-    ...metadata, mimeType, purpose: 'raw', uploadKey, browserOrigin,
+    ...metadata, mimeType, purpose: 'raw', uploadKey, browserOrigin, rawGeneration: generation,
   }))
   return { grant, expiresAt, mimeType, uploadUrl }
 }
@@ -54,6 +56,8 @@ export async function completeRawUpload(context: Context, token: string, driveFi
   const grant = verifyRawUploadGrant(token, context.workspaceId, context.actorId, context.bookingId)
   const admin = adminClient()
   const { hierarchy, booking, batch } = await ensureBookingFolders(admin, context.workspaceId, context.bookingId)
+  const generation = await rawUploadGeneration(admin, context.workspaceId, context.bookingId)
+  if (generation !== (grant.generation || 0)) throw new RawUploadError('These uploads were cleared. Try: refresh the client and select the correct photos again.', 409)
   if (hierarchy.raw.id !== grant.rawFolderId) {
     throw new RawUploadError('The client folder changed during upload. Try: refresh the client folder and select the photo again.', 409)
   }
@@ -83,6 +87,9 @@ export async function completeRawUpload(context: Context, token: string, driveFi
   })
   if (auditError) throw new RawUploadError('The upload check could not be saved. Try: retry the failed file; the original is already in Drive.', 503)
   // Moving the new verified upload is not a replacement of any existing original.
+  if (await rawUploadGeneration(admin, context.workspaceId, context.bookingId) !== generation) {
+    throw new RawUploadError('These uploads were cleared. Try: refresh the client and select the correct photos again.', 409)
+  }
   const promoted = await promoteRawUpload(file, grant.incomingFolderId, grant.rawFolderId)
   let thumbnailReference: string | null = promoted.thumbnailLink || null
   // Reuse the existing preview bucket; the full-resolution original remains exclusively in Drive.
@@ -98,6 +105,7 @@ export async function completeRawUpload(context: Context, token: string, driveFi
     } catch { /* Camera formats/preview outages can still use Google's generated thumbnail. */ }
   }
   const { data: gallery, error } = await admin.from('gallery_files').upsert({
+    upload_generation: generation,
     workspace_id: context.workspaceId, booking_id: context.bookingId, client_id: booking.client_id,
     drive_file_id: promoted.id, file_name: promoted.name, mime_type: photoMime(promoted.name),
     file_size: grant.fileSize, checksum: grant.checksum,

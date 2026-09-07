@@ -285,12 +285,14 @@ export async function upsertDriveFile(input: {
   mimeType: string
   checksum: string
   purpose?: 'raw' | 'deliverable' | 'print-manifest'
+  rawGeneration?: number
   data: Buffer
 }): Promise<{ file: DriveFile; duplicate: boolean }> {
   const current = (await listDriveFiles(input.destinationFolderId)).find(
     (file) =>
       file.appProperties?.bookingId === input.bookingId &&
-      file.appProperties?.relativePath === input.relativePath,
+      file.appProperties?.relativePath === input.relativePath &&
+      (input.purpose !== 'raw' || Number(file.appProperties?.rawGeneration || 0) === (input.rawGeneration || 0)),
   )
   if (current?.appProperties?.checksum === input.checksum) return { file: current, duplicate: true }
 
@@ -305,6 +307,7 @@ export async function upsertDriveFile(input: {
         relativePath: input.relativePath,
         checksum: input.checksum,
         purpose: input.purpose || 'deliverable',
+        ...(input.purpose === 'raw' ? { rawGeneration: String(input.rawGeneration || 0) } : {}),
       },
     }),
   )
@@ -389,6 +392,7 @@ export async function createDriveResumableUpload(input: {
   checksum: string
   purpose?: 'raw' | 'deliverable'
   uploadKey?: string
+  rawGeneration?: number
   browserOrigin?: string
 }): Promise<string> {
   const origin = input.browserOrigin === undefined ? undefined : validateDriveUploadOrigin(input.browserOrigin)
@@ -401,7 +405,7 @@ export async function createDriveResumableUpload(input: {
       relativePath: input.relativePath,
       checksum: input.checksum,
       purpose: input.purpose || 'deliverable',
-      ...(input.purpose === 'raw' ? { rawUploadKey: input.uploadKey || '', rawVerification: 'pending' } : {}),
+      ...(input.purpose === 'raw' ? { rawUploadKey: input.uploadKey || '', rawVerification: 'pending', rawGeneration: String(input.rawGeneration || 0) } : {}),
     },
   }
   const filePath = input.existingDriveFileId

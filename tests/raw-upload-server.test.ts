@@ -22,6 +22,7 @@ function fixture(options: { invalidContent?: boolean; scanRejected?: boolean; sc
   const calls: string[] = []
   const gallery = new Map<string, Record<string, unknown>>()
   const previews: Buffer[] = []
+  let generation = 0
   const admin = { storage: { from(bucket: string) { assert.equal(bucket, 'fico-mana-thumbnails'); return {
     async upload(_path: string, preview: Buffer) { previews.push(preview); return { error: null } },
   } } }, from(table: string) { return {
@@ -31,6 +32,7 @@ function fixture(options: { invalidContent?: boolean; scanRejected?: boolean; sc
     } } } } },
   } } }
   const server = loadTs<typeof import('../lib/raw-upload-server.ts')>('lib/raw-upload-server.ts', {
+    '@/lib/raw-upload-generation': { rawUploadGeneration: async () => generation },
     sharp,
     '@/lib/supabase/admin': { getSupabaseAdmin: () => admin },
     '@/lib/editor-workflow': { ensureBookingFolders: async (_admin: unknown, workspace: string, booking: string) => {
@@ -67,7 +69,7 @@ function fixture(options: { invalidContent?: boolean; scanRejected?: boolean; sc
       promoteRawUpload: async () => { calls.push('promote'); file!.parents = ['raw']; file!.appProperties!.rawVerification = 'verified'; return file },
     },
   })
-  return { server, calls, gallery, metadata, previews, get file() { return file! } }
+  return { server, calls, gallery, metadata, previews, setGeneration(value:number) { generation=value }, get file() { return file! } }
 }
 
 test('signed raw upload permissions bind staff, workspace, booking, metadata and expiry', () => {
@@ -115,6 +117,15 @@ test('forged permissions and foreign files are refused before file content acces
   const unauthorized = fixture({ forbiddenBooking: true })
   await assert.rejects(unauthorized.server.startRawUpload(context, unauthorized.metadata, 'https://admin.ficomana.com'))
   assert.deepEqual(unauthorized.calls, ['authorize-booking'])
+})
+
+test('a grant issued before Delete Files cannot promote or re-index its old upload', async () => {
+  const f = fixture()
+  const session = await f.server.startRawUpload(context, f.metadata, 'https://admin.ficomana.com')
+  f.setGeneration(1)
+  await assert.rejects(f.server.completeRawUpload(context, session.grant, f.file.id), /cleared/)
+  assert.equal(f.gallery.size, 0)
+  assert.ok(!f.calls.includes('promote') && !f.calls.includes('read-bytes'))
 })
 
 test('portal previews are small separate derivatives and never replace original Drive bytes', async () => {
