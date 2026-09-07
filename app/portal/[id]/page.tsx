@@ -58,7 +58,7 @@ export default function ClientPortalPage(){
 
   const balance=data?Math.max(0,data.booking.price-data.booking.amountPaid):0
 
-  if(loading)return <main className="flex min-h-screen items-center justify-center bg-[#171717] text-sm text-white/40">Loading your FICO MANA project…</main>
+  if(loading)return <main className="flex min-h-screen items-center justify-center bg-[#171717] text-sm text-white/40">Preparing your Portal, No files were harmed in the process.</main>
   if(error&&!data)return <AccessMessage title="Portal unavailable" message={error} onRetry={()=>void load(0)}/>
   if(!data)return <AccessMessage title="Portal unavailable" message="This project could not be loaded. Try: refresh this page or ask FICO MANA staff to reopen your private portal link." onRetry={()=>void load(0)}/>
 
