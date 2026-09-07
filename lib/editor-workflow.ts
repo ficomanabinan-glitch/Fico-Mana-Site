@@ -20,6 +20,8 @@ import { sendEditedPhotosEmail } from '@/lib/email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
 import { safeMetadata } from '@/lib/security/audit-metadata'
+import { assertGraduationBooking, graduationBookingIds, graduationPackageIds } from '@/lib/package-workflow-server'
+import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -157,6 +159,8 @@ async function audit(
 }
 
 async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
+  const eligiblePackageIds = await graduationPackageIds(admin)
+  if (!eligiblePackageIds.length) return []
   const rows: Record<string, unknown>[] = []
   for (let offset = 0; ; offset += 1000) {
     const { data, error } = await admin
@@ -165,6 +169,7 @@ async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
         'id,workspace_id,client_id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,booking_status,payment_status,price,deposit_amount,selection_limit,raw_photo_status,raw_photo_link,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_link,edited_photo_delivered_at',
       )
       .eq('workspace_id', workspaceId)
+      .in('package_id', eligiblePackageIds)
       .order('booking_date', { ascending: false })
       .range(offset, offset + 999)
     if (error) throw new Error(error.message)
@@ -275,7 +280,7 @@ export async function getBatchList(
   const bookingMap = new Map(bookings.map((booking) => [String(booking.id), booking]))
 
   return (batches || []).map((batch) => {
-    const batchJobs = (jobs || []).filter((job) => job.batch_id === batch.id) as Array<Record<string, unknown> & { status: EditingJobStatus }>
+    const batchJobs = (jobs || []).filter((job) => job.batch_id === batch.id && bookingMap.has(String(job.booking_id))) as Array<Record<string, unknown> & { status: EditingJobStatus }>
     const counts = batchCounts(batchJobs)
     return {
       id: String(batch.display_id),
@@ -303,7 +308,7 @@ export async function getBatchList(
       }),
       driveDayFolderUrl: String(batch.drive_day_folder_url || driveFolderUrl(batch.drive_day_folder_id)),
     }
-  })
+  }).filter(batch => batch.totalClients > 0)
 }
 
 /**
@@ -320,6 +325,8 @@ export async function getOnsiteBatchSummary(
 ) {
   const admin = adminClient()
   if (synchronize) await syncEditorWorkflow(workspaceId)
+  const eligiblePackageIds = await graduationPackageIds(admin)
+  if (!eligiblePackageIds.length) return null
 
   const { data: batches, error: batchesError } = await admin
     .from('editing_batches')
@@ -347,6 +354,8 @@ export async function getOnsiteBatchSummary(
     admin
       .from('bookings')
       .select('id,customer_name,package_name,booking_time,booking_status')
+      .eq('workspace_id', workspaceId)
+      .in('package_id', eligiblePackageIds)
       .in('id', bookingIds),
     admin
       .from('gallery_files')
@@ -451,7 +460,9 @@ export async function getBatchDetail(
     .eq('batch_id', batch.id)
     .order('updated_at', { ascending: false })
   if (jobsError) throw new Error(jobsError.message)
-  const bookingIds = (jobs || []).map((job) => String(job.booking_id))
+  const eligibleBookingIds = new Set(listEntry.clients.map(client => client.bookingId))
+  const eligibleJobs = (jobs || []).filter(job => eligibleBookingIds.has(String(job.booking_id)))
+  const bookingIds = eligibleJobs.map((job) => String(job.booking_id))
   if (!bookingIds.length) return { ...listEntry, jobs: [], auditLogs: [] }
 
   const [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult] = await Promise.all([
@@ -509,7 +520,7 @@ export async function getBatchDetail(
 
   return {
     ...listEntry,
-    jobs: (jobs || []).map((job) => {
+    jobs: eligibleJobs.map((job) => {
       const bookingId = String(job.booking_id)
       const booking = bookingMap.get(bookingId)
       const selection = selectionMap.get(bookingId)
@@ -751,6 +762,7 @@ export async function resolveMatchReview(
 }
 
 async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+  await assertGraduationBooking(admin, bookingId, workspaceId)
   const { data: existing, error } = await admin
     .from('client_portals')
     .select('*')
@@ -768,6 +780,7 @@ async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingI
 }
 
 async function ensureBookingFolders(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+  await assertGraduationBooking(admin, bookingId, workspaceId)
   let { data: booking, error } = await admin
     .from('bookings')
     .select('id,workspace_id,client_id,customer_name,booking_date,selection_limit')
@@ -876,6 +889,7 @@ export async function reconcileBookingFolders(
   repair = false,
 ) {
   const admin = adminClient()
+  await assertGraduationBooking(admin, bookingId, workspaceId)
   if (repair) {
     const [provisioningReset, folderReset] = await Promise.all([
       admin
@@ -1717,8 +1731,10 @@ export async function prepareBatchDownload(
     .eq('batch_id', batch.id)
     .in('status', ['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'])
   if (error) throw new Error(error.message)
+  const allowedBookingIds = await graduationBookingIds(admin, workspaceId, (readyJobs || []).map(job => String(job.booking_id)))
   const now = Date.now()
   const jobs = (readyJobs || []).filter((job) => {
+    if (!allowedBookingIds.has(String(job.booking_id))) return false
     if (allowOverride) return true
     const lockedElsewhere =
       job.download_locked_by !== actorId &&
@@ -1893,6 +1909,8 @@ export async function createBatchUploadRun(
   if (!uniqueIds.length) throw new Error('Choose at least one client folder to upload.')
   if (uniqueIds.length !== clients.length) throw new Error('Each client folder may appear only once per upload run.')
   if (uniqueIds.length > 500) throw new Error('One upload run is limited to 500 client folders.')
+  const eligibleIds = await graduationBookingIds(admin, workspaceId, uniqueIds)
+  if (eligibleIds.size !== uniqueIds.length) throw new GraduationWorkflowOnlyError()
   const expectedByBooking = new Map(clients.map((client) => [client.bookingId, client.expectedFiles]))
   const { data: jobs, error } = await admin
     .from('editing_jobs')

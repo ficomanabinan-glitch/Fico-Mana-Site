@@ -1,6 +1,7 @@
 import { PassThrough, Readable } from 'node:stream'
 import archiver from 'archiver'
 import { NextRequest, NextResponse } from 'next/server'
+import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { requireWorkflowAuth } from '@/lib/auth-api'
 import { canUseWorkflow, type WorkflowCapability } from '@/lib/auth/workflow'
 import {
@@ -521,6 +522,7 @@ async function handle(request: NextRequest, path: string[]) {
     }
     return json({ error: 'Unknown editor workflow endpoint.' }, 404)
   } catch (error) {
+    if (error instanceof GraduationWorkflowOnlyError) return json({ error: error.message, requestId }, 409)
     console.error(`Editor workflow ${request.method} /${path.join('/')} [${requestId}]:`, error)
     return errorResponse(error, 'Editor workflow request failed.', requestId)
   }

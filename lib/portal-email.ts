@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import { sendEmail } from '@/lib/email'
 import { portalUrl } from '@/lib/client-portal'
+import { packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
 
 export async function sendPortalAccessIfNeeded(
   admin: SupabaseClient,
@@ -16,7 +17,7 @@ export async function sendPortalAccessIfNeeded(
       .maybeSingle(),
     admin
       .from('bookings')
-      .select('id,customer_name,customer_email,booking_date,booking_time,package_name')
+      .select('id,customer_name,customer_email,booking_date,booking_time,package_name,package_id')
       .eq('id', bookingId)
       .maybeSingle(),
   ])
@@ -24,6 +25,7 @@ export async function sendPortalAccessIfNeeded(
   if (!portal || !booking || portal.status !== 'active' || portal.access_email_sent_at) {
     return { sent: false as const }
   }
+  if (!await packageUsesGraduationWorkflow(admin, String(booking.package_id))) return { sent: false as const }
 
   const recipient = String(booking.customer_email || '').trim()
   if (!recipient || isPlaceholderCustomerEmail(recipient)) {

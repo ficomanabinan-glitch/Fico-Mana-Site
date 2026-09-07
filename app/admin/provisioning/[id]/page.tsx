@@ -9,6 +9,7 @@ import { adminInput, adminPage, adminSelect } from '@/lib/admin-ui'
 
 type Snapshot = {
   bookingId: string
+  required?: boolean
   status: string
   driveClientFolderUrl?: string
   clientPortalUrl?: string
@@ -187,13 +188,13 @@ export default function ProvisioningBookingPage() {
         <div className="flex flex-wrap gap-2">
           {snapshot?.driveClientFolderUrl ? <a href={snapshot.driveClientFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-[10px] font-bold uppercase hover:border-white/30">Drive <ExternalLink className="w-3.5 h-3.5" /></a> : null}
           {snapshot?.clientPortalUrl ? <a href={snapshot.clientPortalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-[10px] font-bold uppercase hover:border-white/30">Client Portal <ExternalLink className="w-3.5 h-3.5" /></a> : null}
-          <button disabled={busy} onClick={retry} className="inline-flex items-center gap-1.5 bg-primary px-3 py-2 text-[10px] font-bold uppercase disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />Retry / Reconcile</button>
+          <button disabled={busy || snapshot?.required === false} onClick={retry} className="inline-flex items-center gap-1.5 bg-primary px-3 py-2 text-[10px] font-bold uppercase disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />{snapshot?.required === false ? 'Portal not required' : 'Retry / Reconcile'}</button>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Provisioning</p><p className="font-semibold mt-2">{snapshot?.status || 'NOT_STARTED'}</p></div>
-        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Portal</p><p className="font-semibold mt-2 capitalize">{snapshot?.clientPortalStatus || 'Not created'}</p></div>
+        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Provisioning</p><p className="font-semibold mt-2">{snapshot?.required === false ? 'Not required' : snapshot?.status || 'NOT_STARTED'}</p></div>
+        <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Portal</p><p className="font-semibold mt-2 capitalize">{snapshot?.required === false ? 'Not required' : snapshot?.clientPortalStatus || 'Not created'}</p></div>
         <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Confirmed payments</p><p className="font-semibold mt-2">₱{Number(snapshot?.confirmedPayments || 0).toFixed(2)}</p></div>
         <div className="border border-white/10 bg-white/[0.02] p-4"><p className="text-[9px] uppercase tracking-wider text-white/40">Required deposit</p><p className="font-semibold mt-2">₱{Number(snapshot?.requiredDeposit || 0).toFixed(2)}</p></div>
       </div>

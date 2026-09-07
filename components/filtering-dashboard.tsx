@@ -19,6 +19,8 @@ import {
   Upload,
 } from 'lucide-react'
 import { getBookings, type Booking } from '@/lib/data-store'
+import { fetchManagedPackages } from '@/lib/package-manager-cache'
+import { usesGraduationWorkflow } from '@/lib/package-workflow'
 import {
   getRawPhotoWorkflowStatus,
   isRawPhotoWorkflowBooking,
@@ -81,8 +83,9 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
-      const data = await getBookings()
-      setBookings(data)
+      const [data, packages] = await Promise.all([getBookings(), fetchManagedPackages()])
+      const eligibleIds = new Set(packages.filter(pkg => usesGraduationWorkflow(pkg.category)).map(pkg => pkg.id))
+      setBookings(data.filter(booking => eligibleIds.has(booking.packageId)))
     } catch (err) {
       console.error(err)
       if (!silent) toast.error('Sync failed', 'Could not load filtering dashboard data.')

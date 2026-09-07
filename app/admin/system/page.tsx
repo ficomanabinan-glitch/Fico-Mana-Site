@@ -106,7 +106,7 @@ export default function SystemPage() {
           <h2 className="mt-1 text-sm font-semibold">Google Drive folder and portal settings</h2>
           <p className="mt-1 text-xs text-white/40">Connect the account, choose the root folder, and manage live client portals.</p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-3">
+        <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <ShootStorageCleanup />
           <Link href="/admin/provisioning" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
             Manage Google Drive <ExternalLink className="size-3.5" />

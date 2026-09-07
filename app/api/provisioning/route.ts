@@ -5,6 +5,7 @@ import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { secureErrorResponse } from '@/lib/security/error-response'
+import { graduationPackageIds } from '@/lib/package-workflow-server'
 
 // Internal project folders are intentionally separate from client-facing gallery links.
 export async function GET() {
@@ -14,11 +15,13 @@ export async function GET() {
   try {
     const admin = getSupabaseAdmin()
     if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
+    const eligiblePackageIds = await graduationPackageIds(admin)
 
     const [{ data: bookings, error: bookingsError }, { data: states }, { data: portals }, { data: settings }] = await Promise.all([
       admin
         .from('bookings')
         .select('id,customer_name,customer_email,booking_date,package_name,booking_status,payment_status,deposit_amount,price,drive_link,created_at')
+        .in('package_id', eligiblePackageIds.length ? eligiblePackageIds : ['__no_graduation_packages__'])
         .order('booking_date', { ascending: true }),
       admin.from('booking_provisioning').select('*'),
       admin.from('client_portals').select('id,public_id,booking_id,status,expires_at,created_at,last_accessed_at'),

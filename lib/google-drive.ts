@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { decryptGoogleRefreshToken, googleOAuthClientCredentials } from '@/lib/google-oauth'
 import { googleThumbnailUrl, readBoundedResponse } from '@/lib/security/outbound-url'
+import { assertGraduationBooking } from '@/lib/package-workflow-server'
 
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3'
@@ -473,6 +474,7 @@ export async function ensureShootHierarchy(input: {
   selectionLimit?: number
   existingClientFolderId?: string | null
 }) {
+  await assertGraduationBooking(input.admin, input.bookingId)
   const root = await resolveDriveRootFolder(input.admin)
   const date = new Date(`${input.shootDate}T00:00:00`)
   if (Number.isNaN(date.getTime())) throw new Error('A valid shoot date is required for Drive provisioning.')

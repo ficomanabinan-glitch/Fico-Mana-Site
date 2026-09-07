@@ -9,6 +9,8 @@ import { isAllowedRequestOrigin } from '../lib/security/origin.ts'
 import { validateProductionSecurityEnvironment } from '../lib/security/environment.ts'
 import { validateReceiptImageContent, detectFileSignature } from '../lib/security/file-validation.ts'
 import { escapeEmailText, safeEmailUrl, renderTemplate } from '../lib/email-templates.ts'
+import * as packageWorkflow from '../lib/package-workflow.ts'
+import * as packageWorkflowServer from '../lib/package-workflow-server.ts'
 
 const json = { NextResponse: { json: Response.json } }
 const noStore = { privateNoStoreHeaders: () => ({ 'Cache-Control': 'private, no-store' }), rejectUntrustedMutation: () => null }
@@ -112,6 +114,8 @@ function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolea
     '@/lib/booking-provisioning': {}, '@/lib/security/file-validation': {},
     '@/lib/supabase/admin': { getSupabaseAdmin: () => db },
     '@/lib/security/audit-metadata': { safeMetadata },
+    '@/lib/package-workflow': packageWorkflow,
+    '@/lib/package-workflow-server': packageWorkflowServer,
   })
   return { workflow, driveReads, db }
 }

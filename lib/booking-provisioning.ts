@@ -6,11 +6,13 @@ import { portalUrl } from '@/lib/client-portal'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { sendPortalAccessIfNeeded } from '@/lib/portal-email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { assertGraduationBooking, packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
 
 export type ProvisioningStatus = 'NOT_STARTED' | 'PROVISIONING' | 'ACTIVE' | 'PARTIAL_FAILURE' | 'FAILED'
 
 export type ProvisioningSnapshot = {
   bookingId: string
+  required?: boolean
   status: ProvisioningStatus
   driveRootFolderId?: string
   driveMonthFolderId?: string
@@ -98,6 +100,7 @@ async function loadBooking(admin: SupabaseClient, bookingId: string) {
 }
 
 async function ensurePortal(admin: SupabaseClient, bookingId: string, actor: Actor) {
+  await assertGraduationBooking(admin, bookingId)
   const { data: existing } = await admin
     .from('client_portals')
     .select('*')
@@ -145,6 +148,10 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
   if (!admin) return null
   const booking = await loadBooking(admin, bookingId)
   const confirmedPayments = await totalConfirmedPayments(admin, booking)
+  if (!await packageUsesGraduationWorkflow(admin, booking.packageId)) return {
+    bookingId, required: false, status: 'NOT_STARTED', confirmedPayments,
+    requiredDeposit: Number(booking.depositAmount || 0),
+  }
   const row = await getProvisioningRow(admin, bookingId)
   const { data: portal } = await admin
     .from('client_portals')
@@ -179,11 +186,13 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
 
   const booking = await loadBooking(admin, bookingId)
-  const row = await getProvisioningRow(admin, bookingId)
+  const requiresPhotoWorkflow = await packageUsesGraduationWorkflow(admin, booking.packageId)
+  const row = requiresPhotoWorkflow ? await getProvisioningRow(admin, bookingId) : null
   const confirmedPayments = await totalConfirmedPayments(admin, booking)
   const requiredDeposit = Math.max(0, Number(booking.depositAmount || 0))
 
   if (requiredDeposit > 0 && confirmedPayments < requiredDeposit) {
+    if (!requiresPhotoWorkflow) return null
     await updateProvisioning(admin, bookingId, { status: 'NOT_STARTED', last_error: null })
     await audit(admin, bookingId, 'deposit_threshold_not_reached', actor, {
       metadata: { confirmedPayments, requiredDeposit },
@@ -213,6 +222,10 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   } else {
     await admin.from('bookings').update({ confirmed_at: now }).eq('id', bookingId).is('confirmed_at', null)
   }
+
+  // Payment and booking confirmation still apply to onsite packages. Only remote
+  // photo production is skipped, before any provisioning/portal/folder creation.
+  if (!requiresPhotoWorkflow || !row) return null
 
   await updateProvisioning(admin, bookingId, {
     status: 'PROVISIONING',
@@ -306,6 +319,7 @@ export async function disableClientPortal(bookingId: string, actor: Actor = {}) 
 export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const admin = getSupabaseAdmin()
   if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
+  await assertGraduationBooking(admin, bookingId)
   const now = new Date()
   const { data: portal, error: portalError } = await admin
     .from('client_portals')
