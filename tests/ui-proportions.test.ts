@@ -37,3 +37,15 @@ test('operational metadata uses shared readable tokens, and requested filler lab
   for (const path of ['app/admin/layout.tsx','components/editor-portal-shell.tsx']) assert.doesNotMatch(source(path), /Secure production workspace/)
   assert.doesNotMatch(source('components/client-photo-selection.tsx'), /Uses global preference/)
 })
+
+test('onsite mobile details stack and action buttons have equal columns and touch height', () => {
+  const component = source('components/onsite-upload.tsx')
+  assert.match(component, /<dl className="mt-4 grid gap-3 text-small/)
+  assert.match(component, /<dt>Uploaded files<\/dt>/)
+  assert.match(component, /<dt>Last upload<\/dt>/)
+  assert.match(component, /className="onsite-actions"/)
+  assert.match(component, /AlertTriangle className="mt-0\.5 size-4 shrink-0"/)
+  const css = source('app/globals.css')
+  assert.match(css, /\.onsite-actions \{[^}]*repeat\(2, minmax\(0, 1fr\)\)/)
+  assert.match(css, /\.onsite-actions > button \{[^}]*min-height: 3rem/)
+})

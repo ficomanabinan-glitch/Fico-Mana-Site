@@ -238,6 +238,18 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .onsite-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(3rem, 1fr);
+    gap: var(--fico-space-3);
+    align-items: stretch;
+  }
+
+  @media (min-width: 640px) {
+    .onsite-actions { display: flex; flex-wrap: wrap; }
+  }
+
   .border-brutal {
     @apply border border-border;
   }
@@ -415,6 +427,23 @@
 
 .client-portal {
   --radius: var(--fico-radius-control);
+}
+
+/* Specific mobile action sizing must win over shared button utilities. */
+.onsite-actions > button {
+  min-width: 0;
+  width: 100%;
+  min-height: 3rem;
+  justify-content: center;
+  gap: var(--fico-space-2);
+  white-space: normal;
+  line-height: 1.4;
+  text-align: center;
+  padding-inline: var(--fico-space-2);
+}
+.onsite-actions svg { flex-shrink: 0; }
+@media (min-width: 640px) {
+  .onsite-actions > button { width: auto; padding-inline: var(--fico-space-3); }
 }
 
 /* Keep desktop console navigation available while long pages scroll. */

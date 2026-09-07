@@ -279,28 +279,29 @@ export default function OnsiteUpload({
             return (
               <article key={job.bookingId} className={`${adminPanel} p-card`}>
                 <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] 2xl:items-center">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-card-title font-semibold tracking-heading">{job.customerName}</h2>
                       <span className={`text-caption font-semibold uppercase ${driveTone}`}>{driveStatus}</span>
                     </div>
-                    <p className="mt-1 text-caption text-white/40">
-                      {date} · {job.bookingTime} · {job.packageName}
-                    </p>
-                    <p className="mt-1 font-mono text-caption text-white/25">{job.bookingId}</p>
-                    <div className="mt-3 flex flex-wrap gap-4 text-caption text-white/40">
-                      <span>
-                        Uploaded files: <strong className="text-white/70">{job.galleryCount}</strong>
-                      </span>
-                      <span>
-                        Last upload:{' '}
-                        <strong className="text-white/70">
+                    <div className="mt-2 space-y-1 text-small text-white/40">
+                      <p>{date} · {job.bookingTime}</p>
+                      <p>{job.packageName}</p>
+                    </div>
+                    <p className="mt-2 font-mono text-caption text-white/25">{job.bookingId}</p>
+                    <dl className="mt-4 grid gap-3 text-small text-white/40 sm:flex sm:flex-wrap sm:gap-x-6">
+                      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3">
+                        <dt>Uploaded files</dt><dd className="text-right font-semibold tabular-nums text-white/70">{job.galleryCount}</dd>
+                      </div>
+                      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3">
+                        <dt>Last upload</dt>
+                        <dd className="min-w-0 text-right font-semibold text-white/70">
                           {job.lastUploadAt
                             ? new Date(job.lastUploadAt).toLocaleString('en-PH')
                             : 'Not uploaded yet'}
-                        </strong>
-                      </span>
-                    </div>
+                        </dd>
+                      </div>
+                    </dl>
 
                     {state ? (
                       <div
@@ -383,14 +384,14 @@ export default function OnsiteUpload({
                     ) : null}
 
                     {job.lastError ? (
-                      <p className="mt-3 inline-flex items-center gap-1.5 text-caption text-red-300">
-                        <AlertTriangle className="size-3" />
-                        {job.lastError}
+                      <p className="mt-4 flex items-start gap-2 text-small leading-relaxed text-red-300">
+                        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                        <span className="min-w-0 break-words">{job.lastError}</span>
                       </p>
                     ) : null}
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="onsite-actions">
                     <button
                       type="button"
                       disabled={isBusy}
