@@ -92,6 +92,7 @@ test('real workflow authorization rejects anonymous, role escalation and non-MFA
 
 function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolean } = {}) {
   const db = database({
+    bookings: [{ id: 'booking-a', workspace_id: 'studio', customer_phone: '+63 900 000 0042' }],
     client_portals: [{ id: 'portal-row', public_id: 'portal-a', booking_id: 'booking-a', workspace_id: 'studio', status: 'active', expires_at: options.expired ? '2000-01-01' : '2099-01-01', bookings: { workspace_id: options.mismatchedPortal ? 'other' : 'studio' }, workspaces: { slug: 'fico-mana', status: 'active' } }],
     gallery_files: [
       { id: 'own', booking_id: 'booking-a', workspace_id: 'studio', drive_file_id: 'drive-own' },
@@ -139,6 +140,7 @@ test('real portal file reader rejects cross-client/workspace files and expired o
 test('real selection and edited completion reject foreign resources before Drive access', async () => {
   const { workflow, driveReads } = workflowFixture()
   await assert.rejects(workflow.submitPhotoSelection('portal-a', {
+    pin: '0042',
     fileIds: ['foreign-client'], includedFileIds: ['foreign-client'], acknowledgeNoRevision: true,
     printAllocations: ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'].map(category => ({ category, fileId: 'foreign-client', quantity: category === 'WALLET_SIZE' ? 4 : 1 })) as never,
   }), /do not belong/)

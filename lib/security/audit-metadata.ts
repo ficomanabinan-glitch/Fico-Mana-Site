@@ -1,8 +1,8 @@
-const SENSITIVE_METADATA_KEY = /(password|secret|token|authorization|cookie|signature|refresh|otp|receipt[_-]?hash|raw[_-]?ip)/i
+const SENSITIVE_METADATA_KEY = /(password|secret|token|authorization|cookie|signature|refresh|otp|receipt[_-]?hash|raw[_-]?ip|^pin$|submission[_-]?pin|pin[_-]?code)/i
 
 export function redactDiagnostic(value: string) {
   return value
-    .replace(/\b(password|secret|token|authorization|cookie|signature)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
+    .replace(/\b(password|secret|token|authorization|cookie|signature|pin|submissionPin)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
     .replace(/[A-Za-z]:[\\/][^\s<>"']+/g, '[PATH REDACTED]')
     .replace(/https?:\/\/[^\s<>"']+/gi, '[URL REDACTED]')
     .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')

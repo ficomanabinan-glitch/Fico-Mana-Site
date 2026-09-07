@@ -21,6 +21,7 @@ export const API_RATE_LIMITS = {
   portalSession: { name: 'portal-session', limit: 20, aggregateLimit: 100, windowSeconds: 15 * 60, failClosed: true },
   portalRead: { name: 'portal-read', limit: 240, windowSeconds: 5 * 60, failClosed: true },
   portalSelection: { name: 'portal-selection', limit: 10, windowSeconds: 10 * 60, failClosed: true },
+  portalSubmissionPin: { name: 'portal-submission-pin', limit: 5, windowSeconds: 15 * 60, failClosed: true },
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
   editorUpload: { name: 'editor-upload', limit: 1_000, windowSeconds: 60 * 60, failClosed: true },
   websiteMediaUpload: { name: 'website-media-upload', limit: 60, windowSeconds: 60 * 60, failClosed: true },

@@ -12,6 +12,7 @@ const ids = Array.from({ length: 10 }, (_, index) =>
 )
 
 const validSelection = {
+  pin: '0042',
   fileIds: ids.slice(0, 6),
   includedFileIds: ids.slice(0, 5),
   extraEditFileIds: [ids[5]],

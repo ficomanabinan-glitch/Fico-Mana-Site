@@ -8,7 +8,7 @@ class RawUploadError extends Error {}
 function fixture() {
   let failedTable = ''
   const db = memoryDb({
-    client_portals: [{ id: 'p', public_id: 'private', booking_id: 'booking', workspace_id: 'studio', status: 'active', expires_at: '2099-01-01',
+    client_portals: [{ id: 'p', public_id: '00000000-0000-4000-8000-000000000042', booking_id: 'booking', workspace_id: 'studio', status: 'active', expires_at: '2099-01-01',
       bookings: { workspace_id: 'studio' }, workspaces: { slug: 'fico-mana', status: 'active' } }],
     gallery_files: [
       { id: 'own', workspace_id: 'studio', booking_id: 'booking', drive_file_id: 'drive-own', thumbnail_reference: 'studio/booking/version1.jpg', checksum: 'version-1' },
@@ -29,13 +29,11 @@ function fixture() {
     '@/lib/print-manifest': {}, '@/lib/print-workflow': {}, '@/lib/drive-folder-mappings': {},
     '@/lib/portal-selection-source': { PortalSelectionError: class extends Error {} },
   })
-  let authorized = true
   let limited = false
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {},
     '@/lib/editor-workflow': workflow, '@/lib/google-drive': {},
-    '@/lib/client-portal': { PORTAL_SESSION_COOKIE: 'private-cookie', verifyPortalSignature: () => false, verifyPortalCookie: () => authorized },
     '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async () => limited ? new Response(null, { status: 429, headers: { 'cache-control': 'no-store' } }) : null },
     '@/lib/security/file-validation': {}, '@/lib/security/schemas': {},
     '@/lib/security/security-audit': { recordSecurityAuditEvent: async () => {} },
@@ -43,13 +41,13 @@ function fixture() {
     '@/lib/raw-upload-server': {}, '@/lib/raw-upload-contract': { RawUploadError },
   })
   const request = async (file = 'own', etag = '', kind = 'gallery') => {
-    const req = Object.assign(new Request(`https://www.ficomana.com/api/editor-workflow/portal/private/file/${file}?kind=${kind}`, { headers: { 'if-none-match': etag } }), {
-      nextUrl: new URL(`https://www.ficomana.com/api/editor-workflow/portal/private/file/${file}?kind=${kind}`),
-      cookies: { get: () => ({ value: 'synthetic-cookie' }) },
+    const req = Object.assign(new Request(`https://www.ficomana.com/api/editor-workflow/portal/00000000-0000-4000-8000-000000000042/file/${file}?kind=${kind}`, { headers: { 'if-none-match': etag } }), {
+      nextUrl: new URL(`https://www.ficomana.com/api/editor-workflow/portal/00000000-0000-4000-8000-000000000042/file/${file}?kind=${kind}`),
+      cookies: { get: () => undefined },
     })
-    return route.GET(req as never, { params: Promise.resolve({ path: ['portal', 'private', 'file', file] }) })
+    return route.GET(req as never, { params: Promise.resolve({ path: ['portal', '00000000-0000-4000-8000-000000000042', 'file', file] }) })
   }
-  return { workflow, request, db, get reads() { return reads }, authorize: (value: boolean) => { authorized = value }, limit: () => { limited = true }, fail: (table: string) => { failedTable = table } }
+  return { workflow, request, db, get reads() { return reads }, limit: () => { limited = true }, fail: (table: string) => { failedTable = table } }
 }
 
 test('authorized images use private browser validators; repeat gallery/print/zoom requests transfer no image bytes or provider reads', async () => {
@@ -89,22 +87,19 @@ test('edited delivery images reuse bytes too, with distinct versions and correct
   assert.equal(f.reads, 1)
 })
 
-test('cached validators cannot bypass signature, expiry, disabled state, workspace/file ownership, database failure or rate limits', async t => {
+test('cookie-free viewing keeps expiry, disabled state, workspace/file ownership, database failure and rate limits', async t => {
   t.mock.method(console, 'error', () => {})
   const f = fixture()
   const etag = (await f.request()).headers.get('etag')!
-  f.authorize(false)
-  const denied = await f.request('own', etag)
-  assert.equal(denied.status, 403)
-  assert.match(denied.headers.get('cache-control') || '', /no-store/)
-  f.authorize(true)
+  const freshBrowser = await f.request('own', etag)
+  assert.equal(freshBrowser.status, 304)
   for (const table of ['client_portals', 'gallery_files']) {
     f.fail(table)
-    await assert.rejects(f.workflow.getPortalFile('private', 'own', 'gallery', etag), /Synthetic database failure/)
+    await assert.rejects(f.workflow.getPortalFile('00000000-0000-4000-8000-000000000042', 'own', 'gallery', etag), /Synthetic database failure/)
   }
   f.fail('')
   for (const file of ['foreign', 'foreign-workspace', 'missing']) {
-    await assert.rejects(f.workflow.getPortalFile('private', file, 'gallery', '*'), /Photo not found/)
+    await assert.rejects(f.workflow.getPortalFile('00000000-0000-4000-8000-000000000042', file, 'gallery', '*'), /Photo not found/)
   }
   for (const change of [{ status: 'disabled' }, { status: 'expired' }, { status: 'active', expires_at: '2000-01-01' }]) {
     Object.assign(f.db.tables.client_portals[0], change)
@@ -113,7 +108,7 @@ test('cached validators cannot bypass signature, expiry, disabled state, workspa
     assert.match(response.headers.get('cache-control') || '', /no-store/)
   }
   f.db.tables.client_portals = []
-  await assert.rejects(f.workflow.getPortalFile('private', 'own', 'gallery', etag), /Portal not found/)
+  await assert.rejects(f.workflow.getPortalFile('00000000-0000-4000-8000-000000000042', 'own', 'gallery', etag), /Portal not found/)
   f.limit()
   assert.equal((await f.request('own', etag)).status, 429)
   assert.equal(f.reads, 1)
@@ -124,10 +119,10 @@ test('proxy delegates only exact portal file GETs and keeps private no-store on 
   const middleware = loadTs<typeof import('../proxy.ts')>('proxy.ts', {
     '@/lib/supabase/middleware': { updateSession: async () => new Response(null, { status: next ? 200 : 307, headers: next ? { 'x-middleware-next': '1' } : { location: '/admin' } }) },
   })
-  const imagePath = '/api/editor-workflow/portal/private/file/own'
+  const imagePath = '/api/editor-workflow/portal/00000000-0000-4000-8000-000000000042/file/own'
   const request = (pathname: string, method = 'GET') => ({ method, nextUrl: { pathname }, headers: new Headers() }) as never
   assert.equal((await middleware.proxy(request(imagePath))).headers.get('cache-control'), null)
-  for (const path of ['/portal/private', '/api/editor-workflow/portal/private', '/api/editor-workflow/portal/private/selection', imagePath + '/extra', '/api/bookings']) {
+  for (const path of ['/portal/private', '/api/editor-workflow/portal/private', '/api/editor-workflow/portal/00000000-0000-4000-8000-000000000042/selection', imagePath + '/extra', '/api/bookings']) {
     assert.match((await middleware.proxy(request(path))).headers.get('cache-control') || '', /private.*no-store/)
   }
   for (const method of ['POST', 'HEAD', 'DELETE']) assert.match((await middleware.proxy(request(imagePath, method))).headers.get('cache-control') || '', /no-store/)

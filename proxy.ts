@@ -32,6 +32,10 @@ function applyResponseHardening(request: NextRequest, response: NextResponse) {
   if (request.nextUrl.pathname.startsWith('/portal/') || request.nextUrl.pathname.startsWith('/shoot-response/')) {
     response.headers.set('Referrer-Policy', 'no-referrer')
   }
+  if (request.nextUrl.pathname.startsWith('/portal/') || request.nextUrl.pathname.startsWith('/api/editor-workflow/portal/')) {
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet')
+    response.headers.set('Referrer-Policy', 'no-referrer')
+  }
   return response
 }
 

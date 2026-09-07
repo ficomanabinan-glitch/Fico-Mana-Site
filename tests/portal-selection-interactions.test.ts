@@ -4,6 +4,39 @@ import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 import * as summary from '../lib/client-selection-summary.ts'
 import * as drafts from '../lib/portal-selection-draft.ts'
+
+test('final confirmation shows the balance before PIN; going back clears only the PIN and does not submit', async t => {
+  const ready: ClientSelection = { ...selection, noRevisionAcknowledged: true,
+    selectedIds: gallery.slice(0, 6).map(file => file.id),
+    selectedItems: gallery.slice(0, 6).map((file, i) => ({ fileId: file.id, preference: 'standard', extraEdit: i >= 5 })),
+    printAllocations: (['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'] as const).map(category => ({ category, fileId: '0', quantity: category === 'WALLET_SIZE' ? 4 : 1, label: category })),
+  }
+  const f = setup(ready)
+  t.after(f.unmount)
+  let tree = f.render(), requests = 0
+  t.mock.method(globalThis, 'fetch', async () => { requests++; return Response.json({ error: 'Incorrect PIN. Try: enter the last 4 digits.', code: 'SELECTION_PIN_INVALID' }, { status: 403 }) })
+  const click = (label: string) => elements(tree, el => el.type === 'button' && content(el) === label)[0].props.onClick()
+  elements(tree, el => el.type === 'button' && content(el).endsWith('Review'))[0].props.onClick()
+  tree = f.render()
+  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password').length, 0)
+  click('Submit Final Selection'); tree = f.render()
+  assert.equal(requests, 0)
+  assert.match(content(elements(tree, el => el.props['data-testid'] === 'submission-balance')[0]), /₱6,400/)
+  elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
+  tree = f.render(); click('Go back'); tree = f.render()
+  assert.equal(requests, 0)
+  assert.equal(f.pricing.total, 400)
+  click('Submit Final Selection'); tree = f.render()
+  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.value, '')
+  elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0000' } })
+  tree = f.render(); await click('Confirm & Submit'); await new Promise(resolve => setImmediate(resolve)); tree = f.render()
+  assert.equal(requests, 1)
+  assert.equal(f.submitted, 0)
+  assert.equal(f.pricing.total, 400)
+  assert.match(content(tree), /Incorrect PIN/)
+  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.value, '')
+})
+
 import type { ClientSelection, ClientAddon, ClientGalleryFile } from '../components/client-photo-selection.tsx'
 
 const addons: ClientAddon[] = [
@@ -33,6 +66,7 @@ function setup(initial = selection, photos = gallery) {
   const component = loadTs<typeof import('../components/client-photo-selection.tsx')>('components/client-photo-selection.tsx', {
     react: hooks.react, '@/components/portal-photo-preview': preview, '@/lib/client-selection-summary': summary,
     '@/lib/portal-selection-draft': drafts,
+    '@/components/ui/sheet': { Sheet: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null },
   })
   let pricing: summary.AddonPreview = { total: 0, lines: [] }
   let submitted = 0
@@ -40,6 +74,7 @@ function setup(initial = selection, photos = gallery) {
   const render = () => hooks.render(() => component.ClientPhotoSelection({
     publicId: 'private', selection: initial, gallery: photos, galleryTotal: 7, loadingMore: false, addons,
     onLoadMore: () => {}, onSubmitted: async () => { submitted++ }, onPricingChange,
+    paymentSummary: { packageAmount: 6500, amountPaid: 500 },
   }))
   return { render, preview, unmount: hooks.unmount, get pricing() { return pricing }, get submitted() { return submitted } }
 }
@@ -89,10 +124,24 @@ test('actual selection handlers update totals immediately, use one global prefer
     payload = JSON.parse(String(init.body)); return Response.json({ ok: true })
   })
   const submit = elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0]
+  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password').length, 0, 'PIN is not shown during Review')
   assert.equal(submit.props.disabled, false)
   await submit.props.onClick()
+  assert.equal(Boolean(payload), false, 'Missing PIN must not reach the API')
+  tree = f.render()
+  assert.match(content(tree), /Last 4 digits/)
+  assert.match(content(elements(tree, el => el.props['data-testid'] === 'submission-balance')[0]), /₱6,700/)
+  await elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0].props.onClick()
+  assert.equal(Boolean(payload), false, 'Confirmation still requires a PIN')
+  tree = f.render()
+  elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
+  tree = f.render()
+  await elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0].props.onClick()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(f.submitted, 1)
+  assert.equal(payload.pin, '0042', 'Leading zeros are preserved')
+  tree = f.render()
+  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password').length, 0)
   assert.equal(payload.preferences.length, 6)
   assert.ok(payload.preferences.every((item: any) => item.preference === 'less'))
   assert.equal(payload.printAllocations.length, 4)
@@ -118,7 +167,13 @@ test('failed submission keeps draft photos, global preference, free prints, add-
     return Response.json({ error: 'The original photo is unavailable. Try: ask the studio to restore it.' }, { status: 409 })
   })
   for (let attempt = 0; attempt < 2; attempt++) {
-    const button = elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0]
+    if (!elements(tree, el => el.type === 'input' && el.props.type === 'password').length) {
+      elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0].props.onClick()
+      tree = f.render()
+    }
+    elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
+    tree = f.render()
+    const button = elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0]
     assert.equal(button.props.disabled, false)
     await button.props.onClick(); await new Promise(resolve => setImmediate(resolve)); tree = f.render()
     assert.match(content(tree), /Try: ask the studio to restore it/)
@@ -166,7 +221,14 @@ test('actual portal remount restores a 15-minute draft, recomputes prices, prese
   let success = false
   t.mock.method(globalThis, 'fetch', async () => success ? Response.json({ ok: true }) : Response.json({ error: 'Try: submit again.' }, { status: 503 }))
   const submit = async () => {
-    const button = elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0]
+    if (!elements(tree, el => el.type === 'input' && el.props.type === 'password').length) {
+      elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0].props.onClick()
+      tree = restored.render()
+    }
+    elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
+    tree = restored.render()
+    assert.ok(![...values.values()].some(value => value.includes('0042')), 'PIN must not enter the draft cache')
+    const button = elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0]
     assert.equal(button.props.disabled, false)
     await button.props.onClick(); await new Promise(resolve => setImmediate(resolve)); tree = restored.render()
   }

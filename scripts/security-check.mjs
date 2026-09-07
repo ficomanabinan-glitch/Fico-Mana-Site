@@ -20,7 +20,17 @@ if (uploadRoute.includes('getPublicUrl')) failures.push('Receipt upload still cr
 if (!uploadRoute.includes('validateReceiptImageContent')) failures.push('Receipt content validation is missing.')
 
 const portalRoute = await read('app/api/editor-workflow/[...path]/route.ts')
-if (!portalRoute.includes('PORTAL_SESSION_COOKIE')) failures.push('Portal session cookie is missing.')
+// Viewing uses the unguessable shared link; final writes require the saved-phone PIN.
+if (!portalRoute.includes('enforceApiRateLimit(request, API_RATE_LIMITS.portalSubmissionPin)')) failures.push('IP-only portal PIN rate limiting is missing.')
+const portalWorkflow = await read('lib/editor-workflow.ts')
+const pinCheck = portalWorkflow.indexOf('timingSafeEqual(Buffer.from(input.pin)')
+const selectionLock = portalWorkflow.indexOf(".update({ status: 'SUBMITTING'")
+if (pinCheck < 0 || selectionLock < pinCheck) failures.push('Portal PIN must be checked before selection mutations.')
+const submitWorkflow = portalWorkflow.slice(portalWorkflow.indexOf('export async function submitPhotoSelection'))
+if (!submitWorkflow.includes('await verifiedPortalPin(publicId, input)') || submitWorkflow.indexOf('await verifiedPortalPin(publicId, input)') > submitWorkflow.indexOf(".update({ status: 'SUBMITTING'")) failures.push('Final submission must call the shared PIN check before locking.')
+const drivePhotosWorkflow = portalWorkflow.slice(portalWorkflow.indexOf('export async function getPortalDrivePhotos'), portalWorkflow.indexOf('export async function submitPhotoSelection'))
+if (!drivePhotosWorkflow.includes('await verifiedPortalPin(publicId, { pin })')) failures.push('Drive photo links must require the saved-phone PIN.')
+if (!portalWorkflow.includes(".select('customer_phone').eq('workspace_id', workspaceId).eq('id', bookingId)")) failures.push('PIN must use the saved, scoped booking phone.')
 if (!portalRoute.includes('enforceApiRateLimit')) failures.push('Editor/portal rate limiting is missing.')
 
 const proxy = await read('proxy.ts')

@@ -60,8 +60,11 @@ const portalPrintCategorySchema = z.enum([
   'WALLET_SIZE',
 ])
 
+export const portalDrivePhotosSchema = z.object({ pin: z.string().regex(/^[0-9]{4}$/) }).strict()
+
 export const portalSelectionSchema = z
   .object({
+    pin: z.string().regex(/^[0-9]{4}$/),
     // fileIds remains accepted for older portal links. New clients send the
     // explicit included/extra arrays so the server can price Extra Edit safely.
     fileIds: z.array(z.string().uuid()).min(1).max(205),

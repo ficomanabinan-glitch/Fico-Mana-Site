@@ -230,6 +230,33 @@
     .fico-portal-columns {
       grid-template-columns: minmax(0, 1.618fr) minmax(18rem, 1fr);
     }
+
+    .fico-portal-sidebar {
+      position: sticky;
+      top: var(--fico-space-6);
+      align-self: start;
+      max-height: calc(100vh - 2 * var(--fico-space-6));
+      max-height: calc(100dvh - 2 * var(--fico-space-6));
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      scrollbar-width: thin;
+    }
+  }
+
+  .fico-portal-dock {
+    min-height: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    padding-top: 0.75rem;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .fico-portal-sheet-content {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (max-width: 1023px) {
+    .client-portal-page {
+      padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+    }
   }
 
   .fico-table {

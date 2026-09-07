@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   copyDriveFile,
@@ -51,6 +51,7 @@ type UploadFileInput = {
 }
 
 export type PortalSelectionInput = {
+  pin: string
   fileIds: string[]
   includedFileIds?: string[]
   extraEditFileIds?: string[]
@@ -1244,10 +1245,58 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
   }
 }
 
-export async function submitPhotoSelection(publicId: string, input: PortalSelectionInput) {
+async function verifiedPortalPin(publicId: string, input: { pin: string }) {
   const { admin, portal } = await portalRecord(publicId)
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
+  // Verify against the saved booking, never a client-supplied phone number.
+  // This must precede the selection lock, billing, manifest and Drive writes.
+  const { data: contact, error: contactError } = await admin.from('bookings')
+    .select('customer_phone').eq('workspace_id', workspaceId).eq('id', bookingId).single()
+  if (contactError || !contact) throw new PortalSelectionError('Your booking could not be checked. Try: wait a moment and submit again.', 'SELECTION_PIN_UNAVAILABLE', 503)
+  const phoneDigits = String(contact.customer_phone || '').replace(/\D/g, '')
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+    throw new PortalSelectionError('A valid phone number is needed for this booking. Try: ask FICO MANA to update the booking phone number, then submit again.', 'SELECTION_PHONE_REQUIRED', 409)
+  }
+  if (typeof input.pin !== 'string' || !/^[0-9]{4}$/.test(input.pin) || !timingSafeEqual(Buffer.from(input.pin), Buffer.from(phoneDigits.slice(-4)))) {
+    throw new PortalSelectionError('Incorrect PIN. Try: enter the last 4 digits of the phone number used for this booking.', 'SELECTION_PIN_INVALID', 403)
+  }
+  return { admin, portal, bookingId, workspaceId }
+}
+
+/** Reveal only this booking's current RAW folder after checking its saved-phone PIN. */
+export async function getPortalDrivePhotos(publicId: string, pin: string) {
+  const { admin, bookingId, workspaceId } = await verifiedPortalPin(publicId, { pin })
+  const unavailable = () => new PortalSelectionError('Your photo folder is not available yet. Try: ask FICO MANA to repair this booking’s folders in Client Portals, then try again.', 'PORTAL_DRIVE_UNAVAILABLE', 409)
+  const [mapping, provisioning, settings] = await Promise.all([
+    admin.from('drive_folders').select('folder_type,drive_folder_id')
+      .eq('workspace_id', workspaceId).eq('booking_id', bookingId).in('folder_type', ['CLIENT', 'RAW']),
+    admin.from('booking_provisioning').select('drive_client_folder_id,drive_root_folder_id').eq('booking_id', bookingId).maybeSingle(),
+    admin.from('google_drive_settings').select('root_folder_id').eq('workspace_id', workspaceId).eq('id', 1).maybeSingle(),
+  ])
+  if (mapping.error || provisioning.error || settings.error) throw unavailable()
+  const raw = mapping.data?.filter(row => row.folder_type === 'RAW') || []
+  const client = mapping.data?.filter(row => row.folder_type === 'CLIENT') || []
+  const rawId = String(raw[0]?.drive_folder_id || '')
+  const clientId = String(client[0]?.drive_folder_id || '')
+  if (raw.length !== 1 || client.length !== 1 || !/^[A-Za-z0-9_-]+$/.test(rawId) || !/^[A-Za-z0-9_-]+$/.test(clientId) || rawId === clientId ||
+      provisioning.data?.drive_client_folder_id !== clientId || !settings.data?.root_folder_id ||
+      provisioning.data?.drive_root_folder_id !== settings.data.root_folder_id) throw unavailable()
+  try {
+    const [rawFolder, clientFolder] = await Promise.all([getDriveFile(rawId), getDriveFile(clientId)])
+    if ([rawFolder, clientFolder].some(folder => folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') ||
+        rawFolder.id !== rawId || clientFolder.id !== clientId || rawFolder.parents?.length !== 1 || !rawFolder.parents.includes(clientId) ||
+        [rawFolder, clientFolder].some(folder => folder.appProperties?.bookingId && folder.appProperties.bookingId !== bookingId)) throw unavailable()
+  } catch {
+    throw unavailable()
+  }
+  // Never trust a stored/returned webViewLink and never broaden Drive sharing here.
+  // No original bytes, archive, folder creation or permission changes are needed.
+  return { url: `https://drive.google.com/drive/folders/${encodeURIComponent(rawId)}` }
+}
+
+export async function submitPhotoSelection(publicId: string, input: PortalSelectionInput) {
+  const { admin, bookingId, workspaceId } = await verifiedPortalPin(publicId, input)
   if (!input.acknowledgeNoRevision) throw new PortalSelectionError('Please acknowledge the no-revision policy before submitting.', 'SELECTION_INVALID', 400)
   const { data: selection, error } = await admin
     .from('photo_selections')

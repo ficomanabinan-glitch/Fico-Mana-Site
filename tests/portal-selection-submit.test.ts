@@ -8,6 +8,84 @@ import * as printManifest from '../lib/print-manifest.ts'
 import * as schemas from '../lib/security/schemas.ts'
 import type { DriveFile } from '../lib/google-drive.ts'
 
+test('fresh devices can load the bare portal URL and legacy signed URLs without cookies; phone and PIN stay server-side', async () => {
+  const f = fixture()
+  const seenQuotas: string[][] = []
+  const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
+    'next/server': { NextResponse: { json: Response.json } }, archiver: {},
+    '@/lib/editor-workflow': f.workflow, '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},
+    '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async (_request: Request, _policy: unknown, dimensions: string[]) => { seenQuotas.push(dimensions); return null } },
+    '@/lib/security/file-validation': {}, '@/lib/security/schemas': schemas,
+    '@/lib/security/security-audit': { recordSecurityAuditEvent: async () => {} }, '@/lib/security/upload-scanner': {},
+    '@/lib/security/request-security': { rejectUntrustedMutation: () => null },
+    '@/lib/raw-upload-server': {}, '@/lib/raw-upload-contract': { RawUploadError: class extends Error {} },
+  })
+  const request = async (query = '', id = '00000000-0000-4000-8000-000000000042') => {
+    const url = 'https://www.ficomana.com/api/editor-workflow/portal/' + id + query
+    const req = Object.assign(new Request(url), { nextUrl: new URL(url), cookies: { get: () => undefined } })
+    return route.GET(req as never, { params: Promise.resolve({ path: ['portal', id] }) })
+  }
+  for (const query of ['', '?sig=legacy-shared-link']) {
+    const response = await request(query)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.equal(response.headers.get('set-cookie'), null)
+    const data = await response.json()
+    assert.equal(data.booking.customerName, 'Synthetic Client')
+    assert.equal(data.gallery.length, 2)
+    assert.equal(data.booking.customer_phone, undefined)
+    assert.equal(data.booking.pin, undefined)
+    assert.ok(!JSON.stringify(data).includes('900 000'))
+  }
+  assert.equal((await request('', 'FM-641357')).status, 404, 'Sequential booking references cannot be used as portal links')
+  assert.equal(seenQuotas.length, 2)
+})
+
+
+test('PIN must match the saved booking before any selection, billing, manifest or Drive mutation', async () => {
+  for (const pin of [undefined, '', '42', '00420', '１２３４', '0000', 42, ' 0042']) {
+    const f = fixture()
+    await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', { ...f.input, pin } as never),
+      (error: any) => error.code === 'SELECTION_PIN_INVALID' && error.status === 403 && !error.message.includes('0042'))
+    assert.equal(f.db.tables.photo_selections[0].status, 'COPY_FAILED')
+    assert.equal(f.copies.length, 0)
+    assert.equal(f.manifests.length, 0)
+    assert.ok(f.db.operations.every(op => op.action === 'select'))
+  }
+})
+
+test('missing phone and failed booking lookup never allow PIN submission', async () => {
+  for (const phone of ['', null, '123', '1234567890123456']) {
+    const f = fixture()
+    f.db.tables.bookings[0].customer_phone = phone
+    await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input),
+      (error: any) => error.code === 'SELECTION_PHONE_REQUIRED' && /Try:/.test(error.message))
+    assert.ok(f.db.operations.every(op => op.action === 'select'))
+  }
+  const f = fixture()
+  f.fail((table) => table === 'bookings')
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input),
+    (error: any) => error.code === 'SELECTION_PIN_UNAVAILABLE' && error.status === 503)
+  assert.ok(f.db.operations.every(op => op.action === 'select'))
+})
+
+test('PIN uses the saved phone with formatting and leading zeros; a changed phone invalidates the old PIN', async () => {
+  for (const phone of ['09000000042', '+63 (900) 000-0042']) {
+    const f = fixture()
+    f.db.tables.bookings[0].customer_phone = phone
+    const result = await f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input)
+    assert.equal(result.selection?.status, 'SUBMITTED')
+    assert.equal((result.booking as any).customer_phone, undefined)
+    assert.equal((result.booking as any).pin, undefined)
+    assert.ok(!JSON.stringify(f.manifests).includes('0042'))
+  }
+  const f = fixture()
+  f.db.tables.bookings[0].customer_phone = '09000009999'
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input),
+    (error: any) => error.code === 'SELECTION_PIN_INVALID')
+})
+
+
 class GoogleDriveRequestError extends Error {
   status: number
   constructor(message: string, status: number) { super(message); this.status = status }
@@ -20,8 +98,8 @@ const source = { id: 'old-gallery', workspace_id: 'studio', booking_id: 'booking
 function fixture() {
   let fail: (table: string, action: string) => boolean = () => false
   const db = memoryDb({
-    client_portals: [{ id: 'portal', public_id: 'private', workspace_id: 'studio', booking_id: 'booking', status: 'active', expires_at: '2099-01-01', bookings: { workspace_id: 'studio' }, workspaces: { slug: 'fico-mana', status: 'active' } }],
-    bookings: [{ id: 'booking', workspace_id: 'studio', client_id: 'client', booking_date: '2026-09-08', customer_name: 'Synthetic Client', selection_limit: 1, price: 1200 }],
+    client_portals: [{ id: 'portal', public_id: '00000000-0000-4000-8000-000000000042', workspace_id: 'studio', booking_id: 'booking', status: 'active', expires_at: '2099-01-01', bookings: { workspace_id: 'studio' }, workspaces: { slug: 'fico-mana', status: 'active' } }],
+    bookings: [{ id: 'booking', workspace_id: 'studio', client_id: 'client', booking_date: '2026-09-08', customer_name: 'Synthetic Client', customer_phone: '+63 900 000 0042', selection_limit: 1, price: 1200 }],
     photo_selections: [{ id: 'selection', workspace_id: 'studio', booking_id: 'booking', included_limit: 1, required_count: 1, status: 'COPY_FAILED' }],
     editing_batches: [{ id: 'batch', workspace_id: 'studio', display_id: 'FM-BATCH-2026-09-08-MAIN' }],
     editing_jobs: [{ id: 'job', workspace_id: 'studio', booking_id: 'booking', batch_id: 'batch', status: 'WAITING_FOR_SELECTION' }],
@@ -64,6 +142,7 @@ function fixture() {
     '@/lib/drive-folder-mappings': { saveShootFolderMappings: async () => {} }, '@/lib/portal-selection-source': resolver,
   })
   const input = {
+    pin: '0042',
     fileIds: ['old-gallery'], includedFileIds: ['old-gallery'], preferences: [{ fileId: 'old-gallery', preference: 'less' as const }], acknowledgeNoRevision: true,
     printAllocations: (['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'] as const).map(category => ({ category, fileId: 'old-gallery', quantity: category === 'WALLET_SIZE' ? 4 : 1 })),
   }
@@ -72,9 +151,66 @@ function fixture() {
     fail: (callback: typeof fail) => { fail = callback }, failCopy: (index: number) => { copyFailureAt = index } }
 }
 
+function driveFolderFixture() {
+  const f = fixture()
+  f.db.tables.drive_folders = [
+    { id: 'raw-map', workspace_id: 'studio', booking_id: 'booking', folder_type: 'RAW', drive_folder_id: 'client-raw' },
+    { id: 'client-map', workspace_id: 'studio', booking_id: 'booking', folder_type: 'CLIENT', drive_folder_id: 'client-folder' },
+  ]
+  f.db.tables.booking_provisioning = [{ booking_id: 'booking', drive_client_folder_id: 'client-folder', drive_root_folder_id: 'root' }]
+  f.db.tables.google_drive_settings = [{ id: 1, workspace_id: 'studio', root_folder_id: 'root' }]
+  f.files.set('client-raw', { id: 'client-raw', name: 'RAW', mimeType: 'application/vnd.google-apps.folder', parents: ['client-folder'], webViewLink: 'https://malicious.invalid/' })
+  f.files.set('client-folder', { id: 'client-folder', name: 'CLIENT', mimeType: 'application/vnd.google-apps.folder', parents: ['day'], appProperties: { bookingId: 'booking' } })
+  return f
+}
+
+test('PIN-gated View All Photos returns only the current RAW folder and performs no writes/downloads', async () => {
+  const f = driveFolderFixture()
+  assert.deepEqual(await f.workflow.getPortalDrivePhotos('00000000-0000-4000-8000-000000000042', '0042'), { url: 'https://drive.google.com/drive/folders/client-raw' })
+  assert.deepEqual(f.reads.sort(), ['client-folder', 'client-raw'])
+  assert.ok(f.db.operations.every(op => op.action === 'select'))
+  assert.equal(f.hashReads.length + f.copies.length + f.manifests.length, 0)
+  assert.equal(f.db.tables.photo_selections[0].status, 'COPY_FAILED')
+})
+
+test('Drive link lookup blocks wrong PINs and inactive, expired or cross-workspace portals before Drive reads', async () => {
+  for (const mutate of [
+    (f: ReturnType<typeof driveFolderFixture>) => { f.db.tables.bookings[0].customer_phone = '09000009999' },
+    (f: ReturnType<typeof driveFolderFixture>) => { f.db.tables.client_portals[0].status = 'disabled' },
+    (f: ReturnType<typeof driveFolderFixture>) => { f.db.tables.client_portals[0].expires_at = '2000-01-01' },
+    (f: ReturnType<typeof driveFolderFixture>) => { f.db.tables.client_portals[0].bookings.workspace_id = 'other' },
+  ]) {
+    const f = driveFolderFixture(); mutate(f)
+    await assert.rejects(f.workflow.getPortalDrivePhotos('00000000-0000-4000-8000-000000000042', '0042'))
+    assert.equal(f.reads.length, 0)
+    assert.ok(f.db.operations.every(op => op.action === 'select'))
+  }
+})
+
+test('Drive link lookup rejects stale roots, wrong clients, ambiguous mappings, moved folders, shortcuts, Trash and provider errors', async () => {
+  const mutations: Array<(f: ReturnType<typeof driveFolderFixture>) => void> = [
+    f => { f.db.tables.drive_folders[0].booking_id = 'other' },
+    f => { f.db.tables.drive_folders[0].workspace_id = 'other' },
+    f => { f.db.tables.drive_folders.push({ ...f.db.tables.drive_folders[0], id: 'duplicate' }) },
+    f => { f.db.tables.google_drive_settings[0].root_folder_id = 'new-root' },
+    f => { f.db.tables.booking_provisioning[0].drive_client_folder_id = 'other-client' },
+    f => { f.files.get('client-raw')!.parents = ['other-client'] },
+    f => { f.files.get('client-raw')!.mimeType = 'application/vnd.google-apps.shortcut' },
+    f => { f.files.get('client-raw')!.trashed = true },
+    f => { f.files.get('client-folder')!.appProperties = { bookingId: 'other-client' } },
+    f => { f.files.delete('client-raw') },
+    f => { f.fail(table => table === 'drive_folders') },
+  ]
+  for (const mutate of mutations) {
+    const f = driveFolderFixture(); mutate(f)
+    await assert.rejects(f.workflow.getPortalDrivePhotos('00000000-0000-4000-8000-000000000042', '0042'), (error: any) => error.code === 'PORTAL_DRIVE_UNAVAILABLE' && /Try:/.test(error.message) && !error.message.includes('client-raw'))
+    assert.ok(f.db.operations.every(op => op.action === 'select'))
+  }
+})
+
 test('missing original with cached preview recovers the exact re-upload, preserves photo/print IDs and locks only after saving', async () => {
   const f = fixture()
-  const result = await f.workflow.submitPhotoSelection('private', f.input)
+  const result = await f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input)
   assert.equal(result.selection?.status, 'SUBMITTED')
   assert.equal(f.copies[0].fileId, 'new-drive')
   assert.equal(f.copies[0].galleryFileId, 'old-gallery')
@@ -85,7 +221,7 @@ test('missing original with cached preview recovers the exact re-upload, preserv
   assert.equal(f.manifests.length, 1)
   assert.equal(f.hashReads.length, 0, 'Use the provider checksum without downloading the camera original')
   assert.equal(f.db.tables.gallery_files[0].drive_file_id, 'old-drive', 'Do not mutate gallery identity or originals')
-  await assert.rejects(f.workflow.submitPhotoSelection('private', f.input), /already submitted and locked/)
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input), /already submitted and locked/)
   assert.equal(f.copies.length, 1)
 })
 
@@ -125,7 +261,7 @@ test('recovery rejects lookalikes, wrong clients/workspaces/parents, shortcuts, 
   ]
   for (const change of changes) {
     const f = fixture(); change(f)
-    await assert.rejects(f.workflow.submitPhotoSelection('private', f.input), error => {
+    await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input), error => {
       assert.ok(error instanceof f.resolver.PortalSelectionError)
       assert.equal(error.code, 'SELECTION_ORIGINAL_UNAVAILABLE')
       assert.match(error.message, /BNI00372.JPG.*Try:.*restore or re-upload/)
@@ -142,7 +278,7 @@ test('Drive permission/quota/server errors are not treated as deleted originals'
   t.mock.method(console, 'error', () => {})
   for (const status of [403, 429, 500]) {
     const f = fixture(); f.errors.set('old-drive', status)
-    await assert.rejects(f.workflow.submitPhotoSelection('private', f.input), /Try: submit again/)
+    await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input), /Try: submit again/)
     assert.deepEqual(f.reads, ['old-drive'])
     assert.equal(f.copies.length, 0)
     assert.equal(f.db.tables.photo_selections[0].status, 'COPY_FAILED')
@@ -157,10 +293,10 @@ test('copy interruption remains retryable and creates no duplicate selected copi
   f.files.set('second-drive', { ...f.files.get('new-drive')!, id: 'second-drive', name: 'SECOND.JPG' })
   f.input.fileIds.push('second-gallery'); f.input.includedFileIds.push('second-gallery')
   f.failCopy(1)
-  await assert.rejects(f.workflow.submitPhotoSelection('private', f.input), /could not be completed/)
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input), /could not be completed/)
   assert.equal(f.copies.length, 1)
   assert.equal(f.db.tables.photo_selections[0].status, 'COPY_FAILED')
-  await f.workflow.submitPhotoSelection('private', f.input)
+  await f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input)
   assert.equal(f.copies.length, 2)
   assert.equal(f.db.tables.photo_selection_items.length, 2)
   assert.equal(f.db.tables.print_allocations.length, 4)
@@ -178,10 +314,10 @@ test('five included plus one extra retains the configured PHP 400 charge, with n
   const included = ['old-gallery', 'gallery-1', 'gallery-2', 'gallery-3', 'gallery-4']
   const input = { ...f.input, fileIds: [...included, 'gallery-5'], includedFileIds: included, extraEditFileIds: ['gallery-5'], addons: [{ addonId: 'extra', quantity: 1, photoCount: 1 }] }
   f.fail((table, action) => table === 'client_addon_orders' && action === 'insert')
-  await assert.rejects(f.workflow.submitPhotoSelection('private', input), /could not be completed/)
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', input), /could not be completed/)
   assert.equal(f.copies.length, 6)
   f.fail(() => false)
-  const result = await f.workflow.submitPhotoSelection('private', input)
+  const result = await f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', input)
   assert.equal(f.copies.length, 6)
   assert.equal(f.copies.filter(copy => copy.purpose === 'extra-edit').length, 1)
   assert.equal(f.db.tables.client_addon_orders.length, 1)
@@ -196,46 +332,45 @@ test('database errors are checked, transport errors unlock retry, and post-submi
     const f = fixture()
     let updates = 0
     f.fail((target, operation) => target === table && (action === 'finalize' ? operation === 'update' && ++updates === 2 : operation === action))
-    await assert.rejects(f.workflow.submitPhotoSelection('private', f.input), /could not be completed/)
+    await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input), /could not be completed/)
     assert.equal(f.db.tables.photo_selections[0].status, 'COPY_FAILED')
     assert.equal(f.db.tables.workflow_audit_logs.some(row => row.action === 'SELECTION_SUBMITTED'), false)
   }
   const interrupted = fixture()
   interrupted.fail((table, action) => { if (table === 'gallery_files' && action === 'select') throw new Error('Synthetic transport failure'); return false })
-  await assert.rejects(interrupted.workflow.submitPhotoSelection('private', interrupted.input), /could not be completed/)
+  await assert.rejects(interrupted.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', interrupted.input), /could not be completed/)
   assert.equal(interrupted.db.tables.photo_selections[0].status, 'COPY_FAILED')
   const refresh = fixture()
   refresh.fail((table, action) => table === 'bookings' && action === 'select' && refresh.db.tables.photo_selections[0].status === 'SUBMITTED')
-  await assert.rejects(refresh.workflow.submitPhotoSelection('private', refresh.input), /Your selection was submitted.*refresh the portal/)
+  await assert.rejects(refresh.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', refresh.input), /Your selection was submitted.*refresh the portal/)
   assert.equal(refresh.db.tables.photo_selections[0].status, 'SUBMITTED')
 })
 
 test('validation, private portal access and concurrent submissions remain protected', async () => {
   const f = fixture()
-  await assert.rejects(f.workflow.submitPhotoSelection('private', { ...f.input, acknowledgeNoRevision: false }), /acknowledge/)
-  await assert.rejects(f.workflow.submitPhotoSelection('private', { ...f.input, printAllocations: [] }), /every free print/)
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', { ...f.input, acknowledgeNoRevision: false }), /acknowledge/)
+  await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', { ...f.input, printAllocations: [] }), /every free print/)
   assert.equal(f.db.tables.photo_selections[0].status, 'OPEN')
-  const [first, second] = await Promise.allSettled([f.workflow.submitPhotoSelection('private', f.input), f.workflow.submitPhotoSelection('private', f.input)])
+  const [first, second] = await Promise.allSettled([f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input), f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', f.input)])
   assert.equal([first, second].filter(result => result.status === 'fulfilled').length, 1)
   assert.equal(f.copies.length, 1)
   for (const patch of [{ status: 'disabled' }, { expires_at: '2000-01-01' }, { bookings: { workspace_id: 'other' } }]) {
     const privatePortal = fixture(); Object.assign(privatePortal.db.tables.client_portals[0], patch)
-    await assert.rejects(privatePortal.workflow.submitPhotoSelection('private', privatePortal.input))
+    await assert.rejects(privatePortal.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', privatePortal.input))
     assert.equal(privatePortal.reads.length, 0)
     assert.equal(privatePortal.copies.length, 0)
   }
 })
 
-test('production API exposes only safe selection errors with no-store, preserves origin, session and rate checks', async t => {
+test('production API exposes only safe selection errors with no-store, preserves origin, PIN and rate checks without a session', async t => {
   const f = fixture(); f.files.clear()
-  let authorized = true, trusted = true, limited = false
+  let trusted = true, limited = false
   const testEnv = process.env as Record<string, string | undefined>
   const previous = testEnv.NODE_ENV; testEnv.NODE_ENV = 'production'
   t.after(() => { if (previous === undefined) delete testEnv.NODE_ENV; else testEnv.NODE_ENV = previous })
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/editor-workflow': f.workflow, '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},
-    '@/lib/client-portal': { PORTAL_SESSION_COOKIE: 'portal-cookie', verifyPortalSignature: () => false, verifyPortalCookie: () => authorized },
     '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async () => limited ? Response.json({}, { status: 429 }) : null },
     '@/lib/security/file-validation': {}, '@/lib/security/schemas': { ...schemas, portalSelectionSchema: { safeParse: (data: unknown) => ({ success: true, data }) } },
     '@/lib/security/security-audit': { recordSecurityAuditEvent: async () => {} }, '@/lib/security/upload-scanner': {},
@@ -243,9 +378,9 @@ test('production API exposes only safe selection errors with no-store, preserves
     '@/lib/raw-upload-server': {}, '@/lib/raw-upload-contract': { RawUploadError: class extends Error {} },
   })
   const request = () => {
-    const url = 'https://www.ficomana.com/api/editor-workflow/portal/private/selection'
-    const req = Object.assign(new Request(url, { method: 'POST', body: JSON.stringify(f.input), headers: { 'content-type': 'application/json' } }), { nextUrl: new URL(url), cookies: { get: () => ({ value: 'synthetic' }) } })
-    return route.POST(req as never, { params: Promise.resolve({ path: ['portal', 'private', 'selection'] }) })
+    const url = 'https://www.ficomana.com/api/editor-workflow/portal/00000000-0000-4000-8000-000000000042/selection'
+    const req = Object.assign(new Request(url, { method: 'POST', body: JSON.stringify(f.input), headers: { 'content-type': 'application/json' } }), { nextUrl: new URL(url), cookies: { get: () => undefined } })
+    return route.POST(req as never, { params: Promise.resolve({ path: ['portal', '00000000-0000-4000-8000-000000000042', 'selection'] }) })
   }
   const failed = await request()
   assert.equal(failed.status, 409)
@@ -255,7 +390,6 @@ test('production API exposes only safe selection errors with no-store, preserves
   assert.match(body.error, /BNI00372.JPG.*Try:/)
   assert.ok(body.requestId)
   assert.ok(!JSON.stringify(body).includes('old-drive'))
-  authorized = false; assert.equal((await request()).status, 403)
-  authorized = true; trusted = false; assert.equal((await request()).status, 403)
+  trusted = false; assert.equal((await request()).status, 403)
   trusted = true; limited = true; assert.equal((await request()).status, 429)
 })

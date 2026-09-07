@@ -18,6 +18,7 @@ import {
   getOnsiteBatchSummary,
   getUploadReport,
   getPortalData,
+  getPortalDrivePhotos,
   getPortalFile,
   getWorkflowMembers,
   indexRawFolder,
@@ -37,12 +38,6 @@ import {
   type EditingJobStatus,
 } from '@/lib/editor-workflow'
 import { openDriveFile } from '@/lib/google-drive'
-import {
-  createPortalCookieValue,
-  PORTAL_SESSION_COOKIE,
-  verifyPortalCookie,
-  verifyPortalSignature,
-} from '@/lib/client-portal'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/lib/security/file-validation'
 import {
@@ -55,6 +50,7 @@ import {
   editorUploadFailureSchema,
   editorUploadSessionSchema,
   portalSelectionSchema,
+  portalDrivePhotosSchema,
 } from '@/lib/security/schemas'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { scanUpload } from '@/lib/security/upload-scanner'
@@ -87,12 +83,6 @@ function errorResponse(error: unknown, fallback: string, requestId: string, stat
     { error: exposeDetails ? message : fallback, requestId },
     serverError ? 503 : exposeDetails ? status : 500,
   )
-}
-
-function portalAccess(request: NextRequest, publicId: string) {
-  const signature = verifyPortalSignature(publicId, request.nextUrl.searchParams.get('sig'))
-  const cookie = verifyPortalCookie(request.cookies.get(PORTAL_SESSION_COOKIE)?.value, publicId)
-  return { authorized: signature || cookie, signature }
 }
 
 function lazyDriveStream(fileId: string) {
@@ -133,7 +123,12 @@ function zipResponse(
 }
 
 async function handlePortal(request: NextRequest, path: string[]) {
-  const publicId = decodeURIComponent(path[1] || '')
+  // The unguessable portal UUID is the shared viewing link. No browser cookie
+  // is required; each reader below still checks expiry, status and ownership.
+  const publicId = decodeURIComponent(path[1] || '').toLowerCase()
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(publicId)) {
+    return json({ error: 'This portal link is invalid. Try: ask FICO MANA for the complete portal link.' }, 404)
+  }
   const method = request.method.toUpperCase()
   if (method !== 'GET' && method !== 'HEAD') {
     const originError = rejectUntrustedMutation(request)
@@ -146,11 +141,6 @@ async function handlePortal(request: NextRequest, path: string[]) {
       : API_RATE_LIMITS.portalRead
   const limited = await enforceApiRateLimit(request, policy, [publicId, path[2]])
   if (limited) return limited
-  const access = portalAccess(request, publicId)
-  if (!publicId || !access.authorized) {
-    await recordSecurityAuditEvent({ eventType: 'portal_verification_failed', outcome: 'blocked', route: '/api/editor-workflow/portal' })
-    return json({ error: 'Private client portal link required.' }, 403)
-  }
   if (path.length === 2 && method === 'GET') {
     const offset = Number(request.nextUrl.searchParams.get('offset') || 0)
     const limit = Number(request.nextUrl.searchParams.get('limit') || 48)
@@ -167,22 +157,47 @@ async function handlePortal(request: NextRequest, path: string[]) {
       })),
       downloadAllUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/deliverables.zip`,
     })
-    if (access.signature) {
-      response.cookies.set(PORTAL_SESSION_COOKIE, createPortalCookieValue(publicId), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 30,
-      })
-    }
     response.headers.set('Referrer-Policy', 'no-referrer')
     return response
   }
-  if (path[2] === 'selection' && method === 'POST') {
+  if (path.length === 3 && path[2] === 'selection' && method === 'POST') {
+    // IP-only quota: portals and devices on one network share attempts.
+    const pinLimited = await enforceApiRateLimit(request, API_RATE_LIMITS.portalSubmissionPin)
+    if (pinLimited) return pinLimited
     const parsed = portalSelectionSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return json({ error: 'A valid photo selection is required.' }, 400)
-    return json(await submitPhotoSelection(publicId, parsed.data))
+    if (!parsed.success) return json({ error: 'A valid photo selection and 4-digit PIN are required. Try: review your choices and enter the last 4 digits of your booking phone number.', code: 'SELECTION_INVALID' }, 400)
+    try {
+      const result = await submitPhotoSelection(publicId, parsed.data)
+      // A Drive-link failure must not turn an already-saved selection into a failed submission.
+      try {
+        const photos = await getPortalDrivePhotos(publicId, parsed.data.pin)
+        return json({ ...result, allPhotosUrl: photos.url })
+      } catch {
+        return json({ ...result, allPhotosWarning: 'Your selection was saved, but the Google Drive link is not available yet. Try: use View All Photos again, or ask FICO MANA to check your photo folder.' })
+      }
+    } catch (error) {
+      if (error instanceof PortalSelectionError && error.code === 'SELECTION_PIN_INVALID') {
+        await recordSecurityAuditEvent({ eventType: 'portal_submission_pin_failed', outcome: 'blocked', route: '/api/editor-workflow/portal/selection' })
+      }
+      throw error
+    }
+  }
+  if (path.length === 3 && path[2] === 'drive-photos' && method === 'POST') {
+    // Use the exact same IP-only PIN budget as final submission; switching endpoints cannot bypass it.
+    const pinLimited = await enforceApiRateLimit(request, API_RATE_LIMITS.portalSubmissionPin)
+    if (pinLimited) return pinLimited
+    const parsed = portalDrivePhotosSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return json({ error: 'Enter your 4-digit PIN. Try: use the last 4 digits of your booking phone number.', code: 'SELECTION_INVALID' }, 400)
+    try {
+      const response = json(await getPortalDrivePhotos(publicId, parsed.data.pin))
+      response.headers.set('Referrer-Policy', 'no-referrer')
+      return response
+    } catch (error) {
+      if (error instanceof PortalSelectionError && error.code === 'SELECTION_PIN_INVALID') {
+        await recordSecurityAuditEvent({ eventType: 'portal_submission_pin_failed', outcome: 'blocked', route: '/api/editor-workflow/portal/drive-photos' })
+      }
+      throw error
+    }
   }
   if (path[2] === 'file' && path[3] && method === 'GET') {
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'gallery'
