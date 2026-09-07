@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getEmailLogs, EmailLog } from '@/lib/data-store'
+import { getEmailLogs, peekEmailLogs, EmailLog } from '@/lib/data-store'
 import { Search, Clock, Eye, X } from 'lucide-react'
 import {
   adminPage,
@@ -20,9 +20,9 @@ import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 
 export default function EmailLogsConsole() {
   const toast = useAdminToast()
-  const [logs, setLogs] = useState<EmailLog[]>([])
-  const [filteredLogs, setFilteredLogs] = useState<EmailLog[]>([])
-  const [loading, setLoading] = useState(true)
+  const [logs, setLogs] = useState<EmailLog[]>(() => peekEmailLogs() ?? [])
+  const [filteredLogs, setFilteredLogs] = useState<EmailLog[]>(() => peekEmailLogs() ?? [])
+  const [loading, setLoading] = useState(() => peekEmailLogs() === undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null)

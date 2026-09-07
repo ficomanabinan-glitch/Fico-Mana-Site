@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getBookings, dismissBookingNotifications, Booking } from '@/lib/data-store'
+import { getBookings, peekBookings, dismissBookingNotifications, Booking } from '@/lib/data-store'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AdminPageHeader from '@/components/admin-page-header'
 import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
@@ -54,8 +54,8 @@ export default function AdminRawPhotoQueue({
   embedded?: boolean
 }) {
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(true)
+  const [bookings, setBookings] = useState<Booking[]>(() => (peekBookings() ?? []).filter(hasRawPhotoSubmission))
+  const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState(initialSearch)
   const [activeTab, setActiveTab] = useState<FilteringTab>(initialSearch ? 'All' : 'Pending Review')

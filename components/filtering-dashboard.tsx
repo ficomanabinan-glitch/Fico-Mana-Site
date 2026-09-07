@@ -18,8 +18,8 @@ import {
   PenTool,
   Upload,
 } from 'lucide-react'
-import { getBookings, type Booking } from '@/lib/data-store'
-import { fetchManagedPackages } from '@/lib/package-manager-cache'
+import { getBookings, peekBookings, type Booking } from '@/lib/data-store'
+import { fetchManagedPackages, getCachedManagedPackages } from '@/lib/package-manager-cache'
 import { usesGraduationWorkflow } from '@/lib/package-workflow'
 import {
   getRawPhotoWorkflowStatus,
@@ -71,8 +71,12 @@ function workflowBookings(bookings: Booking[]) {
 
 export default function FilteringDashboard({ initialSearch = '', initialTab }: Props) {
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(true)
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    const eligibleIds = new Set((getCachedManagedPackages() ?? [])
+      .filter(pkg => usesGraduationWorkflow(pkg.category)).map(pkg => pkg.id))
+    return (peekBookings() ?? []).filter(booking => eligibleIds.has(booking.packageId))
+  })
+  const [loading, setLoading] = useState(() => peekBookings() === undefined || getCachedManagedPackages() === null)
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<FilteringDashTab>(
     initialTab || (initialSearch ? 'queue' : 'overview'),

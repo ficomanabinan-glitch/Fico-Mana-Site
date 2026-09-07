@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getBookings, dismissBookingNotifications, addNotification, Booking } from '@/lib/data-store'
+import { getBookings, peekBookings, dismissBookingNotifications, addNotification, Booking } from '@/lib/data-store'
 import { GraduationSessionDetails } from '@/components/graduation-session-details'
 import { runAdminTransaction, formatEmailResult } from '@/lib/admin-actions'
 import { useAdminToast } from '@/components/admin-toast-provider'
@@ -32,8 +32,9 @@ import {
 
 export default function PaymentVerificationQueue() {
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(true)
+  const [bookings, setBookings] = useState<Booking[]>(() => (peekBookings() ?? [])
+    .filter(booking => booking.bookingStatus === 'Pending Verification').map(enrichBookingDisplay))
+  const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
 
   // Modal states

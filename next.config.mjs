@@ -65,6 +65,9 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Reuse recently visited route segments in this tab. Page effects still
+  // revalidate private data; API/Proxy authentication and no-store stay intact.
+  experimental: { staleTimes: { dynamic: 300, static: 300 } },
   turbopack: {
     root: projectRoot,
   },

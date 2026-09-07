@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cached-page-read'
 
 import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 
@@ -93,8 +94,7 @@ export default function EditorUploadPhotos({
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const [results, setResults] = useState<UploadResult[]>([])
   const [runErrors, setRunErrors] = useState<string[]>([])
-  const [reports, setReports] = useState<UploadReport[]>([])
-  const [reportsLoading, setReportsLoading] = useState(true)
+  const [reports, setReports, reportsLoading, setReportsLoading, reportsRefreshing] = useCachedPageRead<UploadReport[]>('editor:upload-reports', [])
 
   const loadReports = useCallback(async (silent = false) => {
     if (!silent) setReportsLoading(true)
@@ -111,7 +111,7 @@ export default function EditorUploadPhotos({
     } finally {
       setReportsLoading(false)
     }
-  }, [toast])
+  }, [toast, setReports, setReportsLoading])
 
   useEffect(() => {
     if (input.current) {
@@ -130,6 +130,8 @@ export default function EditorUploadPhotos({
     window.addEventListener('beforeunload', preventClose)
     return () => window.removeEventListener('beforeunload', preventClose)
   }, [uploading])
+
+  usePageBackgroundSync(() => uploading ? undefined : loadReports(true))
 
   const inspect = async (files: Awaited<ReturnType<typeof pickedFilesFromDrop>>) => {
     if (!files.length) return
@@ -377,7 +379,7 @@ export default function EditorUploadPhotos({
               {failedReports ? ` · ${failedReports} failed client${failedReports === 1 ? '' : 's'} in recent runs` : ''}
             </p>
           </div>
-          <WorkspaceRefreshButton onRefresh={() => void loadReports()} refreshing={reportsLoading} />
+          <WorkspaceRefreshButton onRefresh={() => void loadReports()} refreshing={reportsRefreshing} />
         </div>
         {reportsLoading ? (
           <EditorPageSkeleton variant="queue" />

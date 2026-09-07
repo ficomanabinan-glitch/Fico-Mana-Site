@@ -17,8 +17,7 @@ const fontCss = [...builtCss.matchAll(/@font-face\{font-family:Geist[^}]*\}/g)].
 const fontFiles = new Set([...fontCss.matchAll(/\/media\/([a-zA-Z0-9._-]+\.woff2)/g)].map(match=>match[1]))
 const ui = loadTs('lib/admin-ui.ts', {})
 let stateIndex = 0
-const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initialDate:string}> }>('components/onsite-upload.tsx', {
-  react: { ...React, useState(value: unknown) {
+const onsiteReact = { ...React, useState(value: unknown) {
     const index = stateIndex++
     const schedule = { shootDate: '2026-09-08', batch: { id: 'synthetic-batch', jobs: [{
       bookingId: 'FM-EXAMPLE', customerName: 'Sample Client With a Longer Name', packageName: 'MANA PACKAGE',
@@ -26,7 +25,13 @@ const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initial
       lastError: 'The original photo BNI00372.JPG is no longer available. Try: ask the studio to restore or re-upload the original to your RAW folder and click Sync Drive, then submit your selection again.',
     }] } }
     return [index === 2 ? schedule : index === 3 ? false : value, () => {}]
-  }, useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn, useRef: (value:unknown)=>({current:value}) },
+  }, useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn, useRef: (value:unknown)=>({current:value}) }
+const { default: OnsiteUpload } = loadTs<{ default: React.ComponentType<{initialDate:string}> }>('components/onsite-upload.tsx', {
+  react: onsiteReact,
+  '@/components/use-cached-page-read': {
+    useCachedPageRead: () => { const [data,setData] = onsiteReact.useState(null); const [loading,setLoading] = onsiteReact.useState(true); return [data,setData,loading,setLoading,loading] },
+    usePageBackgroundSync() {},
+  },
   '@/components/admin-toast-provider': {useAdminToast:()=>({})}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': ui,
   '@/lib/raw-upload-client': {}, '@/lib/raw-upload-queue': {},
 })

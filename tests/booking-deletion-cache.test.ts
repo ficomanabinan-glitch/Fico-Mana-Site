@@ -9,7 +9,7 @@ const second = { id: 'FM-CACHE-2', customerName: 'Synthetic two' } as Booking
 function setup(t: test.TestContext) {
   const originals = Object.fromEntries(['window', 'localStorage', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   const records = new Map<string, string>()
-  const storage = { getItem: (key: string) => records.get(key) ?? null, setItem: (key: string, value: string) => records.set(key, value) }
+  const storage = { getItem: (key: string) => records.get(key) ?? null, setItem: (key: string, value: string) => records.set(key, value), removeItem: (key: string) => records.delete(key) }
   const events = new EventTarget()
   Object.defineProperty(globalThis, 'window', { configurable: true, value: events })
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage })
@@ -31,6 +31,26 @@ function setup(t: test.TestContext) {
   }
   return { store, records, storage, events, seed, salesSignals: () => salesSignals }
 }
+
+test('session changes clear cached booking rows and reject older email reads without losing the new request', async t => {
+  const { store, seed } = setup(t)
+  seed([first])
+  const pending: Array<(response: Response) => void> = []
+  globalThis.fetch = () => new Promise<Response>(resolve => pending.push(resolve))
+  const beforeLogout = store.getEmailLogs()
+  store.clearAdminReadCaches()
+  assert.equal(store.peekBookings(), undefined)
+  const current = store.getEmailLogs()
+  pending[0](Response.json([{ id: 'old-private-log' }]))
+  await beforeLogout
+  assert.equal(store.peekEmailLogs(), undefined)
+  const joined = store.getEmailLogs()
+  assert.equal(pending.length, 2)
+  pending[1](Response.json([]))
+  assert.deepEqual(await current, [])
+  assert.deepEqual(await joined, [])
+  assert.deepEqual(store.peekEmailLogs(), [])
+})
 
 test('deletion evicts a fresh cached row immediately, including the final row', async t => {
   const { store, seed, salesSignals } = setup(t)

@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cached-page-read'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -37,8 +38,7 @@ export default function ShootRemindersPage() {
   const [to, setTo] = useState(()=>dateAfter(today(),7))
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
-  const [data, setData] = useState<Overview | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData, loading, setLoading] = useCachedPageRead<Overview | null>(`admin:reminders:${from}:${to}`, null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -51,12 +51,14 @@ export default function ShootRemindersPage() {
     } catch (failure) {
       if (!signal?.aborted) setError(failure instanceof Error ? failure.message : 'Try: check your connection and refresh.')
     } finally { if (!signal?.aborted) { setLoading(false); setRefreshing(false) } }
-  }, [from,to])
+  }, [from,to,setData,setLoading])
   useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
   }, [load])
+  usePageBackgroundSync(() => load())
+
   const rows = useMemo(() => (data?.rows || []).filter(row =>
     (filter==='all'||row.response===filter) && `${row.bookingId} ${row.customerName} ${row.email}`.toLowerCase().includes(search.toLowerCase().trim())), [data,filter,search])
 

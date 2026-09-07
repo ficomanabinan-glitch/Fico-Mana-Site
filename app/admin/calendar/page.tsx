@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getBookings, getBlockedSlots, getFicoSpotBlocks, Booking } from '@/lib/data-store'
+import { getBookings, getBlockedSlots, getFicoSpotBlocks, peekBookings, peekBlockedSlots, peekFicoSpotBlocks, Booking } from '@/lib/data-store'
 import type { BlockedSlot } from '@/lib/blocked-slots'
 import type { FicoSpotBlock } from '@/lib/fico-spot-blocks'
 import AdminDayOperations from '@/components/admin-day-operations'
@@ -19,10 +19,10 @@ function todayKey() {
 
 export default function AdminCalendarPage() {
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([])
-  const [ficoSpotBlocks, setFicoSpotBlocks] = useState<FicoSpotBlock[]>([])
-  const [loading, setLoading] = useState(true)
+  const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
+  const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>(() => peekBlockedSlots() ?? [])
+  const [ficoSpotBlocks, setFicoSpotBlocks] = useState<FicoSpotBlock[]>(() => peekFicoSpotBlocks() ?? [])
+  const [loading, setLoading] = useState(() => [peekBookings(), peekBlockedSlots(), peekFicoSpotBlocks()].some(data => data === undefined))
   const [refreshing, setRefreshing] = useState(false)
   const [selectedDate, setSelectedDate] = useState(todayKey())
 

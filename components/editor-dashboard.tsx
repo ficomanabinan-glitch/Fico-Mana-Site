@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import Link from 'next/link'
 import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
@@ -49,14 +50,13 @@ function dayLabel(value: string) {
 export default function EditorDashboard() {
   const toast = useAdminToast()
   const session = useEditorSession()
+  const today = dateKey()
   const [batches, setBatches] = useState<Batch[]>(() => getCachedEditorBatches() ?? [])
-  const [todayJobs, setTodayJobs] = useState<TodayJob[]>([])
+  const [todayJobs, setTodayJobs, onsiteLoading, setOnsiteLoading] = useCachedPageRead<TodayJob[]>(`editor:today:${today}`, [])
   const [batchesLoading, setBatchesLoading] = useState(() => getCachedEditorBatches() === null)
-  const [onsiteLoading, setOnsiteLoading] = useState(true)
   const [onsiteError, setOnsiteError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [downloading, setDownloading] = useState('')
-  const today = dateKey()
 
   const load = useCallback(async (silent = false, forceSync = false) => {
     if (silent) setRefreshing(true)
@@ -108,7 +108,7 @@ export default function EditorDashboard() {
       )
     }
     setRefreshing(false)
-  }, [toast, today])
+  }, [toast, today, setTodayJobs, setOnsiteLoading])
 
   useEffect(() => {
     void load()

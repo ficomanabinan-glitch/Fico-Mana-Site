@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, CheckCircle2, Pause, ShieldCheck } from 'lucide-react'
@@ -11,8 +12,7 @@ const stamp = (date: string) => new Intl.DateTimeFormat('en-PH', {
 }).format(new Date(date))
 
 export default function ShootReminderSettings() {
-  const [control, setControl] = useState<ShootReminderControl | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [control, setControl, loading, setLoading] = useCachedPageRead<ShootReminderControl | null>('admin:reminder-settings', null)
   const [busy, setBusy] = useState<'check' | 'enable' | 'pause' | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -32,7 +32,7 @@ export default function ShootReminderSettings() {
         setError(failure instanceof Error ? failure.message : 'Try: check your connection and refresh.')
       }
     } finally { if (!signal?.aborted && version === requestVersion.current) setLoading(false) }
-  }, [])
+  }, [setControl, setLoading])
 
   useEffect(() => {
     const controller = new AbortController()

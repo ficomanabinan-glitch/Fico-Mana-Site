@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   getBookings,
+  peekBookings,
   deleteBooking,
   getBookingPackages,
   addNotification,
@@ -85,9 +86,9 @@ export default function BookingsManagementPage() {
 function BookingsManagement() {
   const searchParams = useSearchParams()
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [filteredBookings, setFilteredBookings] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(true)
+  const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
+  const [filteredBookings, setFilteredBookings] = useState<Booking[]>(() => peekBookings() ?? [])
+  const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
 
   // Search & Filter states

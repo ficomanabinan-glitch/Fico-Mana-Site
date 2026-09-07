@@ -124,7 +124,9 @@ export async function fetchSales(
 
 export function invalidateSalesDataCache() {
   cacheGeneration += 1
-  salesCache.clear()
+  // A mutation makes summaries stale, not absent. Keep the last view on screen
+  // until its replacement arrives; sign-out still removes every snapshot.
+  for (const [key, entry] of salesCache) salesCache.set(key, { ...entry, cachedAt: 0 })
   salesRequests.clear()
 }
 
@@ -137,5 +139,6 @@ export function signalSalesDataChanged() {
 
 export function clearSalesReadCache() {
   invalidateSalesDataCache()
+  salesCache.clear()
   rememberedView = null
 }

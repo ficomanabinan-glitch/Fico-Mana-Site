@@ -31,6 +31,7 @@ import {
 } from '@/components/dashboard-sidebar'
 import EditorLoadingSkeleton from '@/components/editor-page-skeleton'
 import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
+import { bindStaffReadCache } from '@/lib/staff-cache-session'
 
 export type EditorSession = {
   user: { id: string; email: string; displayName: string }
@@ -59,6 +60,8 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
 
   useEffect(() => {
     if (loginPage) {
+      bindStaffReadCache(null)
+      setSession(null)
       setLoading(false)
       return
     }
@@ -69,6 +72,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
     fetch('/api/editor-workflow/session', { cache: 'no-store', credentials: 'include' })
       .then(async (response) => {
         if (!response.ok) {
+          bindStaffReadCache(null)
           invalidateEditorBatchCache()
           const { createSupabaseBrowserClient } = await import('@/lib/supabase/browser')
           await createSupabaseBrowserClient().auth.signOut()
@@ -76,7 +80,10 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
           return
         }
         const body = (await response.json()) as EditorSession
-        if (!cancelled) setSession(body)
+        if (!cancelled) {
+          bindStaffReadCache(body.user.id)
+          setSession(body)
+        }
       })
       .catch(() => router.replace('/editor/login'))
       .finally(() => {
@@ -89,6 +96,25 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
     // The editor layout persists between protected routes. Re-check only when
     // crossing the login boundary; Proxy and every API retain server-side auth.
   }, [loginPage, router])
+
+  useEffect(() => {
+    if (!session) return
+    let disposed = false
+    let unsubscribe: (() => void) | undefined
+    void import('@/lib/supabase/browser').then(({ createSupabaseBrowserClient }) => {
+      if (disposed) return
+      const { data: { subscription } } = createSupabaseBrowserClient().auth.onAuthStateChange((_event, next) => {
+        if (!next || next.user.id !== session.user.id) {
+          bindStaffReadCache(null)
+          setSession(null)
+          router.replace('/editor/login')
+          router.refresh()
+        }
+      })
+      unsubscribe = () => subscription.unsubscribe()
+    })
+    return () => { disposed = true; unsubscribe?.() }
+  }, [session, router])
 
   useEffect(() => {
     setPendingHref(null)
@@ -150,6 +176,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
   }, [navigation, pathname, pendingHref])
 
   const logout = async () => {
+    bindStaffReadCache(null)
     invalidateEditorBatchCache()
     const { createSupabaseBrowserClient } = await import('@/lib/supabase/browser')
     await createSupabaseBrowserClient().auth.signOut()
@@ -168,7 +195,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
 
   return (
     <EditorSessionContext.Provider value={session}>
-      <AdminToastProvider>
+      <AdminToastProvider key={session.user.id}>
         <WorkspaceRefreshProvider>
         <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">
           <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">

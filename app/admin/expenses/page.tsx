@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cached-page-read'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarClock, Edit3, Plus, ReceiptText, Save, Trash2, X } from 'lucide-react'
@@ -79,9 +80,8 @@ function nextMonthlyDate(startDate?: string | null) {
 
 export default function BusinessExpensesPage() {
   const toast = useAdminToast()
-  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [expenses, setExpenses, loading, setLoading] = useCachedPageRead<Expense[]>('admin:expenses', [])
   const [draft, setDraft] = useState<Draft>(emptyDraft)
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const fetchExpenses = useCallback(async () => {
@@ -93,13 +93,15 @@ export default function BusinessExpensesPage() {
     if (!response.ok) throw new Error('Could not load business expenses.')
 
     setExpenses(Array.isArray(body) ? body : [])
-  }, [])
+  }, [setExpenses])
 
   useEffect(() => {
     fetchExpenses()
       .catch((error) => toast.error('Expenses unavailable', error instanceof Error ? error.message : 'Try again.'))
       .finally(() => setLoading(false))
-  }, [fetchExpenses, toast])
+  }, [fetchExpenses, toast, setLoading])
+
+  usePageBackgroundSync(fetchExpenses)
 
   const totals = useMemo(() => {
     const active = expenses.filter((item) => item.isActive)

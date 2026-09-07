@@ -1,7 +1,8 @@
 'use client'
+import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 import { Cloud, Database, ExternalLink, Mail, ShieldCheck } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import ShootReminderSettings from '@/components/shoot-reminder-settings'
@@ -23,9 +24,11 @@ type EmailHealth = {
 }
 
 export default function SystemPage() {
-  const [drive, setDrive] = useState<DriveHealth | null>(null)
-  const [email, setEmail] = useState<EmailHealth | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [health, setHealth, loading, setLoading, refreshing] = useCachedPageRead<{
+    drive: DriveHealth | null; email: EmailHealth | null
+  } | null>('admin:system-health', null)
+  const drive = health?.drive
+  const email = health?.email
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -41,10 +44,12 @@ export default function SystemPage() {
         return body
       }),
     ])
-    setDrive(driveResult.status === 'fulfilled' ? driveResult.value : null)
-    setEmail(emailResult.status === 'fulfilled' ? emailResult.value : null)
+    setHealth({
+      drive: driveResult.status === 'fulfilled' ? driveResult.value : null,
+      email: emailResult.status === 'fulfilled' ? emailResult.value : null,
+    })
     setLoading(false)
-  }, [])
+  }, [setHealth, setLoading])
 
   useEffect(() => {
     void load()
@@ -56,7 +61,7 @@ export default function SystemPage() {
         title="System"
         subtitle="Manage Google Drive, email, and reminder settings."
         onRefresh={() => void load()}
-        refreshing={loading}
+        refreshing={refreshing}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

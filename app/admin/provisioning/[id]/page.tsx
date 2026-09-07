@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -65,11 +66,13 @@ export default function ProvisioningBookingPage() {
   const params = useParams<{ id: string }>()
   const bookingId = decodeURIComponent(params.id)
   const toast = useAdminToast()
-  const [booking, setBooking] = useState<Booking | null>(null)
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
-  const [resources, setResources] = useState<Resource[]>([])
-  const [audit, setAudit] = useState<Audit[]>([])
-  const [loading, setLoading] = useState(true)
+  const [details, setDetails, loading, setLoading] = useCachedPageRead<{
+    booking: Booking; snapshot: Snapshot | null; resources: Resource[]; audit: Audit[]
+  } | null>(`admin:provisioning:${bookingId}`, null)
+  const booking = details?.booking
+  const snapshot = details?.snapshot
+  const resources = details?.resources ?? []
+  const audit = details?.audit ?? []
   const [busy, setBusy] = useState(false)
   const [resourceType, setResourceType] = useState<Resource['resource_type']>('other')
   const [title, setTitle] = useState('')
@@ -89,10 +92,12 @@ export default function ProvisioningBookingPage() {
       const resourcesData = await resourcesRes.json().catch(() => [])
       const auditData = await auditRes.json().catch(() => [])
       if (!bookingRes.ok) throw new Error(bookingData.error || 'Booking could not be loaded.')
-      setBooking(bookingData as Booking)
-      if (snapshotRes.ok) setSnapshot(snapshotData as Snapshot)
-      if (resourcesRes.ok) setResources(resourcesData as Resource[])
-      if (auditRes.ok) setAudit(auditData as Audit[])
+      setDetails(previous => ({
+        booking: bookingData as Booking,
+        snapshot: snapshotRes.ok ? snapshotData as Snapshot : previous?.snapshot ?? null,
+        resources: resourcesRes.ok ? resourcesData as Resource[] : previous?.resources ?? [],
+        audit: auditRes.ok ? auditData as Audit[] : previous?.audit ?? [],
+      }))
     } catch (error) {
       toast.error('Load failed', error instanceof Error ? error.message : 'Could not load provisioning details.')
     } finally {

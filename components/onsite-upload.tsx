@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cached-page-read'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -71,8 +72,7 @@ export default function OnsiteUpload({
   const toast = useAdminToast()
   const [date, setDate] = useState(/^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey())
   const [search, setSearch] = useState(initialBooking)
-  const [data, setData] = useState<OnsiteResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData, loading, setLoading] = useCachedPageRead<OnsiteResponse | null>(`editor:onsite:${date}`, null)
   const [busy, setBusy] = useState('')
   const [progress, setProgress] = useState<Record<string, Progress>>({})
   const target = useRef('')
@@ -94,11 +94,13 @@ export default function OnsiteUpload({
     } finally {
       setLoading(false)
     }
-  }, [date, toast])
+  }, [date, toast, setData, setLoading])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  usePageBackgroundSync(() => uploading.current.size ? undefined : load(true))
 
   const folders = async (bookingId: string, repair = false) => {
     setBusy(bookingId)

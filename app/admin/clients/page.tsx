@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Search, Users } from 'lucide-react'
-import { getBookings, type Booking } from '@/lib/data-store'
+import { getBookings, peekBookings, type Booking } from '@/lib/data-store'
+import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { adminInput, adminPage, adminPanel } from '@/lib/admin-ui'
 import AdminPageHeader from '@/components/admin-page-header'
 
 export default function ClientsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([])
+  const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
   const [search, setSearch] = useState('')
 
   useEffect(() => {
     getBookings().then(setBookings)
   }, [])
+  useOnAdminDbSync(() => { void getBookings().then(setBookings) })
 
   const clients = useMemo(() => {
     const map = new Map<string, Booking>()

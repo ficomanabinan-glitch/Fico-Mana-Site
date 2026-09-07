@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -47,7 +48,7 @@ function formatBytes(value: number | null) {
   return `${Math.max(1, Math.round(value / 1024))} KB`
 }
 
-function updateSlot(slots: WebsiteMediaSlot[], slot: WebsiteMediaSlot) {
+function updateSlot(slots: readonly WebsiteMediaSlot[], slot: WebsiteMediaSlot) {
   const found = slots.some((current) => current.slotKey === slot.slotKey)
   const next = found
     ? slots.map((current) => current.slotKey === slot.slotKey ? slot : current)
@@ -57,15 +58,17 @@ function updateSlot(slots: WebsiteMediaSlot[], slot: WebsiteMediaSlot) {
 
 export default function WebsiteMediaPage() {
   const toast = useAdminToast()
+  const [savedMedia, setSavedMedia, loading, setLoading] = useCachedPageRead<WebsiteMediaSlot[] | null>('admin:website-media', null)
   const [media, setMedia] = useState<WebsiteMediaSlot[]>(() =>
-    DEFAULT_WEBSITE_MEDIA.map((slot) => ({ ...slot })),
+    savedMedia ?? DEFAULT_WEBSITE_MEDIA.map((slot) => ({ ...slot })),
   )
-  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<Partial<Record<WebsiteMediaSlotKey, File>>>({})
   const [uploadState, setUploadState] = useState<Partial<Record<WebsiteMediaSlotKey, UploadState>>>({})
-  const [altDrafts, setAltDrafts] = useState<Partial<Record<WebsiteMediaSlotKey, string>>>({})
+  const [altDrafts, setAltDrafts] = useState<Partial<Record<WebsiteMediaSlotKey, string>>>(() =>
+    Object.fromEntries((savedMedia ?? DEFAULT_WEBSITE_MEDIA).map(slot => [slot.slotKey, slot.altText])))
+  const editedDescriptions = useRef(new Set<WebsiteMediaSlotKey>())
   const [savingDescription, setSavingDescription] = useState<WebsiteMediaSlotKey | null>(null)
   const [removingSlot, setRemovingSlot] = useState<WebsiteMediaSlotKey | null>(null)
   const activeUploads = useRef(new Map<WebsiteMediaSlotKey, tus.Upload>())
@@ -79,8 +82,10 @@ export default function WebsiteMediaPage() {
       const body = await response.json().catch(() => null)
       if (!response.ok) throw new Error(body?.error || 'Website media could not be loaded.')
       const nextMedia = mergeWebsiteMedia(body)
+      setSavedMedia(nextMedia)
       setMedia(nextMedia)
-      setAltDrafts(Object.fromEntries(nextMedia.map((slot) => [slot.slotKey, slot.altText])))
+      setAltDrafts(current => Object.fromEntries(nextMedia.map(slot =>
+        [slot.slotKey, editedDescriptions.current.has(slot.slotKey) ? current[slot.slotKey] ?? slot.altText : slot.altText])))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Website media could not be loaded.'
       setLoadError(`${message} Try: refresh this page; if it continues, ask your administrator to check the photo and video settings.`)
@@ -88,7 +93,7 @@ export default function WebsiteMediaPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [setLoading, setSavedMedia])
 
   useEffect(() => {
     void load()
@@ -209,6 +214,7 @@ export default function WebsiteMediaPage() {
       const body = await response.json().catch(() => null)
       if (!response.ok) throw new Error(body?.error || 'The gallery photo could not be removed.')
       const nextMedia = mergeWebsiteMedia(body)
+      setSavedMedia(nextMedia)
       setMedia(nextMedia)
       setAltDrafts(Object.fromEntries(nextMedia.map((item) => [item.slotKey, item.altText])))
       setSelectedFiles((current) => {
@@ -325,6 +331,7 @@ export default function WebsiteMediaPage() {
       if (!finalizeResponse.ok) throw new Error(published.error || 'The uploaded file could not be published.')
 
       setMedia((current) => updateSlot(current, published))
+      setSavedMedia(current => updateSlot(current ?? DEFAULT_WEBSITE_MEDIA, published))
       setSelectedFiles((current) => {
         const next = { ...current }
         delete next[slot.slotKey]
@@ -376,6 +383,7 @@ export default function WebsiteMediaPage() {
       const updated = (await response.json().catch(() => ({}))) as WebsiteMediaSlot & { error?: string }
       if (!response.ok) throw new Error(updated.error || 'Description could not be saved.')
       setMedia((current) => updateSlot(current, updated))
+      setSavedMedia(current => updateSlot(current ?? DEFAULT_WEBSITE_MEDIA, updated))
       toast.success('Description saved', `${slot.label} was updated.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Description could not be saved.'
@@ -459,7 +467,7 @@ export default function WebsiteMediaPage() {
                   upload={uploadState[slot.slotKey]}
                   altText={altDrafts[slot.slotKey] ?? slot.altText}
                   savingDescription={savingDescription === slot.slotKey}
-                  onAltText={(value) => setAltDrafts((current) => ({ ...current, [slot.slotKey]: value }))}
+                  onAltText={(value) => { editedDescriptions.current.add(slot.slotKey); setAltDrafts((current) => ({ ...current, [slot.slotKey]: value })) }}
                   onFile={(file) => void selectFile(slot, file)}
                   onPublish={() => void publish(slot)}
                   onCancel={() => void cancelUpload(slot.slotKey)}
@@ -484,7 +492,7 @@ export default function WebsiteMediaPage() {
                   upload={uploadState[video.slotKey]}
                   altText={altDrafts[video.slotKey] ?? video.altText}
                   savingDescription={savingDescription === video.slotKey}
-                  onAltText={(value) => setAltDrafts((current) => ({ ...current, [video.slotKey]: value }))}
+                  onAltText={(value) => { editedDescriptions.current.add(video.slotKey); setAltDrafts((current) => ({ ...current, [video.slotKey]: value })) }}
                   onFile={(file) => void selectFile(video, file)}
                   onPublish={() => void publish(video)}
                   onCancel={() => void cancelUpload(video.slotKey)}

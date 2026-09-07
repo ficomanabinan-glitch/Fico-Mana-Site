@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { BarChart3, CalendarDays, DollarSign, Users } from 'lucide-react'
-import { getBookings, type Booking } from '@/lib/data-store'
+import { getBookings, peekBookings, type Booking } from '@/lib/data-store'
+import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { adminCard, adminPage, adminPanel } from '@/lib/admin-ui'
 import AdminPageHeader from '@/components/admin-page-header'
 
 export default function ReportsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([])
+  const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
 
   useEffect(() => {
     getBookings().then(setBookings)
   }, [])
+  useOnAdminDbSync(() => { void getBookings().then(setBookings) })
 
   const report = useMemo(() => {
     const totalRevenue = bookings.reduce(

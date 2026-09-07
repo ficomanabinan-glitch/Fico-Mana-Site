@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { getBookings, Booking } from '@/lib/data-store'
+import { getBookings, peekBookings, Booking } from '@/lib/data-store'
 import Link from 'next/link'
 import {
   Calendar,
@@ -23,18 +23,56 @@ import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import { buildDayPriorityMap, getDayPriorityCount, sortBookingsByDayPriority } from '@/lib/booking-priority'
 import { downloadDayBookingsExcel } from '@/lib/export-day-bookings'
 
+function calculateDashboardStats(data: Booking[]) {
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  let todaysBookings = 0
+  let pendingVerification = 0
+  let confirmedBookings = 0
+  let completedSessions = 0
+  let outstandingBalances = 0
+  let totalRevenue = 0
+
+  data.forEach((b) => {
+    if (b.bookingDate === todayStr) todaysBookings++
+    if (b.bookingStatus === 'Pending Verification') pendingVerification++
+    if (b.bookingStatus === 'Confirmed') confirmedBookings++
+    if (b.bookingStatus === 'Completed') completedSessions++
+
+    const paidPayments = b.paymentHistory || []
+    let paidSum = 0
+
+    paidPayments.forEach((pay) => {
+      const isDepositVerified =
+        pay.type === 'Deposit' && ['Confirmed', 'Completed', 'No Show'].includes(b.bookingStatus)
+      const isBalancePayment = pay.type === 'Balance Payment'
+
+      if (isDepositVerified || isBalancePayment) {
+        paidSum += pay.amount
+        totalRevenue += pay.amount
+      }
+    })
+
+    if (b.bookingStatus === 'Confirmed') {
+      outstandingBalances += b.price - paidSum
+    }
+  })
+
+  return {
+    todaysBookings,
+    pendingVerification,
+    confirmedBookings,
+    completedSessions,
+    outstandingBalances,
+    totalRevenue,
+  }
+}
+
 export default function DashboardOverview() {
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [stats, setStats] = useState({
-    todaysBookings: 0,
-    pendingVerification: 0,
-    confirmedBookings: 0,
-    completedSessions: 0,
-    outstandingBalances: 0,
-    totalRevenue: 0,
-  })
-  const [loading, setLoading] = useState(true)
+  const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
+  const stats = useMemo(() => calculateDashboardStats(bookings), [bookings])
+  const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchStats = async (silent = false) => {
@@ -42,49 +80,6 @@ export default function DashboardOverview() {
     try {
       const data = await getBookings()
       setBookings(data)
-
-      const todayStr = new Date().toISOString().split('T')[0]
-
-      let todaysBookings = 0
-      let pendingVerification = 0
-      let confirmedBookings = 0
-      let completedSessions = 0
-      let outstandingBalances = 0
-      let totalRevenue = 0
-
-      data.forEach((b) => {
-        if (b.bookingDate === todayStr) todaysBookings++
-        if (b.bookingStatus === 'Pending Verification') pendingVerification++
-        if (b.bookingStatus === 'Confirmed') confirmedBookings++
-        if (b.bookingStatus === 'Completed') completedSessions++
-
-        const paidPayments = b.paymentHistory || []
-        let paidSum = 0
-
-        paidPayments.forEach((pay) => {
-          const isDepositVerified =
-            pay.type === 'Deposit' && ['Confirmed', 'Completed', 'No Show'].includes(b.bookingStatus)
-          const isBalancePayment = pay.type === 'Balance Payment'
-
-          if (isDepositVerified || isBalancePayment) {
-            paidSum += pay.amount
-            totalRevenue += pay.amount
-          }
-        })
-
-        if (b.bookingStatus === 'Confirmed') {
-          outstandingBalances += b.price - paidSum
-        }
-      })
-
-      setStats({
-        todaysBookings,
-        pendingVerification,
-        confirmedBookings,
-        completedSessions,
-        outstandingBalances,
-        totalRevenue,
-      })
     } catch (err) {
       console.error(err)
       if (!silent) toast.error('Sync failed', 'Could not load the dashboard. Try: refresh the page.')

@@ -1,4 +1,5 @@
 'use client'
+import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -47,8 +48,7 @@ export default function BatchDetailPage() {
   const pathname=usePathname()
   const batchId=decodeURIComponent(params.batchId||'')
   const toast=useAdminToast()
-  const [detail,setDetail]=useState<Detail|null>(null)
-  const [loading,setLoading]=useState(true)
+  const [detail,setDetail,loading,setLoading]=useCachedPageRead<Detail|null>(`editor:batch:${batchId}`,null)
   const [busyJob,setBusyJob]=useState('')
   const [rawTarget,setRawTarget]=useState('')
   const [uploadMode,setUploadMode]=useState<'all'|'failed'>('all')

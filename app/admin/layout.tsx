@@ -32,6 +32,7 @@ import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge } from '@/lib/admin-ui'
 import { clearSalesReadCache } from '@/lib/sales-read-cache'
 import { clearManagedPackageCache } from '@/lib/package-manager-cache'
+import { bindStaffReadCache } from '@/lib/staff-cache-session'
 import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
 import {
   DashboardSidebarNavigation,
@@ -39,7 +40,7 @@ import {
   type DashboardNavigationSection,
 } from '@/components/dashboard-sidebar'
 
-type StaffUser = { email?: string | null }
+type StaffUser = { id: string; email?: string | null }
 
 const navigationSections = [
   {
@@ -100,7 +101,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const client = createSupabaseBrowserClient()
+    let authEventSeen = false
+    let disposed = false
     client.auth.getSession().then(({ data: { session } }) => {
+      if (disposed || authEventSeen) return
+      bindStaffReadCache(session?.user.id ?? null)
       setIsLoggedIn(Boolean(session))
       setStaffUser((session?.user as StaffUser | undefined) ?? null)
       setLoading(false)
@@ -109,15 +114,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const {
       data: { subscription },
     } = client.auth.onAuthStateChange((_event, session) => {
+      authEventSeen = true
+      if (bindStaffReadCache(session?.user.id ?? null)) {
+        setNotifications([])
+        setShowNotifDrawer(false)
+        setPendingVerifications(0)
+        setPendingRawPhotoReviews(0)
+      }
       setIsLoggedIn(Boolean(session))
       setStaffUser((session?.user as StaffUser | undefined) ?? null)
+      setLoading(false)
       if (!session) {
         clearSalesReadCache()
         clearManagedPackageCache()
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => { disposed = true; subscription.unsubscribe() }
   }, [])
 
   const refreshConsoleData = useCallback(async () => {
@@ -222,6 +235,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [pathname, pendingHref])
 
   const handleLogout = async () => {
+    bindStaffReadCache(null)
     const client = createSupabaseBrowserClient()
     await client.auth.signOut()
     clearSalesReadCache()
@@ -260,7 +274,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <AdminToastProvider>
+    <AdminToastProvider key={staffUser?.id}>
       <AdminAutoSyncProvider enabled={isLoggedIn}>
         <WorkspaceRefreshProvider>
         <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">

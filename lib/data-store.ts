@@ -107,6 +107,41 @@ let ficoSpotBlocksMemory: { data: FicoSpotBlock[]; at: number } | null = null
 let ficoSpotBlocksInFlight: Promise<FicoSpotBlock[]> | null = null
 let emailLogsMemory: { data: EmailLog[]; at: number } | null = null
 let emailLogsInFlight: Promise<EmailLog[]> | null = null
+let readSessionGeneration = 0
+
+/** Also discard legacy persisted reads when entering/leaving a staff session. */
+export function clearAdminReadCaches() {
+  readSessionGeneration += 1
+  bookingsGeneration += 1
+  bookingsInFlight = null
+  notificationsInFlight = null
+  blockedSlotsMemory = null
+  blockedSlotsInFlight = null
+  ficoSpotBlocksMemory = null
+  ficoSpotBlocksInFlight = null
+  emailLogsMemory = null
+  emailLogsInFlight = null
+  if (typeof window !== 'undefined') {
+    try {
+      for (const key of [BOOKINGS_KEY, BOOKINGS_AT_KEY, NOTIFS_KEY, NOTIFS_AT_KEY]) localStorage.removeItem(key)
+    } catch { /* Storage can be disabled; the in-memory caches are still cleared. */ }
+  }
+}
+
+/** undefined means not loaded; an empty list is a successful cached result. */
+export function peekBookings(): Booking[] | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const raw = localStorage.getItem(BOOKINGS_KEY)
+    if (!raw) return undefined
+    const data = JSON.parse(raw)
+    return Array.isArray(data) ? data : undefined
+  } catch { return undefined }
+}
+
+export function peekBlockedSlots() { return blockedSlotsMemory?.data }
+export function peekFicoSpotBlocks() { return ficoSpotBlocksMemory?.data }
+export function peekEmailLogs() { return emailLogsMemory?.data }
 
 function cacheIsFresh(at: number | null | undefined) {
   return !!at && Date.now() - at < ADMIN_CACHE_TTL_MS
@@ -315,11 +350,13 @@ export async function getBookingsForAvailability(): Promise<Booking[]> {
 
 async function fetchFicoSpotBlocksFresh(signalUpdate = false): Promise<FicoSpotBlock[]> {
   if (ficoSpotBlocksInFlight) return ficoSpotBlocksInFlight
+  const generation = readSessionGeneration
   ficoSpotBlocksInFlight = (async () => {
     try {
       const res = await fetch('/api/fico-spot-blocks', { cache: 'no-store' })
       if (res.ok) {
         const data = (await res.json()) as FicoSpotBlock[]
+        if (generation !== readSessionGeneration) return []
         ficoSpotBlocksMemory = { data, at: Date.now() }
         if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
         return data
@@ -332,7 +369,7 @@ async function fetchFicoSpotBlocksFresh(signalUpdate = false): Promise<FicoSpotB
   try {
     return await ficoSpotBlocksInFlight
   } finally {
-    ficoSpotBlocksInFlight = null
+    if (generation === readSessionGeneration) ficoSpotBlocksInFlight = null
   }
 }
 
@@ -375,11 +412,13 @@ export async function setFicoSpotBlock(
 
 async function fetchBlockedSlotsFresh(signalUpdate = false): Promise<BlockedSlot[]> {
   if (blockedSlotsInFlight) return blockedSlotsInFlight
+  const generation = readSessionGeneration
   blockedSlotsInFlight = (async () => {
     try {
       const res = await fetch('/api/blocked-slots', { cache: 'no-store' })
       if (res.ok) {
         const data = (await res.json()) as BlockedSlot[]
+        if (generation !== readSessionGeneration) return []
         blockedSlotsMemory = { data, at: Date.now() }
         if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
         return data
@@ -392,7 +431,7 @@ async function fetchBlockedSlotsFresh(signalUpdate = false): Promise<BlockedSlot
   try {
     return await blockedSlotsInFlight
   } finally {
-    blockedSlotsInFlight = null
+    if (generation === readSessionGeneration) blockedSlotsInFlight = null
   }
 }
 
@@ -564,6 +603,7 @@ export async function syncAdminDatabase(): Promise<{
 }
 
 export async function saveBooking(booking: Booking): Promise<{ booking: Booking; emailErrors: string[] }> {
+  const generation = readSessionGeneration
   const res = await fetch('/api/bookings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -578,6 +618,7 @@ export async function saveBooking(booking: Booking): Promise<{ booking: Booking;
 
   const data = (await res.json()) as Booking & { emailErrors?: string[] }
   const { emailErrors = [], ...saved } = data
+  if (generation !== readSessionGeneration) return { booking: saved, emailErrors }
   // Do not let a list fetched before this save overwrite the saved record.
   bookingsGeneration += 1
   bookingsInFlight = null
@@ -592,11 +633,13 @@ export async function saveBooking(booking: Booking): Promise<{ booking: Booking;
 
 async function fetchNotificationsFresh(signalUpdate = false): Promise<Notification[]> {
   if (notificationsInFlight) return notificationsInFlight
+  const generation = readSessionGeneration
   notificationsInFlight = (async () => {
     try {
       const res = await fetch('/api/notifications', { cache: 'no-store', credentials: 'include' })
       if (res.ok) {
         const data = (await res.json()) as Notification[]
+        if (generation !== readSessionGeneration) return []
         cacheNotifications(data)
         if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
         return data
@@ -609,7 +652,7 @@ async function fetchNotificationsFresh(signalUpdate = false): Promise<Notificati
   try {
     return await notificationsInFlight
   } finally {
-    notificationsInFlight = null
+    if (generation === readSessionGeneration) notificationsInFlight = null
   }
 }
 
@@ -701,11 +744,13 @@ export async function markOpsSubscriptionPaid(): Promise<boolean> {
 
 async function fetchEmailLogsFresh(signalUpdate = false): Promise<EmailLog[]> {
   if (emailLogsInFlight) return emailLogsInFlight
+  const generation = readSessionGeneration
   emailLogsInFlight = (async () => {
     try {
       const res = await fetch('/api/emails/logs', { cache: 'no-store', credentials: 'include' })
       if (res.ok) {
         const data = (await res.json()) as EmailLog[]
+        if (generation !== readSessionGeneration) return []
         emailLogsMemory = { data, at: Date.now() }
         if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
         return data
@@ -718,7 +763,7 @@ async function fetchEmailLogsFresh(signalUpdate = false): Promise<EmailLog[]> {
   try {
     return await emailLogsInFlight
   } finally {
-    emailLogsInFlight = null
+    if (generation === readSessionGeneration) emailLogsInFlight = null
   }
 }
 
