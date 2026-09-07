@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { hasPortalExpired } from '../lib/portal-expiry.ts'
+
+test('portal expiry is enforced at the exact configured time', () => {
+  const now = Date.parse('2026-09-07T01:00:00.000Z')
+  assert.equal(hasPortalExpired(null, now), false)
+  assert.equal(hasPortalExpired('2026-09-07T01:00:00.001Z', now), false)
+  assert.equal(hasPortalExpired('2026-09-07T01:00:00.000Z', now), true)
+  assert.equal(hasPortalExpired('2026-09-06T23:59:59.999Z', now), true)
+})
 
 test('client portal QR uses the existing signed portal URL without an external QR service', async () => {
   const [qrCode, portalPage, provisioningPage, workflow] = await Promise.all([
@@ -33,10 +42,10 @@ test('expired portal links and QR codes are rejected together and can be explici
     readFile('app/api/provisioning/route.ts', 'utf8'),
   ])
 
-  assert.match(sessionRoute, /portal\.expires_at[\s\S]*Portal access has expired/)
+  assert.match(sessionRoute, /hasPortalExpired\(portal\?\.expires_at\)[\s\S]*Portal access has expired/)
   assert.match(sessionRoute, /portal\.status === 'expired'/)
   assert.match(provisioning, /clientPortalUrl: portal\?\.public_id && portalActive/)
-  assert.match(provisioning, /portal\.status === 'expired' \|\| portalExpiryPassed/)
+  assert.match(provisioning, /portal\.status === 'expired' \|\| hasPortalExpired/)
   assert.match(provisioning, /renewedUntil\.setUTCDate/)
   assert.match(overviewRoute, /status: portalExpired \? 'expired' : portal\.status/)
 })

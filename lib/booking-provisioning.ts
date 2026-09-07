@@ -3,6 +3,7 @@ import type { Booking, PaymentRecord } from '@/lib/data-store'
 import { mapDbBookingToModel } from '@/lib/booking-db'
 import { ensureShootHierarchy } from '@/lib/google-drive'
 import { portalUrl } from '@/lib/client-portal'
+import { hasPortalExpired } from '@/lib/portal-expiry'
 import { sendPortalAccessIfNeeded } from '@/lib/portal-email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
@@ -28,12 +29,6 @@ export type ProvisioningSnapshot = {
 }
 
 type Actor = { type?: 'system' | 'staff' | 'webhook'; id?: string | null }
-
-function portalExpiryPassed(value: unknown) {
-  if (typeof value !== 'string' || !value) return false
-  const expiresAt = Date.parse(value)
-  return Number.isFinite(expiresAt) && expiresAt <= Date.now()
-}
 
 async function audit(
   admin: SupabaseClient,
@@ -156,7 +151,7 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
     .select('id,public_id,status,expires_at')
     .eq('booking_id', bookingId)
     .maybeSingle()
-  const portalExpired = portalExpiryPassed(portal?.expires_at)
+  const portalExpired = hasPortalExpired(portal?.expires_at)
   const portalActive = portal?.status === 'active' && !portalExpired
 
   return {
@@ -320,7 +315,7 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   if (portalError) throw new Error(portalError.message)
   if (!portal) throw new Error('Client Portal not found.')
   const patch: Record<string, unknown> = { status: 'active', updated_at: now.toISOString() }
-  if (portal.status === 'expired' || portalExpiryPassed(portal.expires_at)) {
+  if (portal.status === 'expired' || hasPortalExpired(portal.expires_at)) {
     const { data: settings } = await admin
       .from('google_drive_settings')
       .select('portal_expiry_days')

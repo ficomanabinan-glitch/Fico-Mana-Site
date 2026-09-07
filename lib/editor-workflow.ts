@@ -14,6 +14,7 @@ import {
 } from '@/lib/google-drive'
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
 import { portalUrl } from '@/lib/client-portal'
+import { hasPortalExpired } from '@/lib/portal-expiry'
 import { setPortalExpiryFromDelivery } from '@/lib/booking-provisioning'
 import { sendEditedPhotosEmail } from '@/lib/email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
@@ -1028,7 +1029,7 @@ async function portalRecord(publicId: string) {
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Portal not found.')
-  if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) throw new Error('Portal expired.')
+  if (hasPortalExpired(data.expires_at)) throw new Error('Portal expired.')
   if (data.status === 'expired') throw new Error('Portal expired.')
   if (data.status !== 'active') throw new Error('Portal disabled.')
   return { admin, portal: data }

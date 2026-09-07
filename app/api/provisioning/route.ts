@@ -3,6 +3,7 @@ import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { googleOAuthAppConfigured } from '@/lib/google-oauth'
 import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
+import { hasPortalExpired } from '@/lib/portal-expiry'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
 // Internal project folders are intentionally separate from client-facing gallery links.
@@ -35,8 +36,7 @@ export async function GET() {
     const items = (bookings || []).map((booking) => {
       const state = stateMap.get(String(booking.id))
       const portal = portalMap.get(String(booking.id))
-      const portalExpiresAt = portal?.expires_at ? Date.parse(String(portal.expires_at)) : Number.NaN
-      const portalExpired = Number.isFinite(portalExpiresAt) && portalExpiresAt <= Date.now()
+      const portalExpired = hasPortalExpired(portal?.expires_at)
       return {
         bookingId: String(booking.id),
         customerName: String(booking.customer_name),

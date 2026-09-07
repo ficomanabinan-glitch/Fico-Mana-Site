@@ -5,6 +5,7 @@ import {
   PORTAL_SESSION_COOKIE,
   verifyPortalSignature,
 } from '@/lib/client-portal'
+import { hasPortalExpired } from '@/lib/portal-expiry'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { privateNoStoreHeaders, rejectUntrustedMutation } from '@/lib/security/request-security'
 import { portalSessionSchema } from '@/lib/security/schemas'
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
       .eq('public_id', publicId)
       .maybeSingle()
 
-    if (portal?.expires_at && new Date(portal.expires_at).getTime() <= Date.now()) {
+    if (hasPortalExpired(portal?.expires_at)) {
       await admin.from('client_portals').update({ status: 'expired' }).eq('public_id', publicId)
       return NextResponse.json({ error: 'Portal access has expired.' }, { status: 403 })
     }
