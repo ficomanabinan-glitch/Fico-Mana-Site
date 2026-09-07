@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
+test('sales insight cards use the same rounded corners as other dashboard metrics', () => {
+  const sales = source('app/admin/sales/page.tsx')
+  const insight = sales.slice(sales.indexOf('function Insight('), sales.indexOf('function ExpenseBar('))
+  assert.match(insight, /className="rounded-control border border-white\/\[0\.07\] bg-black\/10 p-3"/)
+  assert.equal((sales.match(/<Insight label=/g) || []).length, 8)
+})
+
 test('queue sections have real grid gaps and rounded metrics without changing filter behavior', () => {
   const queue = source('components/editor-queue.tsx')
   assert.match(queue, /adminPanel\} grid min-w-0 gap-4 p-4/)

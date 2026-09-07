@@ -350,7 +350,7 @@ function MoneyField({ label, value, onChange }: { label: string; value: string; 
 
 function Insight({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-white/[0.07] bg-black/10 p-3">
+    <div className="rounded-control border border-white/[0.07] bg-black/10 p-3">
       <p className="text-caption font-semibold uppercase tracking-wider text-white/30">{label}</p>
       <p className="mt-1 text-sm font-semibold text-white/80">{value}</p>
     </div>
