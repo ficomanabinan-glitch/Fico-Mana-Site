@@ -1,4 +1,4 @@
-import { Analytics } from '@vercel/analytics/next'
+import SiteAnalytics from '@/components/site-analytics'
 import type { Viewport } from 'next'
 import { Geist, Geist_Mono, Cormorant_Garamond } from 'next/font/google'
 import { rootMetadata } from '@/lib/site-metadata'
@@ -35,7 +35,7 @@ export default function RootLayout({
     <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable} ${cormorant.variable}`} style={{ backgroundColor: '#1c2e22' }}>
       <body className="font-sans antialiased" style={{ backgroundColor: '#1c2e22' }}>
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.NODE_ENV === 'production' && <SiteAnalytics />}
       </body>
     </html>
   )

@@ -54,6 +54,7 @@ const navigationSections = [
       { label: 'Filtering Queue', href: '/admin/filtering', icon: Image, badgeKey: 'filtering' },
       { label: 'Editor Portal', href: 'https://editor.ficomana.com', icon: PenTool },
       { label: 'Session Calendar', href: '/admin/calendar', icon: CalendarDays },
+      { label: 'Shoot Reminders', href: '/admin/shoot-reminders', icon: Bell },
     ],
   },
   {

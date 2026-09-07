@@ -10,6 +10,7 @@ function shouldDisableCaching(request: NextRequest) {
     pathname.startsWith('/editor') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/portal/') ||
+    pathname.startsWith('/shoot-response/') ||
     pathname.startsWith('/filtering') ||
     pathname.startsWith('/submit-raw-photo')
   )
@@ -22,7 +23,7 @@ function applyResponseHardening(request: NextRequest, response: NextResponse) {
     response.headers.set('Pragma', 'no-cache')
     response.headers.set('Expires', '0')
   }
-  if (request.nextUrl.pathname.startsWith('/portal/')) {
+  if (request.nextUrl.pathname.startsWith('/portal/') || request.nextUrl.pathname.startsWith('/shoot-response/')) {
     response.headers.set('Referrer-Policy', 'no-referrer')
   }
   return response
