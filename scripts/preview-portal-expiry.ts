@@ -24,7 +24,6 @@ async function main() {
   const {default:Notice}=loadTs<any>('components/portal-expiry-notice.tsx',{'@/lib/portal-expiry':expiry})
   const {default:Sidebar}=loadTs<any>('components/portal-sidebar.tsx',{'@/components/ui/sheet':sheet})
   const photoPreview=loadTs<any>('components/portal-photo-preview.tsx',{'@/lib/photo-pan-zoom':photoGestures})
-  const {default:DeliverableGallery}=loadTs<any>('components/portal-deliverable-gallery.tsx',{'@/components/portal-photo-preview':photoPreview})
   const picture='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#363636"/><text x="200" y="250" text-anchor="middle" fill="#aaa">Sample photo</text></svg>')
   const gallery=Array.from({length:5},(_,i)=>({id:`sample-${i}`,fileName:`PHOTO-${i+1}.JPG`,mimeType:'image/jpeg',previewUrl:picture}))
   const data={booking:{id:'FM-EXAMPLE',customerName:'Sample Client',packageName:'MANA PACKAGE',bookingDate:'2026-09-08',bookingTime:'1:30 PM - 3:00 PM · SLOT 1',bookingStatus:'Confirmed',paymentStatus:'Paid Deposit',price:6500,amountPaid:500},
@@ -32,12 +31,14 @@ async function main() {
     selection:{id:'sample-selection',status:'SUBMITTED',requiredCount:5,includedLimit:5,clientStatus:'Ready for Release',noRevisionAcknowledged:true,submittedAt:'2026-09-08T00:00:00Z',selectedIds:gallery.map(file=>file.id),selectedItems:gallery.map(file=>({fileId:file.id,preference:'standard',extraEdit:false})),printAllocations:[],addonOrders:[],totalAddonAmount:0},
     gallery,galleryTotal:5,galleryOffset:0,galleryLimit:48,editingStatus:'DELIVERED',addonCatalog:[],deliverables:gallery,resources:[],downloadAllUrl:'#'}
   const source=(file:string,before:boolean)=>before?execFileSync('git',['show',`HEAD:${file}`],{encoding:'utf8'}):undefined
-  function portal(before:boolean,started:boolean) {
+  function portal(before:boolean,started:boolean,photos:boolean) {
+    const {default:DeliverableGallery}=loadTs<any>('components/portal-deliverable-gallery.tsx',{'@/components/portal-photo-preview':photoPreview},source('components/portal-deliverable-gallery.tsx',before))
     const firstDownloadAt=new Date(Date.now()-60_000).toISOString()
     const expiresAt=new Date(Date.parse(firstDownloadAt)+30*86_400_000).toISOString()
     const {ClientPhotoSelection}=loadTs<any>('components/client-photo-selection.tsx',{
+      react:{...React,useState(initial:any){return React.useState(photos&&initial==='review'?'photos':initial)}},
       '@/lib/client-selection-summary':summary,'@/lib/portal-selection-draft':draft,'@/components/ui/sheet':sheet,
-      '@/components/portal-photo-preview':{PortalPhotoPreview:()=>null,PhotoSelectButton:({children}:any)=>createElement('button',{},children)},
+      '@/components/portal-photo-preview':photoPreview,
     },source('components/client-photo-selection.tsx',before))
     let state=0
     const stateful={...React,useState(initial:any){const index=state++;return [index===0?{...data,expiry:started?{days:30,firstDownloadAt,expiresAt}:data.expiry}:index===1?false:typeof initial==='function'?initial():initial,()=>{}]}}
@@ -69,7 +70,7 @@ async function main() {
     if(!['/portal','/provisioning'].includes(url.pathname)){response.writeHead(404);response.end();return}
     const admin=url.pathname==='/provisioning',before=url.searchParams.has('before')
     response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'})
-    response.end(`<!doctype html><html class="dark" style="--font-geist-sans:Geist;--font-geist-mono:'Geist Mono';--font-cormorant:Georgia"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Portal release — synthetic ${before?'before':'after'}</title><link rel="stylesheet" href="/styles.css"></head><body class="${admin?'admin-console p-5':''} font-sans antialiased">${admin?provisioning(before):portal(before,url.searchParams.has('started'))}</body></html>`)
+    response.end(`<!doctype html><html class="dark" style="--font-geist-sans:Geist;--font-geist-mono:'Geist Mono';--font-cormorant:Georgia"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Portal release — synthetic ${before?'before':'after'}</title><link rel="stylesheet" href="/styles.css"></head><body class="${admin?'admin-console p-5':''} font-sans antialiased">${admin?provisioning(before):portal(before,url.searchParams.has('started'),url.searchParams.has('photos'))}</body></html>`)
   }).listen(4283,'127.0.0.1',()=>console.log('Read-only preview: http://127.0.0.1:4283/portal and /provisioning; ?before for baseline; ?started for countdown'))
 }
 void main().catch(error=>{console.error(error);process.exitCode=1})

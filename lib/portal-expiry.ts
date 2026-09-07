@@ -7,7 +7,7 @@ export function hasPortalExpired(expiresAt: string | null | undefined, nowMs = D
 export type PortalExpiry = { days: number; firstDownloadAt: string | null; expiresAt: string | null }
 
 export function portalExpiryNotice(expiry: PortalExpiry, nowMs = Date.now()) {
-  if (!expiry.expiresAt) return `Your portal and QR link will expire ${expiry.days} ${expiry.days === 1 ? 'day' : 'days'} after your first completed Download All. Viewing photos does not start the countdown.`
+  if (!expiry.expiresAt) return `Your portal and QR link will expire ${expiry.days} ${expiry.days === 1 ? 'day' : 'days'} after your first completed Download All.`
   const deadline = Date.parse(expiry.expiresAt)
   if (!Number.isFinite(deadline)) return 'The expiry date is unavailable. Try: refresh this page or contact FICO MANA.'
   const date = new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }).format(deadline)
