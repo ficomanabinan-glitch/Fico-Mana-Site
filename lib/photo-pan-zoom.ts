@@ -13,6 +13,14 @@ export function constrainPhotoView(view: PhotoView, bounds: PhotoBounds): PhotoV
   return { scale, x: offset(view.x, maxX), y: offset(view.y, maxY) }
 }
 
+export function zoomPhotoWithWheel(view: PhotoView, deltaY: number, deltaMode: number, point: PhotoPoint, bounds: PhotoBounds): PhotoView {
+  const units = deltaMode === 1 ? 16 : deltaMode === 2 ? bounds.height : 1
+  const delta = Math.min(500, Math.max(-500, deltaY * units))
+  const scale = Math.min(MAX_PHOTO_ZOOM, Math.max(1, view.scale * Math.exp(-delta * 0.002)))
+  const ratio = scale / view.scale
+  return constrainPhotoView({ scale, x: point.x - (point.x - view.x) * ratio, y: point.y - (point.y - view.y) * ratio }, bounds)
+}
+
 /** Points are relative to the viewport center; keep the pinch midpoint anchored. */
 export function transformPhotoGesture(start: PhotoView, from: PhotoPoint[], to: PhotoPoint[], bounds: PhotoBounds): PhotoView {
   if (!from.length || !to.length) return constrainPhotoView(start, bounds)

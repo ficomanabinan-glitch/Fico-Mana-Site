@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
-import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
+import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, zoomPhotoWithWheel, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
 
 export function PhotoSelectButton({ file, locked, onSelect, onPreview, children }: {
   file: ClientGalleryFile; locked: boolean; onSelect: () => void; onPreview: (file: ClientGalleryFile) => void; children: ReactNode
@@ -69,6 +69,21 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
     rebaseGesture()
   }
   useEffect(() => {
+    const element = viewport.current
+    if (!file || !element || failed) return
+    const onWheel = (event: WheelEvent) => {
+      // React delegates wheel events passively. A local non-passive listener
+      // keeps trackpad/browser zoom and page scrolling out of the photo viewer.
+      event.preventDefault()
+      const rect = element.getBoundingClientRect()
+      applyView(zoomPhotoWithWheel(currentView.current, event.deltaY, event.deltaMode,
+        { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 }, bounds()))
+      gesture.current = { view: currentView.current, points: [...pointers.current.values()] }
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [file, failed, applyView, bounds])
+  useEffect(() => {
     const element = dialog.current
     if (!file || !element) return
     element.showModal()
@@ -92,7 +107,7 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
         <button type="button" autoFocus aria-label="Close photo preview" onClick={onClose} className="rounded-lg border border-white/15 p-2 hover:bg-white/10"><X className="size-4"/></button>
       </div>
     </div>
-    <div ref={viewport} role="region" aria-label="Photo preview. Pinch to zoom and drag to move. Arrow keys move a zoomed photo."
+    <div ref={viewport} role="region" aria-label="Photo preview. Pinch or scroll to zoom and drag to move. Arrow keys move a zoomed photo."
       tabIndex={0} className={`max-h-[75dvh] touch-none overflow-hidden overscroll-contain bg-black/25 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C4CEFF]/50 ${view.scale > 1 ? dragging ? 'cursor-grabbing' : 'cursor-grab' : ''}`}
       onPointerDown={event => {
         if (failed || event.button !== 0 || pointers.current.size >= 2) return
@@ -123,6 +138,5 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
           className="pointer-events-none block w-full select-none object-contain" style={{ maxHeight: '75dvh', transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`, transformOrigin: 'center', willChange: dragging ? 'transform' : undefined }}/>
       }
     </div>
-    <p className="p-3 text-center text-caption text-white/40">{view.scale > 1 ? 'Drag to move · Pinch to zoom · Use − to fit it back on screen.' : 'Pinch to zoom, or use + to inspect details.'}</p>
   </dialog>
 }

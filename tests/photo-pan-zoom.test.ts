@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { constrainPhotoView, FIT_PHOTO, transformPhotoGesture } from '../lib/photo-pan-zoom.ts'
+import { constrainPhotoView, FIT_PHOTO, transformPhotoGesture, zoomPhotoWithWheel } from '../lib/photo-pan-zoom.ts'
 import * as gestures from '../lib/photo-pan-zoom.ts'
 import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements } from './helpers/component-harness.ts'
@@ -34,6 +34,18 @@ test('coincident fingers and missing pointers never create an invalid transform'
   assert.deepEqual(transformPhotoGesture(FIT_PHOTO, [], [], bounds), FIT_PHOTO)
 })
 
+test('mouse wheel zooms around the cursor and normalizes line, page and trackpad deltas', () => {
+  const cursor = { x: 80, y: 120 }
+  const zoomed = zoomPhotoWithWheel(FIT_PHOTO, -100, 0, cursor, bounds)
+  assert.ok(zoomed.scale > 1)
+  assert.ok(Math.abs((cursor.x - zoomed.x) / zoomed.scale - cursor.x) < 0.00001)
+  assert.ok(Math.abs((cursor.y - zoomed.y) / zoomed.scale - cursor.y) < 0.00001)
+  assert.deepEqual(zoomPhotoWithWheel(FIT_PHOTO, -1, 1, cursor, bounds), zoomPhotoWithWheel(FIT_PHOTO, -16, 0, cursor, bounds))
+  assert.equal(zoomPhotoWithWheel({ scale: 3, x: 0, y: 0 }, -9999, 2, cursor, bounds).scale, 3)
+  assert.deepEqual(zoomPhotoWithWheel(FIT_PHOTO, 100, 0, cursor, bounds), FIT_PHOTO)
+  assert.equal(zoomPhotoWithWheel(FIT_PHOTO, 0, 0, cursor, bounds).scale, 1)
+})
+
 test('preview handlers support two-finger pinch, one-finger drag, cancellation and existing buttons', () => {
   const hooks = componentHarness()
   const loaded = loadTs<typeof import('../components/portal-photo-preview.tsx')>('components/portal-photo-preview.tsx', {
@@ -46,11 +58,17 @@ test('preview handlers support two-finger pinch, one-finger drag, cancellation a
   let viewport = elements(tree, el => el.props.role === 'region')[0]
   let image = elements(tree, el => el.type === 'img')[0]
   const captured = new Set<number>()
+  const listeners = new Map<string, (event: { deltaY: number; deltaMode: number; clientX: number; clientY: number; preventDefault: () => void }) => void>()
   const surface = {
     clientWidth: 400, clientHeight: 600,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 600 }),
     setPointerCapture: (id: number) => captured.add(id), hasPointerCapture: (id: number) => captured.has(id),
     releasePointerCapture: (id: number) => captured.delete(id), focus() {},
+    addEventListener: (name: string, listener: typeof listeners extends Map<string, infer L> ? L : never, options: { passive?: boolean }) => {
+      assert.equal(options.passive, false, 'wheel listener can prevent the page/browser from scrolling or zooming')
+      listeners.set(name, listener)
+    },
+    removeEventListener: (name: string) => listeners.delete(name),
   }
   viewport.props.ref.current = surface
   image.props.ref.current = { naturalWidth: 400, naturalHeight: 600 }
@@ -79,7 +97,14 @@ test('preview handlers support two-finger pinch, one-finger drag, cancellation a
   elements(tree, el => el.props['aria-label'] === 'Zoom out')[0].props.onClick()
   tree = render()
   assert.equal(elements(tree, el => el.type === 'img')[0].props.style.transform, 'translate3d(0px, 0px, 0) scale(1)')
+  let prevented = 0
+  listeners.get('wheel')!({ deltaY: -200, deltaMode: 0, clientX: 230, clientY: 330, preventDefault: () => { prevented++ } })
+  tree = render()
+  assert.equal(prevented, 1)
+  assert.doesNotMatch(elements(tree, el => el.type === 'img')[0].props.style.transform, /scale\(1\)$/)
+  assert.equal(elements(tree, el => el.type === 'p').length, 0, 'instruction footer is removed')
   elements(tree, el => el.props['aria-label'] === 'Close photo preview')[0].props.onClick()
   assert.equal(closed, 1)
   hooks.unmount()
+  assert.equal(listeners.size, 0, 'wheel listener is cleaned up with the preview')
 })
