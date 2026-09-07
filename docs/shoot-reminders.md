@@ -15,18 +15,15 @@
 
 Existing Vercel environment requirements: `RESEND_API_KEY`, a verified `RESEND_FROM_EMAIL`/supported sender setting (see `lib/resend-config.ts`), Supabase URL and server secret key, and the existing security/rate-limit configuration. Never set secrets as `NEXT_PUBLIC_*` variables.
 
-1. Apply `supabase/migrations/20260908060000_shoot_reminders_and_attendance.sql` in the Fico Mana project's SQL Editor. It creates only reminder/attendance objects and starts disabled. It relies on the existing bookings, email_logs, workspaces, pgcrypto schema and grants.
+1. One-time backend deployment: apply `supabase/migrations/20260908060000_shoot_reminders_and_attendance.sql`, then `supabase/migrations/20260908070000_admin_shoot_reminder_controls.sql`. The second migration adds the secure Admin controls and the scheduler extensions. Installing migrations does not enable emails. Existing bookings, payments and reminder history are preserved.
 2. Deploy the app to the canonical production domain. The worker is POST-only at `/api/cron/shoot-reminders`; anonymous requests must return 401.
-3. Run `supabase/shoot-reminders-setup.sql`. It creates the internal key in Supabase Vault, stores only its hash in the service-only settings table, creates a paused scheduler and returns `readiness_request_id`. No client email is sent.
-4. Inspect **that exact request ID** after the request completes:
+3. Open **Admin → System Settings** or **Admin → Shoot Reminders**. Both show the same reminder settings, backed by the database.
+4. Press **Check Reminder Service**. The backend creates/reuses the internal Vault key and the fixed scheduler, and submits a no-email readiness probe to the production endpoint. The Admin panel polls the exact request until it passes or fails; no request ID copying or SQL is needed. A check preserves an existing enabled/paused state.
+5. When the check passes, press **Enable Reminders** within 10 minutes. The server verifies the exact successful probe, schedule and administrator again before changing both the saved setting and cron job together. **Pause Reminders** turns both off without removing client responses or delivery history, even when a service check has failed.
 
-   ```sql
-   select id,status_code,timed_out,error_msg,content
-   from net._http_response where id = REPLACE_WITH_READINESS_REQUEST_ID;
-   ```
+These controls require the server-validated admin role, MFA and owner/admin membership of the active `fico-mana` workspace. Settings actions are rate limited and audited. Browser callers cannot supply destinations, cron expressions or secrets. The 6 AM time and confirmed/no-response rule remain fixed to the requested policy.
 
-   Require HTTP 200 with `success: true` and `dryRun: true`. This verifies the worker, database and presence of email configuration, but does not prove inbox delivery or sender-domain verification.
-5. Run `supabase/shoot-reminders-activate.sql` and verify both scheduler `active` and settings `enabled` are true. This is the step that enables scheduled customer emails.
+Readiness requires HTTP 200 with `success: true` and `dryRun: true`. It verifies the worker, database and presence of email configuration, but does not prove inbox delivery or sender-domain verification. The original `shoot-reminders-setup.sql` and `shoot-reminders-activate.sql` are legacy maintenance scripts; use the Admin controls for normal operation.
 
 The scheduler is `*/5 22-23 * * *` UTC: starts at 6:00 AM PHT, then checks every five minutes until 7:55 AM for the remaining queue and safe retries. These checks **do not mean a new email every five minutes**. There is one delivery record per invitation and reminder kind. The worker processes up to 40 jobs per invocation, with five attempts maximum, and stops claiming at 8:00 AM. Actual inbox arrival depends on provider processing; 6:00 AM is the start of dispatch, not a guaranteed inbox timestamp. A large queue may spread across subsequent checks.
 
@@ -45,7 +42,9 @@ Queue claims are atomic, with expiring leases and per-claim ownership. Attendanc
 - **Failed:** check Resend's sender domain, API key, recipient and account limits. Eligible failures retry in the morning window. Do not manually recreate a job or reset its ID to retry an uncertain send.
 - **No worker check:** inspect the exact cron job and associated `net._http_response` records; cron job success alone means its HTTP request was queued, not that emails were sent.
 - **Response unavailable:** check rate-limit service/security configuration and that the link has not expired or been replaced by a schedule change.
-- **Setup script rerun:** deliberately pauses reminders; reverify readiness and run activation again.
+- **Settings unavailable:** the backend deployment must include both reminder migrations. Routine configuration is then done entirely in Admin.
+- **Cannot enable:** press Check Reminder Service, wait for a successful result, then enable within 10 minutes. Failed or stale probes cannot enable sending.
+- **Legacy setup script rerun:** deliberately pauses reminders; reverify and enable from Admin afterwards.
 
 Pause only this feature without deleting any data:
 
@@ -64,4 +63,4 @@ pnpm typecheck
 pnpm build
 ```
 
-The reminder tests execute the actual migration/queue functions in isolated PostgreSQL (PGlite); only the clock is substituted to test the day boundary deterministically. They do not connect to production, create real customer records or send emails. External Supabase Cron, Vault, production grants, Resend delivery and live Admin/browser behavior still require deployment verification.
+The reminder tests execute the actual migration/queue functions in isolated PostgreSQL (PGlite); only the clock is substituted to test the day boundary deterministically. Settings tests execute the real control functions with isolated Cron, Vault and HTTP fixtures. They cover stale/failed checks, safe enable/pause, duplicate button clicks, workspace roles and secret redaction. They do not connect to production, create real customer records or send emails. External Supabase Cron, Vault encryption, production grants, Resend delivery and live Admin/browser behavior still require deployment verification.

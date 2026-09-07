@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import AdminPageHeader from '@/components/admin-page-header'
+import ShootReminderSettings from '@/components/shoot-reminder-settings'
 import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import { adminCard, adminInput, adminPage, adminSelect } from '@/lib/admin-ui'
 import type { ShootResponse } from '@/lib/shoot-reminder-content'
@@ -64,13 +65,7 @@ export default function ShootRemindersPage() {
       <Link href="/admin/emails" className="cursor-pointer px-3 py-2 text-xs text-[#C4CEFF] hover:underline">Email logs</Link>
     </AdminPageHeader>
     {error?<div role="alert" className="rounded-xl border border-red-400/25 bg-red-400/10 p-4 text-sm text-red-200">{error}</div>:null}
-    <div className={`${adminCard} p-5 text-sm leading-relaxed`}>
-      <p className="font-semibold">{data?.settings.enabled?'Automatic reminders enabled':'Automatic reminders are not active yet'}</p>
-      <p className="mt-2 text-white/60">First email: 6:00 AM, one day before the shoot. Shoot-day email: 6:00 AM, only if the first email was sent and the client confirmed or has not responded. Clients who can’t attend are excluded.</p>
-      <p className="mt-2 text-xs text-white/45">Declining does not cancel the booking or change payments. Follow up with the client in Bookings.</p>
-      {!data?.settings.enabled?<p className="mt-2 text-xs text-amber-200">Try: ask the system administrator to activate the Supabase reminder schedule after deployment.</p>:null}
-      {data?.settings.last_completed_at?<p className="mt-2 text-xs text-white/40">Last worker check: {timeLabel(data.settings.last_completed_at)} PHT</p>:null}
-    </div>
+    <ShootReminderSettings />
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">{(['confirmed','pending','declined'] as const).map(status=><div key={status} className={`${adminCard} p-4`}><p className="text-xs text-white/50">{responseLabels[status]}</p><p className="mt-2 text-2xl font-semibold">{(data?.rows||[]).filter(row=>row.response===status).length}</p></div>)}</div>
     <div className={`${adminCard} grid items-end gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4`}>
       <label className="text-xs text-white/60">From<input type="date" value={from} onChange={event=>setFrom(event.target.value)} className={`${adminInput} mt-2 [color-scheme:dark]`}/></label>

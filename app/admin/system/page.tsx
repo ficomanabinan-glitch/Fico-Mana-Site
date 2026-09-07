@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { Cloud, Database, ExternalLink, Mail, PackageOpen, ShieldCheck } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
+import ShootReminderSettings from '@/components/shoot-reminder-settings'
 import { adminBtnGhost, adminPage, adminPanel } from '@/lib/admin-ui'
 
 type DriveHealth = {
@@ -51,7 +52,7 @@ export default function SystemPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="System"
-        subtitle="Read-only production health for database, security, storage, and notifications."
+        subtitle="Production health and settings for storage, notifications, and automated shoot reminders."
         onRefresh={() => void load()}
         refreshing={loading}
       />
@@ -92,6 +93,8 @@ export default function SystemPage() {
           detail={email?.ok ? `Transactional delivery emails are enabled${email.fromEmail ? ` from ${email.fromEmail}` : ''}.` : 'Configure Resend on the production deployment to send delivery notifications.'}
         />
       </div>
+
+      <ShootReminderSettings />
 
       <section className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
         <div>
