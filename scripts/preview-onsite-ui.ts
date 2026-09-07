@@ -9,6 +9,7 @@ import postcss from 'postcss'
 import tailwind from '@tailwindcss/postcss'
 import { loadTs } from '../tests/helpers/load-ts.ts'
 
+async function main() {
 const root = process.cwd()
 const styles = await postcss([tailwind({ base: root })]).process(readFileSync('app/globals.css', 'utf8'), { from: resolve('app/globals.css') })
 const builtCss = readdirSync('.next/static/chunks').filter(name=>name.endsWith('.css')).map(name=>readFileSync(resolve('.next/static/chunks',name),'utf8')).join('\n')
@@ -39,3 +40,5 @@ createServer((request,response)=>{
   response.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'})
   response.end(`<!doctype html><html class="dark" style="--font-geist-sans:Geist;--font-geist-mono:'Geist Mono';--font-cormorant:Georgia"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Onsite mobile spacing — synthetic preview</title><link rel="stylesheet" href="/styles.css"></head><body class="admin-console font-sans antialiased"><main class="w-full min-w-0 p-5 md:p-8">${html}</main></body></html>`)
 }).listen(4282,'127.0.0.1',()=>console.log('Read-only onsite UI fixture: http://127.0.0.1:4282'))
+}
+void main().catch(error => { console.error(error); process.exitCode = 1 })
