@@ -35,4 +35,14 @@ No secret export, database restore point, provider-token revocation or independe
 
 ## Execution status
 
-Preflight completed; production secret entry and final release verification in progress. Record the confirmed commit, deployment, Drive verification and CI result here after completion.
+Completed on 7 September 2026:
+
+- Security implementation commit `f67ec76`, merged with the previously released UI changes in `fa088c28ccbfd9ddaa159f0fa89a6328a2e5f6c0`; pushed normally to main and the security branch.
+- Vercel production deployment `B6p6XmujNWkzVvmZVZSCBctNVXwh` completed successfully with both new secrets.
+- OAuth reconnection succeeded for the existing studio account. The console confirmed **Google Drive connected**, followed by **Drive settings saved — FICOMANA SHOOTS root verified**. Existing root folder ID and 30-day expiry setting were retained. No files or client folders were moved, created or removed.
+- Existing administrator and editor sessions loaded their live dashboards successfully; the editor dashboard reported active editor access and no scheduled clients/batches. No new sign-in credentials were collected.
+- Anonymous HTTP checks: public homepage 200; bookings, Drive settings and editor dashboard APIs 401 with private no-store caching and `nosniff`.
+- Hosted GitHub Actions run `34084188906` completed successfully: verification/build, full-history secret scan and CodeQL. Local tests: 117 passed; typecheck/build/security HTTP checks passed; lint 0 errors and 35 existing warnings.
+- A live desktop screenshot was reviewed (`artifacts/preservation/security-admin-desktop.png`, actual 2048 x 1111). The connected Chrome viewport override did not alter the captured size during this check, so no new pixel-identical desktop/mobile comparison is claimed for this security-only release. Earlier UI-release comparison files remain available; mobile captures requested at 390 x 844 have an actual captured height of 843 pixels. Security changes do not modify loaded UI markup beyond the already published explicit width/icon changes.
+
+Google displayed its **app not verified / currently being tested** warning during consent. Reconnection is working, but this rollout does not claim that Google's external app verification/publishing requirements have been completed. No email was sent. No database schema, account, permission or policy was changed.

@@ -1,8 +1,8 @@
-# Local hardening and performance results
+# Hardening and performance results
 
 7 September 2026. Branch `codex/security-hardening-20260907`, baseline `056467a`.
 
-**Security implementation remains local. Not a production security sign-off.** After explicit deployment approval, the separate width/performance-only commit `8bd808c` was pushed to main and deployed through the existing Vercel project (`CjK6pDgu53Lh1fviHq1Z8EWMvdWZ`, Production / Current). No security/auth/key/schema changes were included. No live database, storage policy, DNS, account or email was changed. No production data reset was performed. The requested isolated `newadmin` frontend remains queued after the security/performance work, not implemented or published.
+**Compatible security changes are deployed; this is not a complete production security sign-off.** After the separate width/performance release `8bd808c` and icon removal `d12a227`, the owner approved the dedicated-key migration. Security commit `f67ec76` was merged with main in `fa088c2` and deployed through the existing Vercel project (`B6p6XmujNWkzVvmZVZSCBctNVXwh`). Two independent production secrets were added and the existing Drive account was reconnected; its unchanged root folder was verified through the app. No database schema, storage policy, DNS or staff account was changed, and no email or production data reset was performed. See [the migration record](KEY-MIGRATION-20260907.md). The requested isolated `newadmin` frontend remains queued, not implemented or published by this security release.
 
 ## Current findings disposition
 
@@ -46,7 +46,7 @@
 | `pnpm security:secrets` | Passed |
 | `pnpm security:http` | Passed again against the final local production build using synthetic test configuration |
 | Production dependency audit | No known vulnerabilities reported at the time checked |
-| Gitleaks 8.30.1 reachable history | 200 commits scanned; no remaining credential findings after one exact reviewed publishable-key exception |
+| Gitleaks 8.30.1 reachable history | 203 commits scanned locally; no remaining credential findings after one exact reviewed publishable-key exception; hosted history scan also passed |
 | Real authenticated visual/workflow comparison | Original online admin/editor sessions compared at 1920 x 1080 and 390 x 844 after the width/performance release; empty views, not populated client workflows |
 | Live cloud configuration and effective RLS | Production project URL verified; core workflow-table RLS/grants, three service-only rate-limit RPCs, staff/MFA and two private buckets verified read-only; not an all-table/policy audit |
 | Measured speed/Core Web Vitals improvement | Not measured; no percentage claim |
@@ -59,4 +59,4 @@ Baseline screenshots are in ignored `artifacts/preservation/production-dashboard
 
 The icon-only follow-up `d12a227` is also on main and deployed (`H1n68j1WqZaQLJWThtsyEsR2Bzjs`). Its release worktree passed 99 tests, typecheck, targeted lint and production build; the full-width release's hosted CI also passed. Live System Settings visually confirms the icon is gone while the heading, explanation and Manage Packages link remain; Drive reports Connected and email Configured. No test message was sent. Screenshot: `artifacts/preservation/system-package-card-after.png`.
 
-The owner subsequently approved the key migration, including link renewal and Drive reconnection if required. Read-only preflight found zero portals, verified existing staff/MFA and core service-only database controls, and both missing dedicated production secrets have now been stored in Vercel. The compatible patch is approved to proceed through final build/deployment and Drive reconnection; see [the migration record](KEY-MIGRATION-20260907.md) for current status. Quarantine, upload-run binding, RSVP storage, CSP and historic data cleanup remain explicit scope decisions because implementing them conflicts with the preservation restriction on schema, storage architecture or user flows.
+The approved key migration and compatible release are complete. Read-only preflight found zero portals, verified existing staff/MFA and core service-only database controls; both dedicated production keys are stored in Vercel, Drive reconnection/root verification succeeded, and hosted CI passed all three jobs. See [the migration record](KEY-MIGRATION-20260907.md) for evidence and limitations. Quarantine, upload-run binding, RSVP storage, CSP and historic data cleanup remain explicit scope decisions because implementing them conflicts with the preservation restriction on schema, storage architecture or user flows.
