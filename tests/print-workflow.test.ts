@@ -148,7 +148,10 @@ test('interrupted print copies never publish a ready manifest or ready database 
 
 test('workflow integrates print instructions at selection/download and fulfills before delivery with a shared lock', () => {
   const source = readFileSync('lib/editor-workflow.ts', 'utf8')
-  const allocationCode = source.slice(source.indexOf('const allocationRows:'), source.indexOf("await admin.from('photo_selection_items').delete()"))
+  const allocationStart = source.indexOf('const allocationRows:')
+  const allocationEnd = source.indexOf("for (const table of ['photo_selection_items'", allocationStart)
+  assert.ok(allocationStart >= 0 && allocationEnd > allocationStart)
+  const allocationCode = source.slice(allocationStart, allocationEnd)
   assert.doesNotMatch(allocationCode, /copyDriveFile|findOrCreateFolder/)
   assert.match(allocationCode, /drive_file_id: null/)
   assert.match(source, /SELECTED\/manifest.json/)

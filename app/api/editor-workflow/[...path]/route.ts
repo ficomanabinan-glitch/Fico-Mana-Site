@@ -33,6 +33,7 @@ import {
   setClientSelectionStatus,
   setEditingJobStatus,
   submitPhotoSelection,
+  PortalSelectionError,
   type EditingJobStatus,
 } from '@/lib/editor-workflow'
 import { openDriveFile } from '@/lib/google-drive'
@@ -551,6 +552,7 @@ async function handle(request: NextRequest, path: string[]) {
     }
     return json({ error: 'Unknown editor workflow endpoint.' }, 404)
   } catch (error) {
+    if (error instanceof PortalSelectionError) return json({ error: error.message, code: error.code, requestId }, error.status)
     if (error instanceof RawUploadError) return json({ error: error.message, requestId }, error.status)
     if (error instanceof GraduationWorkflowOnlyError) return json({ error: error.message, requestId }, 409)
     console.error(`Editor workflow ${request.method} /${path.join('/')} [${requestId}]:`, error)

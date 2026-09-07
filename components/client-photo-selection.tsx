@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Image as ImageIcon, Lock, Plus, ShoppingBag, ZoomIn } from 'lucide-react'
 
 import { PhotoSelectButton, PortalPhotoPreview } from '@/components/portal-photo-preview'
 import { calculateClientAddons, initialEditingPreference, type AddonPreview } from '@/lib/client-selection-summary'
+import { clearPortalDraft, portalDraftKey, readPortalDraft, writePortalDraft, type PortalDraftChoices } from '@/lib/portal-selection-draft'
 
 export type ClientGalleryFile = { id: string; fileName: string; mimeType: string; previewUrl: string }
 export type ClientAddon = { id: string; name: string; description: string; price: number; pricingType: 'fixed' | 'per_photo' | 'per_piece'; maxQuantity: number }
@@ -84,6 +85,56 @@ export function ClientPhotoSelection({
   const [acknowledged, setAcknowledged] = useState(Boolean(selection?.noRevisionAcknowledged))
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState('')
+  const [hydratedDraftKey, setHydratedDraftKey] = useState('')
+  const [draftExpiresAt, setDraftExpiresAt] = useState<number | null>(null)
+  const [draftFinished, setDraftFinished] = useState(false)
+  const lastSavedDraft = useRef('')
+  const draftKey = portalDraftKey(publicId, selection?.id || '', selection?.reopenedAt, includedLimit)
+  const draft = useMemo<PortalDraftChoices>(() => ({ included, extras, editingPreference, printSelections, addonQuantities, acknowledged, step }),
+    [included, extras, editingPreference, printSelections, addonQuantities, acknowledged, step])
+
+  useEffect(() => {
+    if (!selection?.id) return
+    if (locked) clearPortalDraft(draftKey)
+    const hydrationKey = locked ? `${draftKey}:locked` : draftKey
+    if (hydratedDraftKey === hydrationKey) return
+    const saved = locked ? null : readPortalDraft(draftKey)
+    const choices: PortalDraftChoices = saved?.choices || {
+      included: selection.selectedItems.filter(item => !item.extraEdit).map(item => item.fileId),
+      extras: selection.selectedItems.filter(item => item.extraEdit).map(item => item.fileId),
+      editingPreference: initialEditingPreference(selection.selectedItems),
+      printSelections: Object.fromEntries(selection.printAllocations.map(item => [item.category, item.fileId])),
+      addonQuantities: Object.fromEntries(selection.addonOrders.filter(item => item.addonId && item.name.toLowerCase() !== 'extra edit').map(item => [String(item.addonId), item.quantity])),
+      acknowledged: selection.noRevisionAcknowledged,
+      step: locked ? 'review' : 'photos',
+    }
+    lastSavedDraft.current = JSON.stringify(choices)
+    setIncluded(choices.included)
+    setExtras(choices.extras)
+    setEditingPreference(choices.editingPreference)
+    setPrintSelections(choices.printSelections)
+    setAddonQuantities(choices.addonQuantities)
+    setAcknowledged(choices.acknowledged)
+    setStep(choices.step)
+    setDraftExpiresAt(saved?.expiresAt || null)
+    setDraftFinished(false)
+    setHydratedDraftKey(hydrationKey)
+  }, [selection, locked, draftKey, hydratedDraftKey])
+
+  useEffect(() => {
+    if (!selection?.id || locked || draftFinished || hydratedDraftKey !== draftKey) return
+    const fingerprint = JSON.stringify(draft)
+    if (lastSavedDraft.current === fingerprint) return
+    // Refreshing, loading more photos and price refetches do not extend the 15-minute timer.
+    setDraftExpiresAt(writePortalDraft(draftKey, draft))
+    lastSavedDraft.current = fingerprint
+  }, [selection?.id, locked, draftFinished, hydratedDraftKey, draftKey, draft])
+
+  useEffect(() => {
+    if (!draftExpiresAt) return
+    const timer = setTimeout(() => clearPortalDraft(draftKey), Math.max(0, draftExpiresAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [draftKey, draftExpiresAt])
 
   const galleryMap = useMemo(() => new Map(gallery.map((file) => [file.id, file])), [gallery])
   const extraEditAddon = addons.find((addon) => addon.name.trim().toLowerCase() === 'extra edit')
@@ -100,7 +151,7 @@ export function ClientPhotoSelection({
   } : calculateClientAddons(addons, addonQuantities, extras.length), [locked, selection, addons, addonQuantities, extras.length])
   const addonTotal = pricing.total
   useEffect(() => { onPricingChange?.(pricing) }, [onPricingChange, pricing])
-  const canSubmit = !locked && Boolean(editingPreference) && included.length === includedLimit && printsComplete && acknowledged && addonTypeCount <= 4
+  const canSubmit = !locked && !draftFinished && Boolean(editingPreference) && included.length === includedLimit && printsComplete && acknowledged && addonTypeCount <= 4
   const selectedPhoto = (id: string): ClientGalleryFile => galleryMap.get(id) || {
     id, fileName: 'Selected photo', mimeType: 'image/jpeg',
     previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(id)}?kind=gallery`,
@@ -165,7 +216,11 @@ export function ClientPhotoSelection({
           acknowledgeNoRevision: acknowledged,
         }),
       })
-      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      const body = (await response.json().catch(() => ({}))) as { error?: string; code?: string }
+      if (response.ok || body.code === 'SELECTION_SUBMITTED_REFRESH_FAILED') {
+        clearPortalDraft(draftKey)
+        setDraftFinished(true)
+      }
       if (!response.ok) throw new Error(body.error || 'Could not submit your selection.')
       await onSubmitted()
     } catch (error) {
@@ -184,7 +239,7 @@ export function ClientPhotoSelection({
     </div>
 
     {locked ? <div className="mt-4 flex items-start gap-2 border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="mt-0.5 size-3.5 shrink-0"/><span>Selection submitted and locked{selection.submittedAt ? ` · ${new Date(selection.submittedAt).toLocaleString('en-PH')}` : ''}. Status: {selection.clientStatus}.</span></div> : null}
-    {selection.status === 'COPY_FAILED' ? <div className="mt-4 border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-200">Your choices were saved, but the studio Drive copy needs another attempt. You may submit again safely.</div> : null}
+    {selection.status === 'COPY_FAILED' ? <div className="mt-4 border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-200">Your previous submission could not be completed. Try: review your choices and submit again. If a photo is unavailable, ask the studio to restore the original first.</div> : null}
     {message ? <div role="alert" className="mt-4 flex items-start gap-2 border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200"><AlertTriangle className="mt-0.5 size-3.5 shrink-0"/>{message}</div> : null}
 
     <label className="mt-5 block rounded-xl border border-white/[0.08] bg-black/10 p-4">

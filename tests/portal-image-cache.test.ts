@@ -27,6 +27,7 @@ function fixture() {
     '@/lib/booking-provisioning': {}, '@/lib/security/file-validation': {}, '@/lib/security/audit-metadata': {},
     '@/lib/package-workflow': packageWorkflow, '@/lib/package-workflow-server': {},
     '@/lib/print-manifest': {}, '@/lib/print-workflow': {}, '@/lib/drive-folder-mappings': {},
+    '@/lib/portal-selection-source': { PortalSelectionError: class extends Error {} },
   })
   let authorized = true
   let limited = false

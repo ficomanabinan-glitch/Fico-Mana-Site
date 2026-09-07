@@ -132,6 +132,7 @@ export type DriveFile = {
   mimeType: string
   size?: string
   md5Checksum?: string
+  sha256Checksum?: string
   parents?: string[]
   thumbnailLink?: string
   webContentLink?: string
@@ -143,8 +144,8 @@ export type DriveFile = {
 }
 
 const DRIVE_FILE_FIELDS =
-  'id,name,mimeType,size,md5Checksum,parents,thumbnailLink,webContentLink,webViewLink,appProperties'
-const DRIVE_CLEANUP_FIELDS = `${DRIVE_FILE_FIELDS},trashed,modifiedTime,capabilities(canTrash)`
+  'id,name,mimeType,size,md5Checksum,sha256Checksum,parents,thumbnailLink,webContentLink,webViewLink,appProperties,trashed'
+const DRIVE_CLEANUP_FIELDS = `${DRIVE_FILE_FIELDS},modifiedTime,capabilities(canTrash)`
 
 export async function getDriveCleanupFile(fileId: string): Promise<DriveFile> {
   return driveFetch<DriveFile>(

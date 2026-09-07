@@ -3,6 +3,7 @@ import test from 'node:test'
 import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 import * as summary from '../lib/client-selection-summary.ts'
+import * as drafts from '../lib/portal-selection-draft.ts'
 import type { ClientSelection, ClientAddon, ClientGalleryFile } from '../components/client-photo-selection.tsx'
 
 const addons: ClientAddon[] = [
@@ -31,6 +32,7 @@ function setup(initial = selection, photos = gallery) {
   const preview = { PhotoSelectButton: () => null, PortalPhotoPreview: () => null }
   const component = loadTs<typeof import('../components/client-photo-selection.tsx')>('components/client-photo-selection.tsx', {
     react: hooks.react, '@/components/portal-photo-preview': preview, '@/lib/client-selection-summary': summary,
+    '@/lib/portal-selection-draft': drafts,
   })
   let pricing: summary.AddonPreview = { total: 0, lines: [] }
   let submitted = 0
@@ -39,7 +41,7 @@ function setup(initial = selection, photos = gallery) {
     publicId: 'private', selection: initial, gallery: photos, galleryTotal: 7, loadingMore: false, addons,
     onLoadMore: () => {}, onSubmitted: async () => { submitted++ }, onPricingChange,
   }))
-  return { render, preview, get pricing() { return pricing }, get submitted() { return submitted } }
+  return { render, preview, unmount: hooks.unmount, get pricing() { return pricing }, get submitted() { return submitted } }
 }
 
 test('actual selection handlers update totals immediately, use one global preference, preview print choices, and submit the existing API shape', async t => {
@@ -96,6 +98,99 @@ test('actual selection handlers update totals immediately, use one global prefer
   assert.equal(payload.printAllocations.length, 4)
   assert.equal(payload.addons.find((item: any) => item.addonId === 'extra').quantity, 1)
   assert.equal(payload.total, undefined, 'The server, not an untrusted client total, remains authoritative')
+})
+
+test('failed submission keeps draft photos, global preference, free prints, add-ons and acknowledgement for retry', async t => {
+  const draft: ClientSelection = { ...selection, status: 'COPY_FAILED', selectedIds: gallery.slice(0, 6).map(file => file.id),
+    selectedItems: gallery.slice(0, 6).map((file, index) => ({ fileId: file.id, preference: 'less', extraEdit: index >= 5 })),
+    printAllocations: (['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'] as const).map((category, index) => ({ category, fileId: String(index), quantity: category === 'WALLET_SIZE' ? 4 : 1, label: category })),
+  }
+  const f = setup(draft)
+  let tree = f.render()
+  assert.ok(!content(tree).includes('Your choices were saved'))
+  elements(tree, el => el.type === 'button' && content(el).endsWith('Review'))[0].props.onClick()
+  tree = f.render()
+  elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } })
+  tree = f.render()
+  const payloads: unknown[] = []
+  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+    payloads.push(JSON.parse(String(init.body)))
+    return Response.json({ error: 'The original photo is unavailable. Try: ask the studio to restore it.' }, { status: 409 })
+  })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const button = elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0]
+    assert.equal(button.props.disabled, false)
+    await button.props.onClick(); await new Promise(resolve => setImmediate(resolve)); tree = f.render()
+    assert.match(content(tree), /Try: ask the studio to restore it/)
+    assert.equal(f.pricing.total, 400)
+    assert.equal(f.submitted, 0)
+  }
+  assert.deepEqual(payloads[0], payloads[1], 'Retry keeps the exact original choices and acknowledgement')
+})
+
+test('actual portal remount restores a 15-minute draft, recomputes prices, preserves failure, and clears after success', async t => {
+  const values = new Map<string, string>()
+  const browserStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { sessionStorage: browserStorage } })
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window') })
+  let now = 1_000_000
+  t.mock.method(Date, 'now', () => now)
+  const f = setup(); t.after(f.unmount)
+  let tree = f.render(); tree = f.render()
+  for (let index = 0; index < 6; index++) {
+    elements(tree, el => el.type === f.preview.PhotoSelectButton)[index].props.onSelect(); tree = f.render()
+  }
+  elements(tree, el => el.type === 'select')[0].props.onChange({ target: { value: 'raw' } }); tree = f.render()
+  elements(tree, el => el.type === 'button' && content(el).endsWith('Free Prints'))[0].props.onClick(); tree = f.render()
+  elements(tree, el => el.type === 'select' && el.props.id?.startsWith('print-')).forEach((select, index) => select.props.onChange({ target: { value: String(index) } }))
+  tree = f.render()
+  elements(tree, el => el.type === 'button' && content(el).endsWith('Add-ons'))[0].props.onClick(); tree = f.render()
+  elements(tree, el => el.type === 'button' && el.props['aria-pressed'] !== undefined)[0].props.onClick(); tree = f.render()
+  elements(tree, el => el.type === 'button' && content(el).endsWith('Review'))[0].props.onClick(); tree = f.render()
+  elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } }); f.render(); f.unmount()
+  const key = drafts.portalDraftKey('private', 'selection', null, 5)
+  const saved = drafts.readPortalDraft(key, browserStorage, now)!
+  assert.equal(saved.choices.included.length, 5)
+  assert.equal(saved.choices.extras.length, 1)
+  assert.equal(saved.choices.editingPreference, 'raw')
+  assert.equal(Object.keys(saved.choices.printSelections).length, 4)
+  assert.equal(saved.choices.addonQuantities.print, 1)
+  now += 5 * 60 * 1000
+  const restored = setup(); t.after(restored.unmount)
+  restored.render(); tree = restored.render()
+  assert.equal(restored.pricing.total, 500)
+  assert.equal(elements(tree, el => el.type === 'select')[0].props.value, 'raw')
+  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.checked, true)
+  assert.equal(drafts.readPortalDraft(key, browserStorage, now)?.expiresAt, saved.expiresAt)
+  let success = false
+  t.mock.method(globalThis, 'fetch', async () => success ? Response.json({ ok: true }) : Response.json({ error: 'Try: submit again.' }, { status: 503 }))
+  const submit = async () => {
+    const button = elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0]
+    assert.equal(button.props.disabled, false)
+    await button.props.onClick(); await new Promise(resolve => setImmediate(resolve)); tree = restored.render()
+  }
+  await submit()
+  assert.deepEqual(drafts.readPortalDraft(key, browserStorage, now)?.choices, saved.choices)
+  success = true; await submit()
+  assert.equal(values.size, 0)
+  assert.equal(restored.submitted, 1)
+  restored.render(); assert.equal(values.size, 0, 'A rerender must not resurrect a submitted draft')
+})
+
+test('server-submitted choices override and remove a stale browser draft', () => {
+  const key = drafts.portalDraftKey('private', 'selection', null, 5)
+  const values = new Map<string, string>()
+  const browserStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }
+  drafts.writePortalDraft(key, { included: ['0'], extras: [], editingPreference: 'raw', printSelections: {}, addonQuantities: {}, acknowledged: false, step: 'photos' }, browserStorage)
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { sessionStorage: browserStorage } })
+  const f = setup({ ...selection, status: 'SUBMITTED', selectedItems: [{ fileId: '1', preference: 'less', extraEdit: false }] })
+  try {
+    f.render(); const tree = f.render()
+    assert.equal(elements(tree, el => el.type === 'select')[0].props.value, 'less')
+    assert.equal(values.size, 0)
+  } finally { f.unmount(); if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window') }
 })
 
 test('submitted prices remain snapshots; locked quantities cannot be edited and unloaded print photos can still preview', () => {

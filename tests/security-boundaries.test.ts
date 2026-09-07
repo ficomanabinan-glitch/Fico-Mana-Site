@@ -105,6 +105,7 @@ function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolea
   })
   const driveReads: string[] = []
   const workflow = loadTs<typeof import('../lib/editor-workflow.ts')>('lib/editor-workflow.ts', {
+    '@/lib/portal-selection-source': { PortalSelectionError: class extends Error {} },
     '@/lib/google-drive': {
       downloadDriveFile: async (id: string) => { driveReads.push(id); return Buffer.from('synthetic') },
       getDriveFile: async (id: string) => { driveReads.push(id); throw new Error('unexpected Drive lookup') },

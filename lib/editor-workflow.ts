@@ -25,6 +25,8 @@ import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { buildPrintManifest, type PrintManifest } from '@/lib/print-manifest'
 import { fulfillBookingPrints, savePrintManifest } from '@/lib/print-workflow'
 import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
+import { PortalSelectionError, resolvePortalSelectionSources } from '@/lib/portal-selection-source'
+export { PortalSelectionError } from '@/lib/portal-selection-source'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -1246,7 +1248,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
   const { admin, portal } = await portalRecord(publicId)
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
-  if (!input.acknowledgeNoRevision) throw new Error('Please acknowledge the no-revision policy before submitting.')
+  if (!input.acknowledgeNoRevision) throw new PortalSelectionError('Please acknowledge the no-revision policy before submitting.', 'SELECTION_INVALID', 400)
   const { data: selection, error } = await admin
     .from('photo_selections')
     .update({ status: 'SUBMITTING', client_status: 'Selection In Progress', updated_at: nowIso() })
@@ -1256,117 +1258,108 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     .select('*')
     .maybeSingle()
   if (error) throw new Error(error.message)
-  if (!selection) throw new Error('This selection is already submitted and locked.')
-  const includedLimit = Math.min(5, Math.max(0, Number(selection.included_limit ?? selection.required_count ?? 5)))
-  const included = [...new Set(input.includedFileIds?.length ? input.includedFileIds : input.fileIds.slice(0, includedLimit))]
-  const extras = [...new Set(input.extraEditFileIds?.length ? input.extraEditFileIds : input.fileIds.filter((id) => !included.includes(id)))]
-  if (included.length !== includedLimit || included.some((id) => extras.includes(id))) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error(`Select exactly ${includedLimit} included photo${includedLimit === 1 ? '' : 's'} before submitting.`)
-  }
-  const unique = [...new Set([...included, ...extras])]
-  if (unique.length > 205) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('A selection can contain at most 205 photos.')
-  }
-  const preferenceMap = new Map((input.preferences || []).map((item) => [item.fileId, item.preference]))
-  const printAllocations = input.printAllocations || []
-  if (printAllocations.length !== Object.keys(PRINT_CATEGORY_LIMITS).length) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('Choose a photo for every free print category.')
-  }
-  const allocationByCategory = new Map<string, (typeof printAllocations)[number]>()
-  for (const allocation of printAllocations) {
-    if (allocationByCategory.has(allocation.category)) {
-      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-      throw new Error('Each free print category can be selected only once.')
-    }
-    if (!included.includes(allocation.fileId)) {
-      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-      throw new Error('Free print allocations must use an included enhanced photo.')
-    }
-    if (allocation.quantity !== PRINT_CATEGORY_LIMITS[allocation.category]) {
-      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-      throw new Error(`${PRINT_CATEGORY_LABELS[allocation.category]} allows at most ${PRINT_CATEGORY_LIMITS[allocation.category]}.`)
-    }
-    allocationByCategory.set(allocation.category, allocation)
-  }
-  const { data: gallery, error: galleryError } = await admin
-    .from('gallery_files')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .eq('booking_id', bookingId)
-    .in('id', unique)
-  if (galleryError || !gallery || gallery.length !== unique.length) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('One or more selected photos do not belong to this portal.')
-  }
-  const addonRequests = input.addons || []
-  const addonIds = [...new Set(addonRequests.map((addon) => addon.addonId))]
-  if (addonRequests.length !== addonIds.length) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('Each add-on type may appear only once.')
-  }
-  const { data: addonRows, error: addonError } = addonIds.length
-    ? await admin
-        .from('addon_catalog')
-        .select('id,name,description,price_amount,pricing_type,max_quantity')
-        .eq('workspace_id', workspaceId)
-        .eq('status', 'active')
-        .in('id', addonIds)
-    : { data: [], error: null }
-  if (addonError || (addonRows || []).length !== addonIds.length) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('One or more selected add-ons are no longer available.')
-  }
-  const addonMap = new Map((addonRows || []).map((row) => [String(row.id), row]))
-  const extraAddon = [...addonMap.values()].find((row) => String(row.name).toLowerCase() === 'extra edit')
-  const requestedExtraAddon = addonRequests.find((addon) => String(addon.addonId) === String(extraAddon?.id))
-  if (extras.length && (!extraAddon || !requestedExtraAddon || Number(requestedExtraAddon.photoCount || requestedExtraAddon.quantity) !== extras.length)) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('Add Extra Edit for every photo selected beyond the included allocation.')
-  }
-  if (!extras.length && requestedExtraAddon) {
-    await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-    throw new Error('Extra Edit can only be added when photos exceed the included allocation.')
-  }
-  for (const request of addonRequests) {
-    const row = addonMap.get(request.addonId)
-    if (!row || request.quantity > Number(row.max_quantity || 1)) {
-      await admin.from('photo_selections').update({ status: 'OPEN' }).eq('id', selection.id)
-      throw new Error(row ? `${row.name} exceeds its maximum quantity.` : 'Selected add-on not found.')
-    }
-  }
-  const addonOrders = addonRequests.map((request) => {
-    const row = addonMap.get(request.addonId)
-    if (!row) throw new Error('Selected add-on not found.')
-    const quantity = Number(request.quantity)
-    const photoCount = Number(request.photoCount || 0)
-    const pricingType = String(row.pricing_type) as 'fixed' | 'per_photo' | 'per_piece'
-    const billableUnits = pricingType === 'fixed' ? 1 : pricingType === 'per_photo' ? Math.max(photoCount, quantity) : quantity
-    return {
-      workspace_id: workspaceId,
-      booking_id: bookingId,
-      selection_id: selection.id,
-      addon_catalog_id: row.id,
-      name_snapshot: String(row.name),
-      description_snapshot: String(row.description || ''),
-      pricing_type_snapshot: pricingType,
-      unit_price_snapshot: Number(row.price_amount || 0),
-      quantity,
-      photo_count: photoCount,
-      total_amount: Number(row.price_amount || 0) * billableUnits,
-    }
-  })
-  const totalAddonAmount = addonOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
+  if (!selection) throw new PortalSelectionError('This selection is already submitted and locked. Try: refresh the portal to see its latest status.', 'SELECTION_LOCKED')
+  let submitted = false
   try {
+    const includedLimit = Math.min(5, Math.max(0, Number(selection.included_limit ?? selection.required_count ?? 5)))
+    const included = [...new Set(input.includedFileIds?.length ? input.includedFileIds : input.fileIds.slice(0, includedLimit))]
+    const extras = [...new Set(input.extraEditFileIds?.length ? input.extraEditFileIds : input.fileIds.filter((id) => !included.includes(id)))]
+    if (included.length !== includedLimit || included.some((id) => extras.includes(id))) {
+      throw new PortalSelectionError(`Select exactly ${includedLimit} included photo${includedLimit === 1 ? '' : 's'} before submitting.`, 'SELECTION_INVALID', 400)
+    }
+    const unique = [...new Set([...included, ...extras])]
+    if (unique.length > 205) {
+      throw new PortalSelectionError('A selection can contain at most 205 photos.', 'SELECTION_INVALID', 400)
+    }
+    const preferenceMap = new Map((input.preferences || []).map((item) => [item.fileId, item.preference]))
+    const printAllocations = input.printAllocations || []
+    if (printAllocations.length !== Object.keys(PRINT_CATEGORY_LIMITS).length) {
+      throw new PortalSelectionError('Choose a photo for every free print category.', 'SELECTION_INVALID', 400)
+    }
+    const allocationByCategory = new Map<string, (typeof printAllocations)[number]>()
+    for (const allocation of printAllocations) {
+      if (allocationByCategory.has(allocation.category)) {
+        throw new PortalSelectionError('Each free print category can be selected only once.', 'SELECTION_INVALID', 400)
+      }
+      if (!included.includes(allocation.fileId)) {
+        throw new PortalSelectionError('Free print allocations must use an included enhanced photo.', 'SELECTION_INVALID', 400)
+      }
+      if (allocation.quantity !== PRINT_CATEGORY_LIMITS[allocation.category]) {
+        throw new PortalSelectionError(`${PRINT_CATEGORY_LABELS[allocation.category]} allows at most ${PRINT_CATEGORY_LIMITS[allocation.category]}.`, 'SELECTION_INVALID', 400)
+      }
+      allocationByCategory.set(allocation.category, allocation)
+    }
+    const { data: gallery, error: galleryError } = await admin
+      .from('gallery_files')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('booking_id', bookingId)
+      .in('id', unique)
+    if (galleryError || !gallery || gallery.length !== unique.length) {
+      throw new PortalSelectionError('One or more selected photos do not belong to this portal.', 'SELECTION_INVALID', 400)
+    }
+    const addonRequests = input.addons || []
+    const addonIds = [...new Set(addonRequests.map((addon) => addon.addonId))]
+    if (addonRequests.length !== addonIds.length) {
+      throw new PortalSelectionError('Each add-on type may appear only once.', 'SELECTION_INVALID', 400)
+    }
+    const { data: addonRows, error: addonError } = addonIds.length
+      ? await admin
+          .from('addon_catalog')
+          .select('id,name,description,price_amount,pricing_type,max_quantity')
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'active')
+          .in('id', addonIds)
+      : { data: [], error: null }
+    if (addonError || (addonRows || []).length !== addonIds.length) {
+      throw new PortalSelectionError('One or more selected add-ons are no longer available.', 'SELECTION_INVALID', 400)
+    }
+    const addonMap = new Map((addonRows || []).map((row) => [String(row.id), row]))
+    const extraAddon = [...addonMap.values()].find((row) => String(row.name).toLowerCase() === 'extra edit')
+    const requestedExtraAddon = addonRequests.find((addon) => String(addon.addonId) === String(extraAddon?.id))
+    if (extras.length && (!extraAddon || !requestedExtraAddon || Number(requestedExtraAddon.photoCount || requestedExtraAddon.quantity) !== extras.length)) {
+      throw new PortalSelectionError('Add Extra Edit for every photo selected beyond the included allocation.', 'SELECTION_INVALID', 400)
+    }
+    if (!extras.length && requestedExtraAddon) {
+      throw new PortalSelectionError('Extra Edit can only be added when photos exceed the included allocation.', 'SELECTION_INVALID', 400)
+    }
+    for (const request of addonRequests) {
+      const row = addonMap.get(request.addonId)
+      if (!row || request.quantity > Number(row.max_quantity || 1)) {
+        throw new PortalSelectionError(row ? `${row.name} exceeds its maximum quantity.` : 'Selected add-on not found.', 'SELECTION_INVALID', 400)
+      }
+    }
+    const addonOrders = addonRequests.map((request) => {
+      const row = addonMap.get(request.addonId)
+      if (!row) throw new PortalSelectionError('Selected add-on not found.', 'SELECTION_INVALID', 400)
+      const quantity = Number(request.quantity)
+      const photoCount = Number(request.photoCount || 0)
+      const pricingType = String(row.pricing_type) as 'fixed' | 'per_photo' | 'per_piece'
+      const billableUnits = pricingType === 'fixed' ? 1 : pricingType === 'per_photo' ? Math.max(photoCount, quantity) : quantity
+      return {
+        workspace_id: workspaceId,
+        booking_id: bookingId,
+        selection_id: selection.id,
+        addon_catalog_id: row.id,
+        name_snapshot: String(row.name),
+        description_snapshot: String(row.description || ''),
+        pricing_type_snapshot: pricingType,
+        unit_price_snapshot: Number(row.price_amount || 0),
+        quantity,
+        photo_count: photoCount,
+        total_amount: Number(row.price_amount || 0) * billableUnits,
+      }
+    })
+    const totalAddonAmount = addonOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
     const { hierarchy, batch } = await ensureBookingFolders(admin, workspaceId, bookingId)
+    // Preflight every original before making any selected copies or changing saved choices.
+    const sources = await resolvePortalSelectionSources(admin, workspaceId, bookingId, hierarchy.raw.id, gallery)
     const extraFolder = extras.length ? await findOrCreateFolder(hierarchy.selected.id, 'EXTRA EDITS') : null
     const items: Record<string, unknown>[] = []
     for (const file of gallery) {
       const extraEdit = extras.includes(String(file.id))
       const copy = await copyDriveFile({
-        fileId: String(file.drive_file_id),
+        fileId: sources.get(String(file.id))!,
         destinationFolderId: extraEdit && extraFolder ? extraFolder.id : hierarchy.selected.id,
         bookingId,
         galleryFileId: String(file.id),
@@ -1396,9 +1389,10 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         drive_file_id: null,
       })
     }
-    await admin.from('photo_selection_items').delete().eq('selection_id', selection.id)
-    await admin.from('print_allocations').delete().eq('selection_id', selection.id)
-    await admin.from('client_addon_orders').delete().eq('selection_id', selection.id)
+    for (const table of ['photo_selection_items', 'print_allocations', 'client_addon_orders']) {
+      const { error: deleteError } = await admin.from(table).delete().eq('selection_id', selection.id)
+      if (deleteError) throw new Error(deleteError.message)
+    }
     const { error: itemError } = await admin.from('photo_selection_items').insert(items)
     if (itemError) throw new Error(itemError.message)
     if (allocationRows.length) {
@@ -1420,20 +1414,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       if (addonOrderError) throw new Error(addonOrderError.message)
     }
     const submittedAt = nowIso()
-    await Promise.all([
-      admin
-        .from('photo_selections')
-        .update({
-          status: 'SUBMITTED',
-          client_status: 'Submitted',
-          included_limit: includedLimit,
-          no_revision_acknowledged: true,
-          no_revision_acknowledged_at: submittedAt,
-          total_addon_amount: totalAddonAmount,
-          submitted_at: submittedAt,
-          updated_at: submittedAt,
-        })
-        .eq('id', selection.id),
+    const updates = await Promise.all([
       admin
         .from('editing_jobs')
         .update({ status: 'READY_FOR_EDITING', selected_count: unique.length, expected_output_count: unique.length, last_error: null, updated_at: submittedAt })
@@ -1448,6 +1429,20 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         })
         .eq('id', bookingId),
     ])
+    for (const result of updates) if (result.error) throw new Error(result.error.message)
+    // Only lock the selection once copies, print instructions and associated saves succeeded.
+    const { data: finalized, error: finalizeError } = await admin.from('photo_selections').update({
+      status: 'SUBMITTED',
+      client_status: 'Submitted',
+      included_limit: includedLimit,
+      no_revision_acknowledged: true,
+      no_revision_acknowledged_at: submittedAt,
+      total_addon_amount: totalAddonAmount,
+      submitted_at: submittedAt,
+      updated_at: submittedAt,
+    }).eq('id', selection.id).eq('status', 'SUBMITTING').select('id').maybeSingle()
+    if (finalizeError || !finalized) throw new Error(finalizeError?.message || 'Selection could not be finalized.')
+    submitted = true
     await audit(admin, workspaceId, { type: 'client', id: publicId }, 'SELECTION_SUBMITTED', {
       bookingId,
       batchId: batch.id,
@@ -1458,16 +1453,26 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       batchId: batch.id,
         metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, printsAwaitingEnhancedUpload: true, destructive: false },
     })
-    return getPortalData(publicId)
+    return await getPortalData(publicId)
   } catch (copyError) {
+    if (submitted) {
+      console.error('Submitted selection refresh failed:', copyError)
+      throw new PortalSelectionError('Your selection was submitted, but the updated portal could not be loaded. Try: refresh the portal to see your submitted selection.', 'SELECTION_SUBMITTED_REFRESH_FAILED')
+    }
     const message = copyError instanceof Error ? copyError.message : 'Selected photo copy failed.'
-    await admin.from('photo_selections').update({ status: 'COPY_FAILED', updated_at: nowIso() }).eq('id', selection.id)
+    const { error: resetError } = await admin.from('photo_selections').update({
+      status: copyError instanceof PortalSelectionError && copyError.code === 'SELECTION_INVALID' ? 'OPEN' : 'COPY_FAILED',
+      updated_at: nowIso(),
+    }).eq('id', selection.id).eq('status', 'SUBMITTING')
+    if (resetError) console.error('Selection retry state could not be saved:', resetError.message)
     await admin.from('editing_jobs').update({ last_error: message, updated_at: nowIso() }).eq('booking_id', bookingId)
     await audit(admin, workspaceId, { type: 'system' }, 'SELECTION_COPY_FAILED', {
       bookingId,
       metadata: { error: message },
     })
-    throw copyError
+    if (copyError instanceof PortalSelectionError) throw copyError
+    console.error('Portal selection submission failed:', copyError)
+    throw new PortalSelectionError('Your selection could not be completed. Try: submit again in a moment. If it still fails, ask the studio to check your RAW photos and Drive connection in Client Portals.', 'SELECTION_SUBMISSION_FAILED', 503)
   }
 }
 
