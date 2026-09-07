@@ -4,6 +4,12 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
+test('Private Portal information keeps its message inside a rounded card', () => {
+  const portal = source('app/portal/[id]/page.tsx')
+  assert.match(portal, /rounded-card border border-\[#C4CEFF\]\/15 bg-\[#C4CEFF\]\/\[0\.04\] p-5/)
+  assert.match(portal, /Private Portal<\/p><p[^>]*>This unique link exposes/)
+})
+
 test('client portal statuses are rounded badges without pretending to be action buttons', () => {
   const portals = source('app/admin/provisioning/page.tsx')
   assert.match(portals, /<span className=\{`inline-flex rounded-md border px-2 py-1 text-caption font-semibold capitalize/)
