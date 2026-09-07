@@ -33,7 +33,7 @@ export type PrintOutput = {
 }
 
 function filenameKey(value: string) {
-  return value.normalize('NFKC').trim().toLowerCase()
+  return value.normalize('NFKC').trim().replace(/^ENHANCED - /i, '').toLowerCase()
 }
 
 function stem(value: string) {
@@ -109,7 +109,7 @@ export function matchEnhancedPrintSource(output: PrintOutput, files: EnhancedPri
 
 export function printOutputName(output: PrintOutput, enhancedFileName: string) {
   // Preserve the enhanced image's real extension; renaming never converts image bytes.
-  const safeName = enhancedFileName.normalize('NFKC').replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, ' ').trim()
+  const safeName = enhancedFileName.normalize('NFKC').replace(/^ENHANCED - /i, '').replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, ' ').trim()
   if (!safeName || safeName.length > 180) throw new Error('The enhanced filename is too long. Try: use the original photo filename.')
   return `${output.name_prefix} - ${safeName}`
 }

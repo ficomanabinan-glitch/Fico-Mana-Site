@@ -31,6 +31,7 @@ type Job = {
   rawFolderDriveId?: string | null
   lastError?: string | null
   resetId?: string | null
+  portalEmailStatus?: 'SENT' | 'FAILED' | null
 }
 
 type OnsiteResponse = {
@@ -40,6 +41,7 @@ type OnsiteResponse = {
 }
 
 type Progress = RawQueueProgress
+type PortalEmailState = { status: 'SENT' | 'FAILED'; error?: string }
 
 function todayKey() {
   const now = new Date()
@@ -82,6 +84,9 @@ export default function OnsiteUpload({
   const [deleting, setDeleting] = useState(false)
   const [deleteProgress, setDeleteProgress] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [emailStates, setEmailStates] = useState<Record<string, PortalEmailState>>({})
+  const [emailRetryJob, setEmailRetryJob] = useState<Job | null>(null)
+  const [emailRetrying, setEmailRetrying] = useState(false)
   const target = useRef('')
   const input = useRef<HTMLInputElement | null>(null)
   const uploading = useRef(new Set<string>())
@@ -139,6 +144,24 @@ export default function OnsiteUpload({
     input.current?.click()
   }
 
+  const sendPortalEmail = async (bookingId: string, showRetry = true) => {
+    try {
+      const response = await fetch(`/api/editor-workflow/raw/${encodeURIComponent(bookingId)}/portal-email`, {
+        method: 'POST', credentials: 'include',
+      })
+      const body = await responseJson(response)
+      if (!response.ok || !['SENT', 'ALREADY_SENT'].includes(String(body.status))) throw new Error(String(body.error || 'The portal email could not be sent. Try: check the client email and retry.'))
+      setEmailStates(current => ({ ...current, [bookingId]: { status: 'SENT' } }))
+      setEmailRetryJob(null)
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The portal email could not be sent. Try: check the client email and retry.'
+      setEmailStates(current => ({ ...current, [bookingId]: { status: 'FAILED', error: message } }))
+      if (showRetry) setEmailRetryJob(data?.batch?.jobs.find(item => item.bookingId === bookingId) || null)
+      return false
+    }
+  }
+
   const uploadFiles = async (bookingId: string, files: File[]) => {
     if (!files.length || uploading.current.has(bookingId)) return
     uploading.current.add(bookingId)
@@ -153,6 +176,7 @@ export default function OnsiteUpload({
       } else {
         toast.success('RAW upload complete', `${result.uploaded} files uploaded to the correct client folder.`)
       }
+      if (result.uploaded > 0 && result.failed.length === 0) await sendPortalEmail(bookingId)
     } finally {
       uploading.current.delete(bookingId)
       setBusy(current => current === bookingId ? '' : current)
@@ -306,7 +330,7 @@ export default function OnsiteUpload({
 
             return (
               <article key={job.bookingId} className={`${adminPanel} p-card`}>
-                <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] 2xl:items-center">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-card-title font-semibold tracking-heading">{job.customerName}</h2>
@@ -317,20 +341,6 @@ export default function OnsiteUpload({
                       <p>{job.packageName}</p>
                     </div>
                     <p className="mt-2 font-mono text-caption text-white/25">{job.bookingId}</p>
-                    <dl className="mt-4 grid gap-3 text-small text-white/40 sm:flex sm:flex-wrap sm:gap-x-6">
-                      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3">
-                        <dt>Uploaded files</dt><dd className="text-right font-semibold tabular-nums text-white/70">{job.galleryCount}</dd>
-                      </div>
-                      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3">
-                        <dt>Last upload</dt>
-                        <dd className="min-w-0 text-right font-semibold text-white/70">
-                          {job.lastUploadAt
-                            ? new Date(job.lastUploadAt).toLocaleString('en-PH')
-                            : 'Not uploaded yet'}
-                        </dd>
-                      </div>
-                    </dl>
-
                     {state ? (
                       <div
                         className="mt-4 max-w-xl border border-white/[0.08] bg-black/20 p-3"
@@ -419,7 +429,27 @@ export default function OnsiteUpload({
                     ) : null}
                   </div>
 
-                  <div className="onsite-actions">
+                  <div className="space-y-4 lg:justify-self-end">
+                    <dl className="grid gap-2 text-small text-white/40 sm:flex sm:flex-wrap sm:items-baseline sm:justify-end sm:gap-x-6">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Uploaded files</dt><dd className="font-semibold tabular-nums text-white/70">{job.galleryCount}</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Last upload</dt>
+                        <dd className="min-w-0 font-semibold text-white/70">
+                          {job.lastUploadAt ? new Date(job.lastUploadAt).toLocaleString('en-PH') : 'Not uploaded yet'}
+                        </dd>
+                      </div>
+                      {emailStates[job.bookingId] || job.portalEmailStatus ? (
+                        <div className={`font-semibold ${(emailStates[job.bookingId]?.status || job.portalEmailStatus) === 'SENT' ? 'text-emerald-300' : 'text-red-300'}`}>
+                          <dt className="sr-only">Portal email</dt>
+                          <dd>{(emailStates[job.bookingId]?.status || job.portalEmailStatus) === 'SENT' ? 'Email Sent' : (
+                            <button type="button" className="cursor-pointer underline underline-offset-4" onClick={() => setEmailRetryJob(job)}>Email Failed · Retry</button>
+                          )}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    <div className="onsite-actions">
                     <button
                       type="button"
                       disabled={isBusy || Boolean(job.resetId)}
@@ -453,6 +483,7 @@ export default function OnsiteUpload({
                         Retry {state.failed.length} Failed
                       </button>
                     ) : null}
+                    </div>
                   </div>
                 </div>
               </article>
@@ -480,6 +511,27 @@ export default function OnsiteUpload({
               {deleting ? 'Deleting files…' : deleteJob?.resetId ? 'Resume Delete Files' : 'Delete Files for This Client'}
             </button>
             <button type="button" disabled={deleting} onClick={() => setDeleteJob(null)} className={`${adminBtnGhost} px-4 py-3`}>Cancel</button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      <Sheet open={Boolean(emailRetryJob)} onOpenChange={open => { if (!open && !emailRetrying) setEmailRetryJob(null) }}>
+        <SheetContent className="data-[side=right]:w-full bg-[#222222] text-white data-[side=right]:sm:max-w-md" showCloseButton={!emailRetrying}>
+          <SheetHeader>
+            <SheetTitle className="text-white">Email Failed</SheetTitle>
+            <SheetDescription className="mt-3 text-white/60">
+              Upload completed, but the email failed to send. Do you want to retry?
+            </SheetDescription>
+          </SheetHeader>
+          {emailRetryJob && emailStates[emailRetryJob.bookingId]?.error ? (
+            <p className="px-4 text-small leading-relaxed text-red-300">{emailStates[emailRetryJob.bookingId].error}</p>
+          ) : null}
+          <SheetFooter>
+            <button type="button" disabled={emailRetrying} onClick={() => {
+              if (!emailRetryJob) return
+              setEmailRetrying(true)
+              void sendPortalEmail(emailRetryJob.bookingId, false).finally(() => setEmailRetrying(false))
+            }} className={`${adminBtnPrimary} px-4 py-3`}>{emailRetrying ? 'Retrying…' : 'Retry'}</button>
+            <button type="button" disabled={emailRetrying} onClick={() => setEmailRetryJob(null)} className={`${adminBtnGhost} px-4 py-3`}>No</button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

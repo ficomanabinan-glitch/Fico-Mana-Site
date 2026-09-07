@@ -471,6 +471,17 @@ async function handle(request: NextRequest, path: string[]) {
         return json(body.resetId ? await continueOnsitePhotoReset(context, body.resetId) : await beginOnsitePhotoReset(context))
       }
       if (path[2] === 'index') return json(await indexRawFolder(workspaceId, bookingId, actorId))
+      if (path[2] === 'portal-email' && path.length === 3) {
+        const [{ sendPortalAccessIfNeeded }, { getSupabaseAdmin }] = await Promise.all([
+          import('@/lib/portal-email'), import('@/lib/supabase/admin'),
+        ])
+        const admin = getSupabaseAdmin()
+        if (!admin) return json({ error: 'The email service is unavailable. Try: check Production settings, then retry the email.' }, 503)
+        const result = await sendPortalAccessIfNeeded(admin, bookingId, { workspaceId, type: 'staff', id: actorId })
+        if ('error' in result && result.error) return json({ error: result.error }, 502)
+        if (!result.sent && !result.alreadySent) return json({ error: 'The portal email was not sent. Try: review the client portal and email settings.' }, 409)
+        return json({ success: true, status: result.sent ? 'SENT' : 'ALREADY_SENT' })
+      }
       if (path[2] === 'upload-session' || path[2] === 'complete-file') {
         if (path.length !== 3) return json({ error: 'Unknown upload action.' }, 404)
         // Only metadata enters the application; image bytes go straight to Google Drive.

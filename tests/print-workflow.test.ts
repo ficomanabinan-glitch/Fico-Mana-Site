@@ -38,6 +38,9 @@ test('enhanced matching allows RAW-to-JPEG export but rejects missing, ambiguous
   const output = manifestTools.buildPrintManifest(input).outputs[0]
   const file = { drive_file_id: 'enhanced', file_name: '0920.JPG', checksum: checksums[0] }
   assert.equal(manifestTools.matchEnhancedPrintSource(output, [file]), file)
+  const prefixed = { ...file, file_name: 'ENHANCED - 0920.JPG' }
+  assert.equal(manifestTools.matchEnhancedPrintSource(output, [prefixed]), prefixed)
+  assert.equal(manifestTools.printOutputName(output, prefixed.file_name), 'TOGA PICTURE - 0920.JPG')
   assert.throws(() => manifestTools.matchEnhancedPrintSource(output, [{ ...file, file_name: 'DSC_0920.JPG' }]), /missing.*Try:/)
   assert.throws(() => manifestTools.matchEnhancedPrintSource(output, [{ ...file, checksum: '' }]), /missing/)
   assert.throws(() => manifestTools.matchEnhancedPrintSource(output, [file, { ...file, drive_file_id: 'second', file_name: '0920.PNG' }]), /More than one.*Try:/)
@@ -47,7 +50,7 @@ test('enhanced matching allows RAW-to-JPEG export but rejects missing, ambiguous
 
 function fixture(options: { missing?: boolean; foreign?: boolean; hashMismatch?: boolean; copyFailAt?: number; dbError?: boolean; status?: string; mimeType?: string } = {}) {
   const deliveries = categories.map((_, index) => ({
-    drive_file_id: `edited${index}`, file_name: `092${index}.JPG`, checksum: checksums[index], relative_path: `EDITED/092${index}.JPG`,
+    drive_file_id: `edited${index}`, file_name: `ENHANCED - 092${index}.JPG`, checksum: checksums[index], relative_path: `EDITED/ENHANCED - 092${index}.JPG`,
     workspace_id: 'workspace', booking_id: 'SYNTHETIC', editing_job_id: 'job',
   }))
   const tables: Record<string, Array<Record<string, unknown>>> = {

@@ -343,7 +343,6 @@ export function ClientPhotoSelection({
             ['Paid', money(paymentSummary.amountPaid)],
           ].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b border-white/[0.06] pb-3"><dt className="text-white/45">{label}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl>
           <div data-testid="submission-balance" className="flex items-center justify-between gap-4 rounded-xl border border-[#C4CEFF]/20 bg-[#C4CEFF]/5 p-4"><span className="text-sm text-white/65">Remaining balance</span><strong className="text-2xl text-[#C4CEFF]">{money(payment.remaining)}</strong></div>
-          <p className="text-caption leading-relaxed text-white/45">Submitting saves your selection and add-ons. It does not collect a payment.</p>
           <label className="block"><span className="text-caption font-semibold text-[#C4CEFF]">Final submission PIN</span><span id="mobile-submission-pin-help" className="mt-1 block text-caption text-white/45">Last 4 digits of the phone number used for this booking.</span>
             <input id="mobile-submission-pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" value={submissionPin} disabled={submitting} aria-describedby="mobile-submission-pin-help" onChange={(event) => setSubmissionPin(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#252525] px-3 text-center text-lg tracking-[0.5em] text-white outline-none focus:border-[#C4CEFF]/50"/>
           </label>

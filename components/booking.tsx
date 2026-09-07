@@ -38,6 +38,7 @@ import {
   isMakeupSlotFull,
 } from '@/lib/booking-slots'
 import { generateBookingId } from '@/lib/booking-id'
+import { isValidCustomerEmail } from '@/lib/customer-email'
 
 function getPackageIcon(pkg: BookingPackage) {
   if (pkg.category === 'graduation' && pkg.slotType === 'makeup') return GraduationCap
@@ -282,6 +283,10 @@ function BookingForm() {
       setFormError('Please fill in all required contact fields.')
       return false
     }
+    if (!isValidCustomerEmail(email)) {
+      setFormError('Enter a valid email address, such as name@example.com.')
+      return false
+    }
     setFormError('')
     return true
   }
@@ -390,6 +395,7 @@ function BookingForm() {
     setStep(1)
     setSelectedSession(null)
     setSelectedDate(null)
+    setSelectedTimeSlot('')
     setSelectedSlotId('')
     setName('')
     setEmail('')
@@ -402,6 +408,12 @@ function BookingForm() {
     setReceiptFile(null)
     setTransactionRef('')
     setSubmittedSummary(null)
+    setBookingId('')
+    setFormError('')
+    setCopiedText(false)
+    setCopiedRef(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    window.history.replaceState(null, '', `${window.location.pathname}#booking`)
   }
 
   return (
@@ -428,12 +440,6 @@ function BookingForm() {
             isGraduation={!!isGraduationPackage}
             requiresDeposit={requiresDeposit}
           />
-        )}
-
-        {formError && (
-          <div className="mb-5 border border-white/20 bg-white/5 px-4 py-3 text-sm text-white">
-            {formError}
-          </div>
         )}
 
         <div className="min-h-[min(62vh,640px)] flex flex-col">
@@ -901,15 +907,14 @@ function BookingForm() {
                   </div>
                 </div>
                 <div>
-                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between mb-1.5">
+                  <div className="mb-1.5">
                     <label className={labelClass}>Pre-Shoot Note / Special Requests</label>
-                    <span className="text-caption uppercase tracking-wider text-white bg-white/10 px-2 py-0.5 border border-white/20 w-fit">Requested before shoot</span>
                   </div>
                   <textarea
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     rows={4}
-                    placeholder="Request background colors, props, or lighting adjustments..."
+                    placeholder=""
                     className={inputClass + ' resize-none'}
                   />
                 </div>
@@ -1087,8 +1092,22 @@ function BookingForm() {
             </button>
           </div>
         )}
+        {formError && step < 6 ? (
+          <div role="alert" className="mt-5 border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {formError}
+          </div>
+        ) : null}
         </div>
       </div>
+      {isSubmitting ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4" role="status" aria-live="polite">
+          <div className={`${cardClass} w-full max-w-sm rounded-xl p-6 text-center shadow-2xl`}>
+            <div className="mx-auto size-9 animate-spin rounded-full border-2 border-white/20 border-t-white" aria-hidden="true" />
+            <p className="mt-4 text-base font-semibold text-white">Uploading...</p>
+            <p className="mt-1 text-sm text-white/55">Please keep this page open while we submit your booking.</p>
+          </div>
+        </div>
+      ) : null}
     </SectionShell>
   )
 }

@@ -35,7 +35,6 @@ type UploadReportClient = {
   lastError: string | null
   updatedAt: string
   editedFolderUrl: string
-  deliverablesFolderUrl: string
 }
 
 type UploadReport = {
@@ -414,11 +413,6 @@ export default function EditorUploadPhotos({
                         {client.editedFolderUrl ? (
                           <a href={client.editedFolderUrl} target="_blank" rel="noopener noreferrer" className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}>
                             Drive Folder <ExternalLink className="size-3" />
-                          </a>
-                        ) : null}
-                        {client.deliverablesFolderUrl ? (
-                          <a href={client.deliverablesFolderUrl} target="_blank" rel="noopener noreferrer" className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}>
-                            Delivery <ExternalLink className="size-3" />
                           </a>
                         ) : null}
                       </div>

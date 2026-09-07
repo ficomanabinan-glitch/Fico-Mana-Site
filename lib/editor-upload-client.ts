@@ -198,9 +198,15 @@ export function createUploadWork(batch: DetectedBatchFolder, allowedBookingIds: 
         if (clientIndex < 0) return null
         const afterClient = parts.slice(clientIndex + 1)
         const editedFolder = afterClient.shift()?.toUpperCase()
-        if (editedFolder !== 'EDITED' && editedFolder !== 'EDITED PHOTOS') return null
+        if (!['EDITED', 'EDITED PHOTOS', 'ENHANCED'].includes(editedFolder || '')) return null
         if (!afterClient.length || ['manifest.json', '.fico-client.json'].includes(item.file.name)) return null
-        return { file: item.file, relativePath: `EDITED/${afterClient.join('/')}` }
+        const originalName = item.file.name
+        const uploadName = /^ENHANCED - /i.test(originalName) ? originalName : `ENHANCED - ${originalName}`
+        const file = uploadName === originalName
+          ? item.file
+          : new File([item.file], uploadName, { type: item.file.type, lastModified: item.file.lastModified })
+        afterClient[afterClient.length - 1] = uploadName
+        return { file, relativePath: `EDITED/${afterClient.join('/')}` }
       })
       .filter((item): item is { file: File; relativePath: string } => Boolean(item))
     work.push({ client, edited })

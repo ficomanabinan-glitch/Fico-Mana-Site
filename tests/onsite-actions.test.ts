@@ -4,6 +4,51 @@ import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve))
+test('completed onsite upload sends portal email; Retry resends only email and partial uploads do not send', async t => {
+  const savedFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = savedFetch })
+  const dataset = { batch: { jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, rawFolderDriveId: 'raw' }] } }
+  let uploadCalls = 0, emailCalls = 0, emailFails = true, partial = false
+  globalThis.fetch = async url => {
+    if (String(url).endsWith('/portal-email')) {
+      emailCalls++
+      return Response.json(emailFails ? { error: 'Try: retry email.' } : { status: 'SENT' }, { status: emailFails ? 502 : 200 })
+    }
+    return Response.json(dataset)
+  }
+  const h = componentHarness()
+  const react = { ...h.react, useCallback: (fn: unknown, deps: unknown[]) => h.react.useMemo(() => fn, deps) }
+  const Sheet = () => null
+  const ui = loadTs<typeof import('../components/onsite-upload.tsx')>('components/onsite-upload.tsx', {
+    react, '@/components/use-cached-page-read': { useCachedPageRead: () => [dataset, () => {}, false, () => {}], usePageBackgroundSync: () => {} },
+    '@/components/admin-toast-provider': { useAdminToast: () => ({ success() {}, warning() {}, error() {} }) },
+    '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': {}, '@/lib/raw-upload-client': {},
+    '@/lib/raw-upload-queue': { uploadRawQueue: async () => { uploadCalls++; return { uploaded: 1, failed: partial ? [new File(['x'], 'failed.jpg')] : [] } } },
+    '@/lib/onsite-refresh': { notifyOnsitePhotosChanged() {} },
+    '@/components/ui/sheet': { Sheet, SheetContent: Sheet, SheetHeader: Sheet, SheetTitle: Sheet, SheetDescription: Sheet, SheetFooter: Sheet },
+  })
+  const render = () => h.render(() => ui.default({ initialDate: '2026-09-08' }))
+  const button = (label: string) => elements(render(), el => el.type === 'button' && content(el) === label)[0]
+  const upload = async () => {
+    button('Upload Photos').props.onClick()
+    const picker = elements(render(), el => el.type === 'input' && el.props.type === 'file')[0]
+    await picker.props.onChange({ target: { files: [new File(['image'], 'photo.jpg')] } })
+    await tick(); await tick()
+  }
+  await upload()
+  assert.equal(uploadCalls, 1); assert.equal(emailCalls, 1)
+  assert.match(content(render()), /Upload completed, but the email failed to send. Do you want to retry\?/)
+  emailFails = false
+  button('Retry').props.onClick(); await tick(); await tick()
+  assert.equal(uploadCalls, 1, 'Email retry never reuploads files')
+  assert.equal(emailCalls, 2)
+  assert.match(content(render()), /Email Sent/)
+  partial = true
+  await upload()
+  assert.equal(uploadCalls, 2); assert.equal(emailCalls, 2, 'Partial upload waits for failed files to succeed')
+  h.unmount()
+})
+
 test('actual onsite handlers keep Upload first, combine Sync, require delete confirmation, resume, refresh, and block competing actions',async t=>{
   const savedFetch=globalThis.fetch;t.after(()=>{globalThis.fetch=savedFetch})
   const calls:Array<{url:string;body?:any}>=[],messages:string[]=[]

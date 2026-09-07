@@ -221,11 +221,13 @@ export async function sendEmail({
   to,
   subject,
   html,
+  idempotencyKey,
 }: {
   bookingId: string
   to: string
   subject: string
   html: string
+  idempotencyKey?: string
 }) {
   const recipient = to.trim()
   const from = getResendFromAddress()
@@ -264,7 +266,7 @@ export async function sendEmail({
       to: [recipient],
       subject,
       html,
-    })
+    }, idempotencyKey ? { idempotencyKey } : undefined)
 
     if (result.error) {
       const errorMsg = `${result.error.name}: ${result.error.message}${

@@ -356,10 +356,10 @@ export async function getOnsiteBatchSummary(
     return { id: String(batches[0].display_id), shootDate, jobs: [] }
   }
 
-  const [bookingsResult, galleryResult, foldersResult, resetResult] = await Promise.all([
+  const [bookingsResult, galleryResult, foldersResult, resetResult, emailResult] = await Promise.all([
     admin
       .from('bookings')
-      .select('id,customer_name,package_name,booking_time,booking_status')
+      .select('id,customer_name,customer_email,package_name,booking_time,booking_status')
       .eq('workspace_id', workspaceId)
       .in('package_id', eligiblePackageIds)
       .in('id', bookingIds),
@@ -374,6 +374,8 @@ export async function getOnsiteBatchSummary(
       .eq('folder_type', 'RAW'),
     admin.from('photo_selections').select('booking_id,raw_reset_id,status')
       .eq('workspace_id', workspaceId).in('booking_id', bookingIds),
+    admin.from('email_logs').select('booking_id,recipient_email,subject,status')
+      .in('booking_id', bookingIds).like('subject', 'Your photos are ready to select — FICO MANA %'),
   ])
   if (bookingsResult.error) throw new Error(bookingsResult.error.message)
   if (galleryResult.error) {
@@ -410,6 +412,9 @@ export async function getOnsiteBatchSummary(
       const booking = bookingMap.get(bookingId)
       if (!booking || ACTIVE_BOOKING_EXCLUSIONS.has(String(booking.booking_status || ''))) return null
       const gallery = galleryByBooking.get(bookingId)
+      const emailAttempts = (emailResult.data || []).filter(row => row.booking_id === bookingId &&
+        row.recipient_email === String(booking.customer_email || '').trim() &&
+        row.subject === `Your photos are ready to select — FICO MANA ${bookingId}`)
       return {
         bookingId,
         customerName: String(booking.customer_name || bookingId),
@@ -417,6 +422,7 @@ export async function getOnsiteBatchSummary(
         bookingTime: String(booking.booking_time || ''),
         galleryCount: gallery?.count || 0,
         lastUploadAt: gallery?.lastUploadAt || null,
+        portalEmailStatus: emailAttempts.some(row => row.status === 'SENT') ? 'SENT' : emailAttempts.some(row => row.status === 'FAILED') ? 'FAILED' : null,
         rawFolderDriveId: rawFolderByBooking.get(bookingId) || null,
         lastError: job.last_error ? String(job.last_error) : null,
         resetId: resetResult.data?.find(row => row.booking_id === bookingId)?.raw_reset_id || null,
@@ -618,10 +624,13 @@ export async function getBatchDetail(
 export async function getUploadReport(workspaceId: string, requestedLimit = 30) {
   const admin = adminClient()
   const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit) || 30))
+  const retainedSince = new Date()
+  retainedSince.setUTCMonth(retainedSince.getUTCMonth() - 2)
   const { data: runs, error: runsError } = await admin
     .from('batch_upload_jobs')
     .select('*')
     .eq('workspace_id', workspaceId)
+    .gte('created_at', retainedSince.toISOString())
     .order('created_at', { ascending: false })
     .limit(limit)
   if (runsError) throw new Error(runsError.message)
@@ -645,7 +654,7 @@ export async function getUploadReport(workspaceId: string, requestedLimit = 30) 
         .from('drive_folders')
         .select('booking_id,folder_type,drive_folder_id,web_view_url')
         .in('booking_id', bookingIds)
-        .in('folder_type', ['EDITED', 'DELIVERABLES'])
+        .eq('folder_type', 'EDITED')
     : { data: [], error: null }
   if (bookingsResult.error) throw new Error(bookingsResult.error.message)
   if (foldersResult.error) throw new Error(foldersResult.error.message)
@@ -675,7 +684,6 @@ export async function getUploadReport(workspaceId: string, requestedLimit = 30) 
           const bookingId = String(item.booking_id)
           const booking = bookingMap.get(bookingId)
           const edited = folderMap.get(`${bookingId}:EDITED`)
-          const deliverables = folderMap.get(`${bookingId}:DELIVERABLES`)
           return {
             bookingId,
             customerName: String(booking?.customer_name || bookingId),
@@ -687,9 +695,6 @@ export async function getUploadReport(workspaceId: string, requestedLimit = 30) 
             updatedAt: String(item.updated_at),
             editedFolderUrl: String(
               edited?.web_view_url || driveFolderUrl(edited?.drive_folder_id),
-            ),
-            deliverablesFolderUrl: String(
-              deliverables?.web_view_url || driveFolderUrl(deliverables?.drive_folder_id),
             ),
           }
         }),

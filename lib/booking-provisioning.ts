@@ -4,7 +4,6 @@ import { mapDbBookingToModel } from '@/lib/booking-db'
 import { ensureShootHierarchy } from '@/lib/google-drive'
 import { portalUrl } from '@/lib/client-portal'
 import { hasPortalExpired } from '@/lib/portal-expiry'
-import { sendPortalAccessIfNeeded } from '@/lib/portal-email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { assertGraduationBooking, packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
 import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
@@ -296,19 +295,6 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
     last_error: errors.length ? errors.join(' · ') : null,
   })
   if (complete) await audit(admin, bookingId, 'provisioning_completed', actor)
-
-  if (portal) {
-    try {
-      const emailResult = await sendPortalAccessIfNeeded(admin, bookingId, actor)
-      if (emailResult && 'error' in emailResult && emailResult.error) {
-        await audit(admin, bookingId, 'portal_access_email_failed', actor, { error: emailResult.error })
-      }
-    } catch (error) {
-      await audit(admin, bookingId, 'portal_access_email_failed', actor, {
-        error: error instanceof Error ? error.message : 'Portal access email failed.',
-      })
-    }
-  }
 
   return getProvisioningSnapshot(bookingId)
 }

@@ -194,8 +194,12 @@ export default function BatchDetailPage() {
       const edited=files.map((file)=>{
         const parts=(file.webkitRelativePath||file.name).replace(/\\/g,'/').split('/');const clientAt=parts.findIndex((part)=>part.toLowerCase()===client.folder_name.toLowerCase())
         if(clientAt<0||file.name==='.fico-client.json'||file.name==='manifest.json')return null
-        const after=parts.slice(clientAt+1);if(after[0]?.toUpperCase()==='EDITED'||after[0]?.toUpperCase()==='EDITED PHOTOS')after.shift()
-        return after.length?{file,relativePath:`EDITED/${after.join('/')}`}:null
+        const after=parts.slice(clientAt+1);if(['EDITED','EDITED PHOTOS','ENHANCED'].includes(after[0]?.toUpperCase()))after.shift()
+        if (!after.length) return null
+        const uploadName = /^ENHANCED - /i.test(file.name) ? file.name : `ENHANCED - ${file.name}`
+        const uploadFile = uploadName === file.name ? file : new File([file], uploadName, { type: file.type, lastModified: file.lastModified })
+        after[after.length - 1] = uploadName
+        return { file: uploadFile, relativePath: `EDITED/${after.join('/')}` }
       }).filter((value):value is {file:File;relativePath:string}=>Boolean(value))
       return{client,edited}
     })

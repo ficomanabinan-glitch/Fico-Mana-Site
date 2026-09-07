@@ -93,7 +93,8 @@ test('operational metadata uses shared readable tokens, and requested filler lab
 
 test('onsite mobile details stack and action buttons have equal columns and touch height', () => {
   const component = source('components/onsite-upload.tsx')
-  assert.match(component, /<dl className="mt-4 grid gap-3 text-small/)
+  assert.match(component, /<dl className="grid gap-2 text-small/)
+  assert.match(component, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/)
   assert.match(component, /<dt>Uploaded files<\/dt>/)
   assert.match(component, /<dt>Last upload<\/dt>/)
   assert.match(component, /className="onsite-actions"/)
