@@ -152,11 +152,6 @@ function cachedAt(key: string) {
   return Number(localStorage.getItem(key) || 0)
 }
 
-function hasCachedValue(key: string) {
-  if (typeof window === 'undefined') return false
-  try { return localStorage.getItem(key) !== null } catch { return false }
-}
-
 function invalidateAdminReadCaches() {
   bookingsGeneration += 1
   bookingsInFlight = null

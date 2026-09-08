@@ -10,7 +10,7 @@ let generation = 0
 
 function pruneExpired(now = Date.now()) {
   for (const [key, entry] of pages) {
-    if (now - entry.touchedAt >= ADMIN_QUERY_GC_MS) pages.delete(key)
+    if (now - entry.touchedAt >= STAFF_PAGE_WARM_MS) pages.delete(key)
   }
 }
 
