@@ -27,10 +27,16 @@ test('zoom preview reserves image space and exposes accessible loading and failu
   assert.doesNotMatch(gallery, /auto-fill|min-\[1920px\]:grid-cols-8/)
 })
 
-test('client identity remains compact while all contextual panels use rounded cards', () => {
+test('client identity stays editorial while secondary project context is progressively disclosed in Overview', () => {
   const portal = source('app/portal/[id]/page.tsx')
-  assert.match(portal, /FICO MANA Client Portal<\/p><h1[^>]*>\{data\.booking\.customerName\}<\/h1>/)
-  assert.match(portal, /rounded-card border border-white\/10 bg-white\/\[0\.025\] p-4/)
+  const sidebar = source('components/portal-sidebar.tsx')
+  assert.match(portal, /className="portal-brand-label">FICO MANA<\/p>/)
+  assert.match(portal, /className="portal-client-name">\{data\.booking\.customerName\}<\/h1>/)
+  assert.match(portal, /<PortalSidebar remaining=\{money\(payment\.remaining\)\}>/)
+  assert.doesNotMatch(portal, /sidebarCollapsed/)
+  assert.match(sidebar, />Overview<\/)
+  assert.match(sidebar, /side="right"/)
+  assert.match(sidebar, /Project information/)
   assert.doesNotMatch(portal, /This unique link exposes/)
 })
 
@@ -83,9 +89,9 @@ test('booking panels and quick actions share the established corner tokens', () 
   assert.equal((source('components/admin-receipt-actions.tsx').match(/rounded-control/g) || []).length, 2)
 })
 
-test('shared typography is rounded and responsive without a forced phi multiplier', () => {
+test('shared typography remains responsive while client portal uses golden ratio only as a soft composition guide', () => {
   const css = source('app/globals.css')
-  for (const [name, value] of Object.entries({caption:'0.75rem',small:'0.875rem',body:'1rem',large:'1.125rem','card-title':'1.25rem',h3:'1.5rem'})) {
+  for (const [name, value] of Object.entries({ caption: '0.75rem', small: '0.875rem', body: '1rem', large: '1.125rem', 'card-title': '1.25rem', h3: '1.5rem' })) {
     assert.ok(css.includes(`--fico-text-${name}: ${value};`))
   }
   assert.match(css, /--fico-text-page-title: clamp\([^;]+2\.5rem\)/)
@@ -93,39 +99,49 @@ test('shared typography is rounded and responsive without a forced phi multiplie
   assert.match(css, /--tracking-label: 0\.06em/)
   assert.match(css, /--radius-card: var\(--fico-radius-card\)/)
   assert.match(source('lib/admin-ui.ts'), /text-page-title font-semibold/)
+
+  const portalCss = source('app/portal/portal-final.css')
+  assert.match(portalCss, /--portal-phi: 1\.618/)
+  assert.match(portalCss, /grid-template-columns: minmax\(0, 1\.618fr\) minmax\(18rem, 1fr\)/)
+  for (const px of ['8', '13', '21', '34', '55', '89']) assert.ok(portalCss.includes(`/* ${px} */`))
 })
 
-test('photo layout uses the requested desktop, tablet, and mobile hierarchy', () => {
+test('final photo layout uses an editorial desktop split and a merged compact sticky system on mobile', () => {
   const portal = source('app/portal/[id]/page.tsx')
   const selection = source('components/client-photo-selection.tsx')
   const sidebar = source('components/portal-sidebar.tsx')
-  assert.doesNotMatch(portal, /max-w-\[1760px\]/)
-  assert.match(portal, /xl:grid-cols-\[minmax\(250px,300px\)_minmax\(0,1fr\)\]/)
-  assert.match(portal, /2xl:grid-cols-\[minmax\(280px,340px\)_minmax\(0,1fr\)\]/)
-  assert.match(portal, /sidebarCollapsed \? 'xl:grid-cols-\[3\.5rem_minmax\(0,1fr\)\]/)
+  const portalCss = source('app/portal/portal-final.css')
+
+  assert.doesNotMatch(portal, /max-w-\[1760px\]|sidebarCollapsed/)
+  assert.match(portal, /new IntersectionObserver/)
+  assert.match(portal, /portal-header-compact/)
+  assert.match(portal, /portal-editorial-header/)
+  assert.match(portal, /portal-selection-count/)
   assert.match(portal, />Shoot Day</)
   assert.doesNotMatch(portal, />Session</)
-  assert.match(portal, /sticky top-0 z-30[^>]+md:static[^>]+xl:hidden/)
-  assert.match(selection, /sticky top-\[5.75rem\] z-20[^>]+md:top-3 xl:top-6/)
-  assert.match(selection, /md:grid-cols-\[minmax\(0,1fr\)_minmax\(240px,300px\)\]/)
-  assert.match(selection, /xl:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,420px\)\]/)
-  assert.match(selection, /2xl:grid-cols-\[minmax\(0,1fr\)_minmax\(440px,640px\)\]/)
+  assert.match(portal, /portal-workflow/)
+
+  assert.match(portalCss, /Golden-ratio desktop split/)
+  assert.match(portalCss, /grid-template-columns: minmax\(0, 1\.618fr\) minmax\(18rem, 1fr\)/)
+  assert.match(portalCss, /\.portal-header-compact \.portal-project-id/)
+  assert.match(portalCss, /\.portal-selection-steps \{/)
+  assert.match(portalCss, /top: calc\(var\(--portal-mobile-header-height\) \+ env\(safe-area-inset-top, 0px\)\)/)
+
   assert.match(selection, /xl:grid-cols-5/)
-  assert.match(selection, /sticky top-4 hidden min-w-0 overflow-hidden rounded-card[^>]+md:block/)
-  assert.match(sidebar, /xl:hidden/)
-  assert.match(sidebar, /side="bottom"/)
-  assert.doesNotMatch(portal, /lg:col-span-2/)
+  assert.match(selection, /aria-current=\{active \? 'step' : undefined\}/)
+  assert.match(sidebar, /side="right"/)
+  assert.doesNotMatch(sidebar, /<aside|side="bottom"|xl:hidden/)
   assert.match(source('lib/admin-ui.ts'), /adminPage = 'w-full min-w-0/)
   assert.match(source('lib/admin-ui.ts'), /fico-table overflow-x-auto/)
 })
 
 test('operational metadata uses shared readable tokens, and requested filler labels stay removed', () => {
-  for (const path of ['components/client-photo-selection.tsx','components/onsite-upload.tsx','components/editor-queue.tsx','components/filtering-dashboard.tsx','app/admin/provisioning/page.tsx','components/dashboard-sidebar.tsx']) {
+  for (const path of ['components/client-photo-selection.tsx', 'components/onsite-upload.tsx', 'components/editor-queue.tsx', 'components/filtering-dashboard.tsx', 'app/admin/provisioning/page.tsx', 'components/dashboard-sidebar.tsx']) {
     const text = source(path)
     assert.doesNotMatch(text, /text-\[(8|9|10|11)px\]/, path)
     assert.match(text, /text-caption/, path)
   }
-  for (const path of ['app/admin/layout.tsx','components/editor-portal-shell.tsx']) assert.doesNotMatch(source(path), /Secure production workspace/)
+  for (const path of ['app/admin/layout.tsx', 'components/editor-portal-shell.tsx']) assert.doesNotMatch(source(path), /Secure production workspace/)
   assert.doesNotMatch(source('components/client-photo-selection.tsx'), /Uses global preference/)
 })
 
