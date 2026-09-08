@@ -18,7 +18,7 @@ export default function PortalSidebar({ children, remaining }: { children: React
 
   return <>
     <aside aria-label="Client details, payment summary, and portal QR" tabIndex={0}
-      className="fico-portal-sidebar hidden min-w-0 space-y-4 outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/50 xl:block">
+      className="fico-portal-sidebar hidden min-w-0 space-y-4 outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/50 xl:block xl:pr-6 2xl:pr-8">
       {children}
     </aside>
     <Sheet open={open} onOpenChange={setOpen}>

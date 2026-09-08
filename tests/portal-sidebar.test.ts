@@ -40,6 +40,7 @@ test('tablet and mobile details control reflects live balance, opens the same su
   assert.equal(panel.props.side, 'bottom')
   assert.ok(panel.props.initialFocus, 'Focus the heading so opening does not scroll past the balance to QR actions')
   const aside = elements(tree, el => el.type === 'aside')[0]
+  assert.match(aside.props.className, /xl:pr-6 2xl:pr-8/, 'Keep the card-to-scrollbar gutter aligned with the page gutter')
   assert.equal(aside.props.children, 'Same payment and QR content')
   media.matches = true; listener?.(); tree = render()
   assert.equal(sheet().props.open, false, 'Do not leave an invisible modal trapping focus after resize')
