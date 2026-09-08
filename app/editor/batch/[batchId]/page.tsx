@@ -1,5 +1,3 @@
-'use client'
-
 import BatchDetailPage from '@/app/admin/filtering/batch/[batchId]/page'
 import EditorCapabilityGate from '@/components/editor-capability-gate'
 
