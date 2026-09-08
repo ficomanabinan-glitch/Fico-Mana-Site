@@ -1,4 +1,5 @@
 import type { BookingPackageCategory } from '@/lib/booking-packages'
+import { STAFF_READ_FRESH_MS } from './admin-cache-policy.ts'
 
 export type ManagedPackage = {
   id: string
@@ -24,8 +25,6 @@ type PackageManagerUiState = {
   category: PackageCategoryFilter
 }
 
-const PACKAGE_CACHE_FRESH_MS = 90_000
-
 let packageCache: { data: ManagedPackage[]; cachedAt: number } | null = null
 let packageRequest: Promise<ManagedPackage[]> | null = null
 let cacheGeneration = 0
@@ -42,7 +41,7 @@ export function getCachedManagedPackages() {
 }
 
 export function isManagedPackageCacheFresh() {
-  return Boolean(packageCache && Date.now() - packageCache.cachedAt < PACKAGE_CACHE_FRESH_MS)
+  return Boolean(packageCache && Date.now() - packageCache.cachedAt < STAFF_READ_FRESH_MS)
 }
 
 export async function fetchManagedPackages({ force = false }: { force?: boolean } = {}) {

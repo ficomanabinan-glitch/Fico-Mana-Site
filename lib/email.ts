@@ -1052,6 +1052,18 @@ export async function sendRawPhotoApprovedEmail(booking: any) {
   return sendEmail({ bookingId: booking.id, to: booking.customerEmail, subject, html })
 }
 
+export async function sendPortalSelectionRejectedEmail(input: { bookingId: string; name: string; email: string; reason: string; url: string; revision: string }) {
+  const html = brandedEmail('Please update your photo selection', `
+    <p>Hi <strong>${escapeEmailText(input.name)}</strong>,</p>
+    <p>Please review your photo selection for booking <strong>${escapeEmailText(input.bookingId)}</strong>.</p>
+    <p>${escapeEmailText(input.reason)}</p>
+    <p>Your portal is open again. Update your selection, then submit it for review.</p>
+    <p style="margin:24px 0"><a href="${escapeEmailText(input.url)}" style="display:inline-block;border-radius:12px;background:#0500D0;color:#fff;padding:14px 24px;text-decoration:none;font-weight:bold">Open Your Portal</a></p>
+  `)
+  return sendEmail({ bookingId: input.bookingId, to: input.email, subject: `Please update your photo selection — ${input.bookingId}`, html,
+    idempotencyKey: `selection-rejected-${input.revision}` })
+}
+
 export async function sendRawPhotoRejectedEmail(booking: any, reason: string, customDetails?: string) {
   if (isPlaceholderCustomerEmail(booking.customerEmail)) {
     return { success: true }

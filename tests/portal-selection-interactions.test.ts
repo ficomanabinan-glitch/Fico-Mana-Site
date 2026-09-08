@@ -4,6 +4,7 @@ import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 import * as summary from '../lib/client-selection-summary.ts'
 import * as drafts from '../lib/portal-selection-draft.ts'
+import * as navigation from '../lib/selection-step-navigation.ts'
 
 test('final confirmation shows the balance before PIN; going back clears only the PIN and does not submit', async t => {
   const ready: ClientSelection = { ...selection, noRevisionAcknowledged: true,
@@ -66,6 +67,7 @@ function setup(initial = selection, photos = gallery) {
   const component = loadTs<typeof import('../components/client-photo-selection.tsx')>('components/client-photo-selection.tsx', {
     react: hooks.react, '@/components/portal-photo-preview': preview, '@/lib/client-selection-summary': summary,
     '@/lib/portal-selection-draft': drafts,
+    '@/lib/selection-step-navigation': navigation,
     '@/components/ui/sheet': { Sheet: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null },
   })
   let pricing: summary.AddonPreview = { total: 0, lines: [] }

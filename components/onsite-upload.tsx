@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  X,
   CheckCircle2,
   FolderSync,
   ImagePlus,
@@ -87,6 +90,9 @@ export default function OnsiteUpload({
   const [emailStates, setEmailStates] = useState<Record<string, PortalEmailState>>({})
   const [emailRetryJob, setEmailRetryJob] = useState<Job | null>(null)
   const [emailRetrying, setEmailRetrying] = useState(false)
+  const [uploadsCollapsed, setUploadsCollapsed] = useState(false)
+  const [uploadsHidden, setUploadsHidden] = useState(false)
+  const uploadClientNames = useRef<Record<string, string>>({})
   const target = useRef('')
   const input = useRef<HTMLInputElement | null>(null)
   const uploading = useRef(new Set<string>())
@@ -164,6 +170,9 @@ export default function OnsiteUpload({
 
   const uploadFiles = async (bookingId: string, files: File[]) => {
     if (!files.length || uploading.current.has(bookingId)) return
+    setUploadsHidden(false)
+    setUploadsCollapsed(false)
+    uploadClientNames.current[bookingId] = data?.batch?.jobs.find(job => job.bookingId === bookingId)?.customerName || bookingId
     uploading.current.add(bookingId)
     setBusy(bookingId)
     try {
@@ -310,9 +319,6 @@ export default function OnsiteUpload({
         <div className="grid gap-4">
           {jobs.map((job) => {
             const state = progress[job.bookingId]
-            const overallPercent = state
-              ? Math.min(100, Math.round((state.bytesProcessed / Math.max(1, state.totalBytes)) * 100))
-              : 0
             const isBusy = busy === job.bookingId || uploading.current.has(job.bookingId) || state?.status === 'uploading'
             const driveStatus = job.resetId ? 'Deletion pending' : job.rawFolderDriveId
               ? 'Ready'
@@ -341,11 +347,105 @@ export default function OnsiteUpload({
                       <p>{job.packageName}</p>
                     </div>
                     <p className="mt-2 font-mono text-caption text-white/25">{job.bookingId}</p>
+
+
+                    {job.lastError ? (
+                      <p className="mt-4 flex items-start gap-2 text-small leading-relaxed text-red-300">
+                        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                        <span className="min-w-0 break-words">{job.lastError}</span>
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-4 lg:justify-self-end">
+                    <dl className="grid gap-2 text-small text-white/40 sm:flex sm:flex-wrap sm:items-baseline sm:justify-end sm:gap-x-6">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Uploaded files</dt><dd className="font-semibold tabular-nums text-white/70">{job.galleryCount}</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt>Last upload</dt>
+                        <dd className="min-w-0 font-semibold text-white/70">
+                          {job.lastUploadAt ? new Date(job.lastUploadAt).toLocaleString('en-PH') : 'Not uploaded yet'}
+                        </dd>
+                      </div>
+                      {emailStates[job.bookingId] || job.portalEmailStatus ? (
+                        <div className={`font-semibold ${(emailStates[job.bookingId]?.status || job.portalEmailStatus) === 'SENT' ? 'text-emerald-300' : 'text-red-300'}`}>
+                          <dt className="sr-only">Portal email</dt>
+                          <dd>{(emailStates[job.bookingId]?.status || job.portalEmailStatus) === 'SENT' ? 'Email Sent' : (
+                            <button type="button" className="cursor-pointer underline underline-offset-4" onClick={() => setEmailRetryJob(job)}>Email Failed · Retry</button>
+                          )}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    <div className="onsite-actions">
+                    <button
+                      type="button"
+                      disabled={isBusy || Boolean(job.resetId)}
+                      onClick={() => choose(job.bookingId)}
+                      className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
+                    >
+                      <ImagePlus className="size-3.5" />
+                      Upload Photos
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBusy || Boolean(job.resetId)}
+                      onClick={() => void sync(job.bookingId)}
+                      className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
+                    >
+                      <FolderSync className="size-3.5" />
+                      Sync Drive
+                    </button>
+                    <button type="button" disabled={isBusy} onClick={() => { setDeleteJob(job); setDeleteError(''); setDeleteProgress('') }}
+                      className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 text-red-300 hover:border-red-400/40 hover:bg-red-500/10`}>
+                      <Trash2 className="size-3.5" />{job.resetId ? 'Resume Delete Files' : 'Delete Files'}
+                    </button>
+                    {state?.failed.length ? (
+                      <button
+                        type="button"
+                        disabled={isBusy || Boolean(job.resetId)}
+                        onClick={() => void uploadFiles(job.bookingId, state.failed)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-caption font-semibold uppercase text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20 disabled:opacity-35"
+                      >
+                        <RefreshCw className="size-3.5" />
+                        Retry {state.failed.length} Failed
+                      </button>
+                    ) : null}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+
+      {!uploadsHidden && Object.keys(progress).length > 0 ? (
+        <aside aria-label="Upload activity" className="fixed bottom-4 left-4 right-4 z-40 overflow-hidden rounded-card border border-white/15 bg-[#222222] text-white shadow-2xl sm:left-auto sm:w-96">
+          <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+            <p role="status" className="text-small font-semibold">
+              {Object.values(progress).some(state => state.status === 'uploading') ? 'Uploading photos' : Object.values(progress).some(state => state.failed.length > 0) ? 'Uploads need attention' : 'Uploads complete'}
+            </p>
+            <div className="flex items-center gap-1">
+              <button type="button" aria-label={uploadsCollapsed ? 'Expand uploads' : 'Collapse uploads'} aria-expanded={!uploadsCollapsed} onClick={() => setUploadsCollapsed(value => !value)} className="rounded-control p-2 hover:bg-white/10">
+                {uploadsCollapsed ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </button>
+              {!Object.values(progress).some(state => state.status === 'uploading') ? (
+                <button type="button" aria-label="Dismiss upload activity" onClick={() => setUploadsHidden(true)} className="rounded-control p-2 hover:bg-white/10"><X className="size-4" /></button>
+              ) : null}
+            </div>
+          </header>
+          {!uploadsCollapsed ? <div className="max-h-[60dvh] space-y-3 overflow-y-auto p-3">
+            {Object.entries(progress).map(([bookingId, state]) => {
+              const job = { bookingId, customerName: uploadClientNames.current[bookingId] || bookingId }
+              const overallPercent = Math.min(100, Math.round((state.bytesProcessed / Math.max(1, state.totalBytes)) * 100))
+              return <div key={bookingId}>
                     {state ? (
                       <div
-                        className="mt-4 max-w-xl border border-white/[0.08] bg-black/20 p-3"
+                        className="rounded-control border border-white/[0.08] bg-black/20 p-3"
                         aria-live="polite"
                       >
+                        <p className="mb-2 truncate text-small font-semibold">{job.customerName}</p>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className="text-caption font-semibold uppercase tracking-wider text-white/55">
@@ -420,77 +520,12 @@ export default function OnsiteUpload({
                         ) : null}
                       </div>
                     ) : null}
-
-                    {job.lastError ? (
-                      <p className="mt-4 flex items-start gap-2 text-small leading-relaxed text-red-300">
-                        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                        <span className="min-w-0 break-words">{job.lastError}</span>
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="space-y-4 lg:justify-self-end">
-                    <dl className="grid gap-2 text-small text-white/40 sm:flex sm:flex-wrap sm:items-baseline sm:justify-end sm:gap-x-6">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt>Uploaded files</dt><dd className="font-semibold tabular-nums text-white/70">{job.galleryCount}</dd>
-                      </div>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <dt>Last upload</dt>
-                        <dd className="min-w-0 font-semibold text-white/70">
-                          {job.lastUploadAt ? new Date(job.lastUploadAt).toLocaleString('en-PH') : 'Not uploaded yet'}
-                        </dd>
-                      </div>
-                      {emailStates[job.bookingId] || job.portalEmailStatus ? (
-                        <div className={`font-semibold ${(emailStates[job.bookingId]?.status || job.portalEmailStatus) === 'SENT' ? 'text-emerald-300' : 'text-red-300'}`}>
-                          <dt className="sr-only">Portal email</dt>
-                          <dd>{(emailStates[job.bookingId]?.status || job.portalEmailStatus) === 'SENT' ? 'Email Sent' : (
-                            <button type="button" className="cursor-pointer underline underline-offset-4" onClick={() => setEmailRetryJob(job)}>Email Failed · Retry</button>
-                          )}</dd>
-                        </div>
-                      ) : null}
-                    </dl>
-                    <div className="onsite-actions">
-                    <button
-                      type="button"
-                      disabled={isBusy || Boolean(job.resetId)}
-                      onClick={() => choose(job.bookingId)}
-                      className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
-                    >
-                      <ImagePlus className="size-3.5" />
-                      Upload Photos
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isBusy || Boolean(job.resetId)}
-                      onClick={() => void sync(job.bookingId)}
-                      className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
-                    >
-                      <FolderSync className="size-3.5" />
-                      Sync Drive
-                    </button>
-                    <button type="button" disabled={isBusy} onClick={() => { setDeleteJob(job); setDeleteError(''); setDeleteProgress('') }}
-                      className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 text-red-300 hover:border-red-400/40 hover:bg-red-500/10`}>
-                      <Trash2 className="size-3.5" />{job.resetId ? 'Resume Delete Files' : 'Delete Files'}
-                    </button>
-                    {state?.failed.length ? (
-                      <button
-                        type="button"
-                        disabled={isBusy || Boolean(job.resetId)}
-                        onClick={() => void uploadFiles(job.bookingId, state.failed)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-caption font-semibold uppercase text-red-200 transition hover:border-red-400/40 hover:bg-red-500/20 disabled:opacity-35"
-                      >
-                        <RefreshCw className="size-3.5" />
-                        Retry {state.failed.length} Failed
-                      </button>
-                    ) : null}
-                    </div>
-                  </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      )}
+                {state.failed.length > 0 ? <button type="button" disabled={uploading.current.has(bookingId)} onClick={() => void uploadFiles(bookingId, state.failed)} className={`${adminBtnGhost} mt-2 px-3 py-2`}>Retry failed photos</button> : null}
+              </div>
+            })}
+          </div> : null}
+        </aside>
+      ) : null}
       <Sheet open={Boolean(deleteJob)} onOpenChange={open => { if (!open && !deleting) setDeleteJob(null) }}>
         <SheetContent className="data-[side=right]:w-full overflow-y-auto bg-[#222222] text-white data-[side=right]:sm:max-w-lg" showCloseButton={!deleting}>
           <SheetHeader>

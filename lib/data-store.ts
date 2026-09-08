@@ -3,6 +3,7 @@ import { bookingPackages } from './booking-packages'
 import type { BlockedSlot } from './blocked-slots'
 import type { FicoSpotBlock } from './fico-spot-blocks'
 import { signalSalesDataChanged } from './sales-read-cache'
+import { STAFF_READ_FRESH_MS } from './admin-cache-policy.ts'
 
 export interface PaymentRecord {
   id: string
@@ -96,7 +97,6 @@ const BOOKINGS_KEY = 'ficomana_bookings'
 const BOOKINGS_AT_KEY = 'ficomana_bookings_cached_at'
 const NOTIFS_KEY = 'ficomana_notifications'
 const NOTIFS_AT_KEY = 'ficomana_notifications_cached_at'
-const ADMIN_CACHE_TTL_MS = 90_000
 
 let bookingsInFlight: Promise<Booking[]> | null = null
 let bookingsGeneration = 0
@@ -144,7 +144,7 @@ export function peekFicoSpotBlocks() { return ficoSpotBlocksMemory?.data }
 export function peekEmailLogs() { return emailLogsMemory?.data }
 
 function cacheIsFresh(at: number | null | undefined) {
-  return !!at && Date.now() - at < ADMIN_CACHE_TTL_MS
+  return !!at && Date.now() - at < STAFF_READ_FRESH_MS
 }
 
 function cachedAt(key: string) {
@@ -257,15 +257,34 @@ async function fetchBookingsFresh(signalUpdate = false): Promise<Booking[]> {
 
 /** Staff: all bookings from API. Recent cached data renders immediately while stale data refreshes quietly. */
 export async function getBookings(options: { force?: boolean } = {}): Promise<Booking[]> {
-  if (options.force) return fetchBookingsFresh(false)
-  const cached = getCachedBookings()
+  const cached = peekBookings()
+  if (options.force) {
+    if (cached !== undefined) {
+      void fetchBookingsFresh(true)
+      return cached
+    }
+    return fetchBookingsFresh(false)
+  }
   // An authoritative empty list is cached too (including after the last deletion).
-  if (cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
-  if (cached.length > 0) {
+  if (cached !== undefined && cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
+  if (cached !== undefined) {
     void fetchBookingsFresh(true)
     return cached
   }
   return fetchBookingsFresh(false)
+}
+
+/** undefined means not loaded; an empty notification list is still authoritative. */
+export function peekNotifications(): Notification[] | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const raw = localStorage.getItem(NOTIFS_KEY)
+    if (!raw) return undefined
+    const data = JSON.parse(raw)
+    return Array.isArray(data) ? data : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /** Drop only a server-confirmed missing/deleted booking, then notify mounted views. */
@@ -657,10 +676,16 @@ async function fetchNotificationsFresh(signalUpdate = false): Promise<Notificati
 }
 
 export async function getNotifications(options: { force?: boolean } = {}): Promise<Notification[]> {
-  if (options.force) return fetchNotificationsFresh(false)
-  const cached = getCachedNotifications()
-  if (cached.length > 0 && cacheIsFresh(cachedAt(NOTIFS_AT_KEY))) return cached
-  if (cached.length > 0) {
+  const cached = peekNotifications()
+  if (options.force) {
+    if (cached !== undefined) {
+      void fetchNotificationsFresh(true)
+      return cached
+    }
+    return fetchNotificationsFresh(false)
+  }
+  if (cached !== undefined && cacheIsFresh(cachedAt(NOTIFS_AT_KEY))) return cached
+  if (cached !== undefined) {
     void fetchNotificationsFresh(true)
     return cached
   }

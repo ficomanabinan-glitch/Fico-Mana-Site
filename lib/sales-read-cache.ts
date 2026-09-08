@@ -1,3 +1,5 @@
+import { STAFF_READ_FRESH_MS } from './admin-cache-policy.ts'
+
 export type SalesPeriod = 'month' | 'quarter' | 'year'
 export const SALES_DATA_CHANGED_EVENT = 'admin:sales-data-changed'
 
@@ -42,7 +44,6 @@ export type SalesSummaryPayload = {
 }
 
 const SALES_CACHE_LIMIT = 12
-const SALES_CACHE_FRESH_MS = 90_000
 
 type SalesCacheEntry = {
   data: SalesSummaryPayload
@@ -69,7 +70,7 @@ export function getCachedSales(period: SalesPeriod, anchor: string) {
 
 export function isSalesCacheFresh(period: SalesPeriod, anchor: string) {
   const entry = salesCache.get(salesCacheKey(period, anchor))
-  return Boolean(entry && Date.now() - entry.cachedAt < SALES_CACHE_FRESH_MS)
+  return Boolean(entry && Date.now() - entry.cachedAt < STAFF_READ_FRESH_MS)
 }
 
 export function getRememberedSalesView() {
@@ -87,7 +88,7 @@ export async function fetchSales(
 ) {
   const key = salesCacheKey(period, anchor)
   const cached = salesCache.get(key)
-  if (!force && cached && Date.now() - cached.cachedAt < SALES_CACHE_FRESH_MS) {
+  if (!force && cached && Date.now() - cached.cachedAt < STAFF_READ_FRESH_MS) {
     return cached.data
   }
   const currentRequest = salesRequests.get(key)

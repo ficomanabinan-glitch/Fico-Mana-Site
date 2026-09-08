@@ -22,14 +22,14 @@ function fixture(options: { foreign?: boolean; inactive?: boolean; empty?: boole
     }
     return q
   } }
-  const module = loadTs<typeof import('../lib/portal-email.ts')>('lib/portal-email.ts', {
+  const portalEmailModule = loadTs<typeof import('../lib/portal-email.ts')>('lib/portal-email.ts', {
     '@/lib/customer-email': { isPlaceholderCustomerEmail: () => false, isValidCustomerEmail: () => true },
     '@/lib/email': { sendEmail: async (input: any) => { sends.push(input); return { success: !options.failure } } },
     '@/lib/email-templates': { escapeEmailText: (text: string) => text.replaceAll('<', '&lt;').replaceAll('>', '&gt;') },
     '@/lib/client-portal': { portalUrl: () => 'https://www.ficomana.com/portal/private?sig=test' },
     '@/lib/package-workflow-server': { packageUsesGraduationWorkflow: async () => true },
   })
-  return { calls, sends, run: () => module.sendPortalAccessIfNeeded(admin as never, 'ONE', { workspaceId: 'studio', type: 'staff', id: 'staff' }) }
+  return { calls, sends, run: () => portalEmailModule.sendPortalAccessIfNeeded(admin as never, 'ONE', { workspaceId: 'studio', type: 'staff', id: 'staff' }) }
 }
 
 test('portal email verifies workspace ownership before reading private links or sending', async () => {

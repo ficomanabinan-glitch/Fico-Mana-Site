@@ -1,5 +1,6 @@
 'use client'
 import { useCachedPageRead } from '@/components/use-cached-page-read'
+import { useEditorSession } from '@/components/editor-portal-shell'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -48,6 +49,7 @@ export default function BatchDetailPage() {
   const pathname=usePathname()
   const batchId=decodeURIComponent(params.batchId||'')
   const toast=useAdminToast()
+  const shellSession=useEditorSession()
   const [detail,setDetail,loading,setLoading]=useCachedPageRead<Detail|null>(`editor:batch:${batchId}`,null)
   const [busyJob,setBusyJob]=useState('')
   const [rawTarget,setRawTarget]=useState('')
@@ -55,7 +57,7 @@ export default function BatchDetailPage() {
   const [uploading,setUploading]=useState(false)
   const [uploadProgress,setUploadProgress]=useState({clientsDone:0,clientsTotal:0,filesDone:0,filesTotal:0,current:''})
   const [results,setResults]=useState<UploadResult[]>([])
-  const [session,setSession]=useState<WorkflowSession|null>(null)
+  const [session,setSession]=useState<WorkflowSession|null>(shellSession)
   const rawInputRef=useRef<HTMLInputElement|null>(null)
   const directoryInputRef=useRef<HTMLInputElement|null>(null)
   const inEditorPortal=pathname.startsWith('/editor')
@@ -64,12 +66,13 @@ export default function BatchDetailPage() {
     try {
       const [response,sessionResponse]=await Promise.all([
         fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}`,{cache:'no-store',credentials:'include'}),
-        fetch('/api/editor-workflow/session',{cache:'no-store',credentials:'include'}),
+        shellSession ? Promise.resolve(null) : fetch('/api/editor-workflow/session',{cache:'no-store',credentials:'include'}),
       ])
       const body=await responseJson(response)
       if(!response.ok) throw new Error(String(body.error||'Batch not found.'))
       setDetail(body as unknown as Detail)
-      if(sessionResponse.ok)setSession(await sessionResponse.json() as WorkflowSession)
+      if(shellSession)setSession(shellSession)
+      else if(sessionResponse?.ok)setSession(await sessionResponse.json() as WorkflowSession)
     } catch(error) { toast.error('Batch unavailable',error instanceof Error?error.message:'Try again.') }
     finally { setLoading(false) }
   }

@@ -24,6 +24,7 @@ function setup(t: test.TestContext) {
     './booking-packages': { bookingPackages: [] },
     './booking-db': {},
     './sales-read-cache': { signalSalesDataChanged: () => { salesSignals += 1 } },
+    './admin-cache-policy.ts': { STAFF_READ_FRESH_MS: 5 * 60_000 },
   })
   const seed = (data: Booking[]) => {
     records.set('ficomana_bookings', JSON.stringify(data))
@@ -111,12 +112,13 @@ test('a pre-deletion GET cannot restore the row or clear a newer in-flight reque
   await store.deleteBooking(first.id, 'admin_error')
   const fresh = store.getBookings({ force: true })
   resolveOld(Response.json([first, second]))
-  assert.deepEqual(await old, [second])
+  assert.deepEqual(await old, [first, second], 'the already-rendered snapshot returns immediately')
   const joined = store.getBookings({ force: true })
   assert.equal(reads, 2)
   resolveNew(Response.json([second]))
   assert.deepEqual(await fresh, [second])
   assert.deepEqual(await joined, [second])
+  await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(await store.getBookings(), [second])
 })
 
@@ -132,9 +134,12 @@ test('manual refresh bypasses TTL and same-origin tab updates invalidate old req
   store.receiveBookingCacheChange({ key: 'ficomana_bookings', storageArea: storage } as unknown as StorageEvent)
   assert.equal(notifications, 1)
   resolveOld(Response.json([first, second]))
-  assert.deepEqual(await old, [second])
+  assert.deepEqual(await old, [first, second], 'manual refresh does not block the visible cache')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(await store.getBookings(), [second], 'the invalidated response cannot restore the deleted row')
   globalThis.fetch = async () => Response.json([])
-  assert.deepEqual(await store.getBookings({ force: true }), [])
+  assert.deepEqual(await store.getBookings({ force: true }), [second])
+  await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(await store.getBookings(), [])
 })
 

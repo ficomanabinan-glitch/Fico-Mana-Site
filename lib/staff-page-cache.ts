@@ -1,7 +1,10 @@
+import { STAFF_PAGE_CACHE_LIMIT, STAFF_PAGE_WARM_MS } from './admin-cache-policy.ts'
+
 // Private, tab-local read snapshots only. Never persisted to browser storage or
 // used to authorize a request. The shell binds this cache before showing pages.
-const MAX_PAGES = 64
-const pages = new Map<string, unknown>()
+type StaffPageEntry = { data: unknown; touchedAt: number }
+
+const pages = new Map<string, StaffPageEntry>()
 let owner: string | null = null
 let generation = 0
 
@@ -19,13 +22,23 @@ export function staffPageCacheGeneration() {
 
 export function readStaffPage<T>(key: string): T | undefined {
   if (typeof window === 'undefined' || !owner) return undefined
-  return pages.get(key) as T | undefined
+  const entry = pages.get(key)
+  if (!entry) return undefined
+  const now = Date.now()
+  if (now - entry.touchedAt >= STAFF_PAGE_WARM_MS) {
+    pages.delete(key)
+    return undefined
+  }
+  // Touch and move the entry to the end so the least-recent page is evicted.
+  pages.delete(key)
+  pages.set(key, { ...entry, touchedAt: now })
+  return entry.data as T
 }
 
 export function writeStaffPage<T>(key: string, data: T, requestGeneration: number) {
   if (typeof window === 'undefined' || !owner || requestGeneration !== generation || data == null) return false
   pages.delete(key)
-  pages.set(key, data)
-  if (pages.size > MAX_PAGES) pages.delete(pages.keys().next().value!)
+  pages.set(key, { data, touchedAt: Date.now() })
+  if (pages.size > STAFF_PAGE_CACHE_LIMIT) pages.delete(pages.keys().next().value!)
   return true
 }

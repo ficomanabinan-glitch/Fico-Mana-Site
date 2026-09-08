@@ -52,7 +52,7 @@ export default function About() {
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: index * 0.08 }}
                   viewport={{ once: true, margin: '-40px' }}
-                  className="text-sm md:text-base text-white/70 leading-relaxed"
+                  className="text-sm md:text-base text-white/70 leading-relaxed text-justify"
                 >
                   {paragraph}
                 </motion.p>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Image as ImageIcon, Lock, Plus, ShoppingBag, ZoomIn } from 'lucide-react'
 
 import { PhotoSelectButton, PortalPhotoPreview } from '@/components/portal-photo-preview'
+import { availableSelectionStep, canVisitSelectionStep } from '@/lib/selection-step-navigation'
 import { calculateClientAddons, initialEditingPreference, portalPaymentSummary, type AddonPreview } from '@/lib/client-selection-summary'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { clearPortalDraft, portalDraftKey, readPortalDraft, writePortalDraft, type PortalDraftChoices } from '@/lib/portal-selection-draft'
@@ -79,7 +80,7 @@ export function ClientPhotoSelection({
   const locked = selection?.status === 'SUBMITTED' || selection?.status === 'SUBMITTING'
   const includedLimit = Math.min(5, Math.max(0, selection?.includedLimit || 5))
   const initialItems = selection?.selectedItems || []
-  const [step, setStep] = useState<Step>(locked ? 'review' : 'photos')
+  const [step, updateStep] = useState<Step>(locked ? 'review' : 'photos')
   const [included, setIncluded] = useState<string[]>(() => initialItems.filter((item) => !item.extraEdit).map((item) => item.fileId))
   const [extras, setExtras] = useState<string[]>(() => initialItems.filter((item) => item.extraEdit).map((item) => item.fileId))
   const [editingPreference, setEditingPreference] = useState<Preference | ''>(() => initialEditingPreference(initialItems))
@@ -124,11 +125,14 @@ export function ClientPhotoSelection({
     setPrintSelections(choices.printSelections)
     setAddonQuantities(choices.addonQuantities)
     setAcknowledged(choices.acknowledged)
-    setStep(choices.step)
+    updateStep(locked ? choices.step : availableSelectionStep(choices.step,
+      choices.included.length === includedLimit && Boolean(choices.editingPreference),
+      PRINTS.every(item => choices.included.includes(choices.printSelections[item.category] || '')),
+      Object.values(choices.addonQuantities).filter(quantity => quantity > 0).length + (choices.extras.length > 0 ? 1 : 0) <= 4))
     setDraftExpiresAt(saved?.expiresAt || null)
     setDraftFinished(false)
     setHydratedDraftKey(hydrationKey)
-  }, [selection, locked, draftKey, hydratedDraftKey])
+  }, [selection, locked, draftKey, hydratedDraftKey, includedLimit])
 
   useEffect(() => {
     if (!selection?.id || locked || draftFinished || hydratedDraftKey !== draftKey) return
@@ -150,7 +154,12 @@ export function ClientPhotoSelection({
   const optionalAddons = addons.filter((addon) => addon.id !== extraEditAddon?.id)
   const chosenAddonIds = Object.entries(addonQuantities).filter(([, quantity]) => quantity > 0).map(([id]) => id)
   const addonTypeCount = chosenAddonIds.length + (extras.length > 0 ? 1 : 0)
-  const printsComplete = PRINTS.every((item) => Boolean(printSelections[item.category]))
+  const photosComplete = included.length === includedLimit && Boolean(editingPreference)
+  const printsComplete = PRINTS.every((item) => included.includes(printSelections[item.category] || ''))
+  const canVisitStep = (target: Step) => canVisitSelectionStep(step, target, photosComplete, printsComplete, addonTypeCount <= 4, locked)
+  const setStep = (target: Step) => {
+    if (canVisitStep(target)) updateStep(target)
+  }
   const selectedAll = [...included, ...extras]
   const pricing = useMemo<AddonPreview>(() => locked ? {
     total: Number(selection?.totalAddonAmount || 0),
@@ -280,7 +289,7 @@ export function ClientPhotoSelection({
       {editingPreference === 'standard' ? <span className="mt-1 block text-caption text-white/25">See our posted samples on our Social Media.</span> : null}
     </label>
 
-    <div className="mt-5 grid grid-cols-4 gap-1 rounded-xl border border-white/[0.07] bg-black/20 p-1" aria-label="Selection steps">{STEPS.map((item, index) => <button key={item.id} type="button" onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined} className={`rounded-lg px-2 py-2 text-caption font-semibold uppercase tracking-wider transition ${step === item.id ? 'bg-primary text-white' : 'text-white/35 hover:bg-white/5 hover:text-white'}`}><span className="hidden sm:inline">{index + 1}. </span>{item.label}</button>)}</div>
+    <div className="mt-5 grid grid-cols-4 gap-1 rounded-xl border border-white/[0.07] bg-black/20 p-1" aria-label="Selection steps">{STEPS.map((item, index) => <button key={item.id} type="button" disabled={!canVisitStep(item.id)} onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined} className={`rounded-lg px-2 py-2 text-caption font-semibold uppercase tracking-wider transition disabled:cursor-not-allowed ${step === item.id ? 'bg-primary text-white' : 'text-white/35 hover:bg-white/5 hover:text-white'}`}><span className="hidden sm:inline">{index + 1}. </span>{item.label}</button>)}</div>
 
     {step === 'photos' ? <div className="mt-5">
       {gallery.length === 0 ? <div className="border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Your studio gallery is still being prepared.</div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{gallery.map((file) => {
@@ -301,7 +310,7 @@ export function ClientPhotoSelection({
         </article>
       })}</div>}
       {gallery.length < galleryTotal ? <button onClick={onLoadMore} disabled={loadingMore} className="mt-4 w-full cursor-pointer rounded-lg border border-white/10 px-4 py-3 text-caption font-semibold uppercase text-white/60 transition hover:border-[#C4CEFF]/35 hover:bg-[#C4CEFF]/[0.05] disabled:cursor-not-allowed disabled:opacity-40">{loadingMore ? 'Loading more…' : `Load More Photos (${gallery.length} / ${galleryTotal})`}</button> : null}
-      <StepFooter back={null} next="prints" onStep={setStep} nextDisabled={included.length !== includedLimit} nextHint={included.length !== includedLimit ? `Select ${includedLimit - included.length} more included photo${includedLimit - included.length === 1 ? '' : 's'}.` : extras.length ? `${extras.length} extra edit${extras.length === 1 ? '' : 's'} added.` : 'Included selection complete.'}/>
+      <StepFooter back={null} next="prints" onStep={setStep} nextDisabled={!locked && !photosComplete} nextHint={included.length !== includedLimit ? `Select ${includedLimit - included.length} more included photo${includedLimit - included.length === 1 ? '' : 's'}.` : !editingPreference ? 'Choose an editing preference.' : extras.length ? `${extras.length} extra edit${extras.length === 1 ? '' : 's'} added.` : 'Included selection complete.'}/>
     </div> : null}
 
     {step === 'prints' ? <div className="mt-5 space-y-4">
