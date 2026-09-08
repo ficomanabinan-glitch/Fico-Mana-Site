@@ -1,0 +1,25 @@
+/* Selector corrections for the existing portal gallery markup, where images sit
+   inside a media wrapper rather than as direct button children. */
+.portal-workflow button:has(img) {
+  border-color: var(--portal-border) !important;
+  border-radius: var(--portal-radius-photo) !important;
+  background: var(--portal-surface) !important;
+  box-shadow: none !important;
+  transition:
+    transform var(--portal-motion-normal) var(--portal-ease),
+    border-color var(--portal-motion-fast) ease,
+    box-shadow var(--portal-motion-normal) var(--portal-ease) !important;
+}
+
+.portal-workflow button:has(img):hover {
+  border-color: rgba(196, 206, 255, 0.32) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+@media (max-width: 767px) {
+  .portal-workflow button:has(img):hover {
+    transform: none;
+    box-shadow: none !important;
+  }
+}
