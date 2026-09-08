@@ -13,8 +13,10 @@ test('client identity remains compact while all contextual panels use rounded ca
 
 test('client portal statuses are rounded badges without pretending to be action buttons', () => {
   const portals = source('app/admin/provisioning/page.tsx')
+  assert.match(portals, /<p className="flex items-center gap-2 whitespace-nowrap">/)
   assert.match(portals, /<span className=\{`inline-flex rounded-md border px-2 py-1 text-caption font-semibold capitalize/)
   assert.match(portals, />\{item\.portal\.status\}<\/span>\{item\.portal\.expiresAt\?/)
+  assert.doesNotMatch(portals, /item\.portal\.expiresAt\?<span className="mt-1 block/)
   assert.match(portals, /inline-flex rounded-md border px-2 py-1 text-caption font-semibold uppercase \$\{statusClass/)
 })
 
