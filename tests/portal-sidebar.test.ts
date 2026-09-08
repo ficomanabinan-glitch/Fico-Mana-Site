@@ -4,62 +4,64 @@ import { readFileSync } from 'node:fs'
 import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 
-test('desktop context stays sticky at the three-zone breakpoint and mobile leaves room for its action bar', () => {
-  const css = readFileSync('app/globals.css', 'utf8')
-  const start = css.indexOf('@media (min-width: 1280px)')
-  const sidebar = css.slice(start, css.indexOf('.fico-portal-sheet-content', start))
-  for (const text of ['.fico-portal-sidebar', 'position: sticky', 'align-self: start', 'max-height: calc(100dvh', 'overflow-y: auto', 'scrollbar-width: thin']) assert.ok(sidebar.includes(text))
-  assert.match(css, /@media \(max-width: 767px\)[\s\S]*?\.client-portal-page[\s\S]*?padding-bottom: calc\(5\.5rem \+ env\(safe-area-inset-bottom/)
+test('final portal uses a compact sticky identity/workflow system and golden-ratio desktop workspace', () => {
+  const css = readFileSync('app/portal/portal-final.css', 'utf8')
+  for (const text of [
+    '--portal-phi: 1.618',
+    '.portal-editorial-header',
+    'position: sticky',
+    '.portal-selection-steps',
+    'grid-template-columns: minmax(0, 1.618fr) minmax(18rem, 1fr)',
+    'env(safe-area-inset-top, 0px)',
+    'env(safe-area-inset-bottom, 0px)',
+    '.portal-header-compact .portal-project-id',
+    '@media (prefers-reduced-motion: reduce)',
+  ]) assert.ok(css.includes(text), `Expected final portal CSS to include ${text}`)
+
+  assert.doesNotMatch(css, /\.fico-portal-sidebar\s*\{/)
 })
 
-test('tablet and mobile details control reflects live balance, opens the same summary/QR content and closes on desktop resize', t => {
+test('Overview is one progressive-disclosure drawer on every viewport and reflects the live balance in its accessible name', t => {
   const hooks = componentHarness()
-  const sheets = { Sheet: () => null, SheetTrigger: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null }
-  const media = { matches: false }
-  let listener: (() => void) | undefined
-  let removed = false
-  const prior = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: { matchMedia: () => ({
-    get matches() { return media.matches }, addEventListener: (_event: string, fn: () => void) => { listener = fn },
-    removeEventListener: () => { removed = true },
-  }) } })
-  t.after(() => { hooks.unmount(); if (prior) Object.defineProperty(globalThis, 'window', prior); else Reflect.deleteProperty(globalThis, 'window') })
-  const component = loadTs<typeof import('../components/portal-sidebar.tsx')>('components/portal-sidebar.tsx', { react: hooks.react, '@/components/ui/sheet': sheets })
-  let collapseRequest: boolean | undefined
-  const render = (remaining = '₱6,000', collapsed = false) => hooks.render(() => component.default({ remaining, collapsed, onCollapsedChange: value => { collapseRequest = value }, children: 'Same payment and QR content' }))
+  const sheets = {
+    Sheet: () => null,
+    SheetTrigger: () => null,
+    SheetContent: () => null,
+    SheetHeader: () => null,
+    SheetTitle: () => null,
+    SheetDescription: () => null,
+  }
+  t.after(() => hooks.unmount())
+
+  const component = loadTs<typeof import('../components/portal-sidebar.tsx')>(
+    'components/portal-sidebar.tsx',
+    { react: hooks.react, '@/components/ui/sheet': sheets },
+  )
+
+  const render = (remaining = '₱6,000') => hooks.render(() => component.default({
+    remaining,
+    children: 'Same booking, payment and QR content',
+  }))
+
   let tree = render()
   const sheet = () => elements(tree, el => el.type === sheets.Sheet)[0]
-  const trigger = elements(tree, el => el.type === sheets.SheetTrigger)[0]
+  const trigger = () => elements(tree, el => el.type === sheets.SheetTrigger)[0]
   assert.equal(sheet().props.open, false)
-  assert.match(trigger.props.render.props.className, /fixed.*bottom-\[calc\(0\.75rem\+env\(safe-area-inset-bottom,0px\)\)\].*min-h-12.*rounded-control/)
-  assert.match(trigger.props.render.props.className, /md:static.*md:w-full/)
-  assert.match(trigger.props.render.props.className, /xl:hidden/)
-  assert.match(content(trigger), /₱6,000/)
-  sheet().props.onOpenChange(true); tree = render('₱6,400')
+  assert.match(trigger().props.render.props.className, /portal-overview-trigger/)
+  assert.equal(trigger().props.render.props['aria-label'], 'Open overview. Remaining balance: ₱6,000')
+  assert.match(content(trigger()), /Overview/)
+
+  sheet().props.onOpenChange(true)
+  tree = render('₱6,400')
   assert.equal(sheet().props.open, true)
-  assert.match(content(elements(tree, el => el.type === sheets.SheetTrigger)[0]), /₱6,400/)
+  assert.equal(trigger().props.render.props['aria-label'], 'Open overview. Remaining balance: ₱6,400')
+
   const panel = elements(tree, el => el.type === sheets.SheetContent)[0]
-  assert.equal(panel.props.side, 'bottom')
-  assert.ok(panel.props.initialFocus, 'Focus the heading so opening does not scroll past the balance to QR actions')
-  const aside = elements(tree, el => el.type === 'aside')[0]
-  assert.match(aside.props.className, /xl:pr-6 2xl:pr-8/, 'Keep the card-to-scrollbar gutter aligned with the page gutter')
-  assert.match(content(aside), /Same payment and QR content/)
-  const collapse = elements(aside, el => el.type === 'button' && el.props['aria-label'] === 'Collapse client details')[0]
-  assert.equal(collapse.props['aria-expanded'], true)
-  collapse.props.onClick()
-  assert.equal(collapseRequest, true)
-  tree = render('₱6,400', true)
-  const collapsedAside = elements(tree, el => el.type === 'aside')[0]
-  assert.match(collapsedAside.props.className, /xl:pr-0/)
-  assert.doesNotMatch(content(collapsedAside), /Same payment and QR content/)
-  const expand = elements(collapsedAside, el => el.type === 'button' && el.props['aria-label'] === 'Expand client details')[0]
-  assert.equal(expand.props['aria-expanded'], false)
-  expand.props.onClick()
-  assert.equal(collapseRequest, false)
-  media.matches = true; listener?.(); tree = render()
-  assert.equal(sheet().props.open, false, 'Do not leave an invisible modal trapping focus after resize')
-  hooks.unmount()
-  assert.equal(removed, true)
+  assert.equal(panel.props.side, 'right')
+  assert.ok(panel.props.initialFocus, 'Opening the drawer should focus its title')
+  assert.match(content(panel), /Same booking, payment and QR content/)
+  assert.match(content(panel), /Project information/)
+  assert.match(content(panel), /Overview/)
 })
 
 test('PIN and balance are in the final confirmation, never above the review content', () => {
@@ -70,4 +72,3 @@ test('PIN and balance are in the final confirmation, never above the review cont
   assert.match(source, /paymentSummary: \{ packageAmount: number; amountPaid: number \}/)
   assert.match(source, /portalPaymentSummary\(paymentSummary.packageAmount, paymentSummary.amountPaid, addonTotal\)/)
 })
-
