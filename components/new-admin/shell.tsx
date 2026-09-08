@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { WorkspaceRefreshProvider, WorkspaceRefreshTarget } from '@/components/workspace-refresh'
+import { WorkspaceRefreshProvider } from '@/components/workspace-refresh'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Aperture, ArrowUpRight, CalendarDays, ChevronRight, FolderOpen, Images, LayoutDashboard, ListFilter, LogOut, Menu, PenTool, ReceiptText, Search, Settings, ShieldCheck, TrendingUp } from 'lucide-react'
@@ -53,7 +53,7 @@ export function NewAdminShell({ userId, email, children }: { userId: string; ema
     <div className={styles.workspace}><header className={styles.topbar}>
       <div className={styles.mobileMenu}><Sheet open={open} onOpenChange={setOpen}><SheetTrigger render={<Button aria-label="Open navigation" />}><Menu size={20} aria-hidden="true" /></SheetTrigger><SheetContent side="left" data-theme={theme} className={`${styles.theme} ${styles.drawer}`}><SheetTitle>FICO MANA</SheetTitle><SheetDescription>Studio console preview</SheetDescription><Nav close={() => setOpen(false)} /><Button disabled={signingOut} onClick={() => void signOut()}><LogOut size={16} aria-hidden="true" />Sign out</Button></SheetContent></Sheet></div>
       <div className={styles.breadcrumb}><span className={styles.muted}>Workspace</span><ChevronRight size={14} aria-hidden="true" /><span>{title}</span></div>
-      <form role="search" onSubmit={event => { event.preventDefault(); const term = new FormData(event.currentTarget).get('search'); router.push(`/newadmin/bookings?search=${encodeURIComponent(String(term ?? ''))}`) }}><input name="search" aria-label="Search clients and bookings" placeholder="Search clients or bookings…" /><Button type="submit" aria-label="Search"><Search size={18} aria-hidden="true" /></Button></form><div className={styles.topbarActions}><WorkspaceRefreshTarget /><span className={`${styles.muted} ${styles.previewLabel}`}>Design preview</span><ThemeToggle /></div>
+      <form role="search" onSubmit={event => { event.preventDefault(); const term = new FormData(event.currentTarget).get('search'); router.push(`/newadmin/bookings?search=${encodeURIComponent(String(term ?? ''))}`) }}><input name="search" aria-label="Search clients and bookings" placeholder="Search clients or bookings…" /><Button type="submit" aria-label="Search"><Search size={18} aria-hidden="true" /></Button></form><div className={styles.topbarActions}><span className={`${styles.muted} ${styles.previewLabel}`}>Design preview</span><ThemeToggle /></div>
     </header><main id="newadmin-content" tabIndex={-1} className={styles.content}>{error && <p className={`${styles.notice} ${styles.error}`} role="alert">{error}</p>}{children}</main></div>
   </div></NewAdminDataProvider></WorkspaceRefreshProvider>
 }

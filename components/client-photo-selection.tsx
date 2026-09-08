@@ -319,7 +319,7 @@ export function ClientPhotoSelection({
   if (!selection) return <div className="mt-5 rounded-card border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Photo selection is still being prepared for this booking.</div>
 
   return <section className={`w-full min-w-0 max-w-full rounded-card border border-white/10 bg-white/[0.02] p-3 sm:p-4 lg:p-5 ${locked ? '' : 'pb-24 md:pb-4 lg:pb-5'}`}>
-    <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] md:items-start xl:grid-cols-[minmax(0,1fr)_minmax(270px,340px)]">
+    <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] md:items-start xl:grid-cols-[minmax(0,1fr)_minmax(270px,340px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
     <div className="min-w-0">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div><div className="flex items-center gap-2"><ImageIcon className="size-4 text-[#C4CEFF]"/><h2 className="text-card-title font-semibold tracking-heading">Enhanced Photo Selection</h2></div><p className="mt-2 max-w-2xl text-xs leading-relaxed text-white/45">Choose {includedLimit} included photos. After those are filled, any additional photo you select is automatically priced as an Extra Edit.</p></div>
@@ -343,7 +343,7 @@ export function ClientPhotoSelection({
     <div className="sticky top-0 z-20 mt-5 grid min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] gap-1 rounded-control border border-white/[0.08] bg-[#1d1d1d]/95 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur" aria-label="Selection steps">{STEPS.map((item, index) => {const completed=index<STEPS.findIndex(candidate=>candidate.id===step)||locked;return <button key={item.id} type="button" disabled={!canVisitStep(item.id)} onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined} className={`min-h-11 min-w-0 overflow-hidden rounded-control px-1 py-2 text-[0.625rem] font-semibold uppercase tracking-normal transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/60 disabled:cursor-not-allowed disabled:opacity-35 sm:px-2 sm:text-caption sm:tracking-wide ${step === item.id ? 'bg-primary text-white' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}><span className="hidden sm:inline">{completed ? '✓ ' : `${index + 1}. `}</span><span className="break-words">{item.label}</span></button>})}</div>
 
     {step === 'photos' ? <div className="mt-5">
-      {gallery.length === 0 ? <div className="rounded-card border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Your studio gallery is still being prepared.</div> : <div className="grid min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(155px,1fr))]">{gallery.map((file) => {
+      {gallery.length === 0 ? <div className="rounded-card border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Your studio gallery is still being prepared.</div> : <div className="grid min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-3 md:grid-cols-[repeat(auto-fill,minmax(155px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(175px,1fr))]">{gallery.map((file) => {
         const includedPhoto = included.includes(file.id)
         const extraPhoto = extras.includes(file.id)
         const active = includedPhoto || extraPhoto

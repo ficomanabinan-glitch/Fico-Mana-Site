@@ -140,7 +140,7 @@ export default function ClientPortalPage() {
 
   return (
     <main className="client-portal client-portal-page min-h-screen overflow-x-clip bg-[#171717] text-body text-white">
-      <div className="mx-auto w-full max-w-[1760px] px-3 py-5 sm:px-5 sm:py-8 xl:px-6">
+      <div className="w-full px-3 py-5 sm:px-5 sm:py-8 xl:px-6 2xl:px-8">
         <header className="mb-4 flex items-end justify-between gap-4 border-b border-white/10 pb-4 xl:hidden">
           <div className="min-w-0">
             <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA</p>
@@ -153,7 +153,7 @@ export default function ClientPortalPage() {
         {error ? <div className="mb-4 rounded-control border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200" role="alert">{error}</div> : null}
         {data.warnings?.length ? <div className="mb-4 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-relaxed text-amber-100" role="status"><strong>Some project details are temporarily unavailable:</strong> {data.warnings.join(', ')}.</div> : null}
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(230px,280px)_minmax(0,1fr)] xl:gap-5">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(250px,300px)_minmax(0,1fr)] xl:gap-5 2xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:gap-6">
           <PortalSidebar remaining={money(payment.remaining)}>
             <PortalContext
               data={data}

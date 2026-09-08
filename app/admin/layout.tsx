@@ -26,7 +26,7 @@ import { getBookings, getNotifications, markNotificationRead, type Notification 
 import { AdminToastProvider } from '@/components/admin-toast-provider'
 import { AdminAutoSyncProvider } from '@/components/admin-auto-sync'
 import AdminSyncStatus from '@/components/admin-sync-status'
-import { WorkspaceRefreshProvider, WorkspaceRefreshTarget } from '@/components/workspace-refresh'
+import { WorkspaceRefreshProvider } from '@/components/workspace-refresh'
 import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge } from '@/lib/admin-ui'
 import { clearSalesReadCache } from '@/lib/sales-read-cache'
@@ -316,7 +316,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
 
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-                <WorkspaceRefreshTarget />
                 <AdminSyncStatus />
                 <div className="relative">
                   <button

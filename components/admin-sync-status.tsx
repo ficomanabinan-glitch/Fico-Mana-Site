@@ -13,10 +13,12 @@ export default function AdminSyncStatus() {
     : null
 
   const title = failed
-    ? lastMessage || 'Sync failed — click to retry'
+    ? lastMessage
+      ? `${lastMessage} — manual sync required`
+      : 'Manual sync required — click Sync to retry'
     : timeLabel
-      ? `Last synced ${timeLabel}`
-      : 'Click to refresh your records'
+      ? `Last synced ${timeLabel} — click to sync now`
+      : 'Sync records now'
 
   return (
     <button
@@ -25,16 +27,17 @@ export default function AdminSyncStatus() {
       disabled={syncing}
       className={`inline-flex items-center gap-2 px-3 py-2 ${adminBtnGhost}`}
       title={title}
+      aria-label={syncing ? 'Syncing records' : failed ? 'Manual sync required' : 'Sync records'}
     >
       <span
         className={`w-2 h-2 rounded-full ${
-          syncing ? 'bg-amber-400 animate-pulse' : failed ? 'bg-amber-500' : 'bg-green-400'
+          syncing ? 'bg-amber-400 animate-pulse' : failed ? 'bg-red-500' : 'bg-green-400'
         }`}
         aria-hidden
       />
       <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-      <span className="hidden sm:inline">
-        {syncing ? 'Syncing…' : failed ? 'Sync issue' : 'Auto-sync'}
+      <span className="hidden sm:inline" aria-live="polite">
+        {syncing ? 'Syncing…' : 'Sync'}
       </span>
     </button>
   )

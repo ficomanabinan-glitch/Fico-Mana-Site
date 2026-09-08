@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import React, { createElement, isValidElement, type ReactElement, type ReactNode } from 'react'
+import React, { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { loadTs } from './helpers/load-ts.ts'
 
 type RefreshModule = typeof import('../components/workspace-refresh.tsx')
@@ -42,31 +42,27 @@ function findElement(node: ReactNode, type: unknown): ReactElement<Record<string
   return findElement(node.props.children as ReactNode,type)
 }
 
-test('admin Refresh still synchronizes first, then invokes the current page callback', async () => {
-  const events: string[] = []
-  const Refresh = () => createElement('button')
+test('admin page headers no longer render a Refresh control', () => {
+  let calls = 0
   const loaded = loadTs<HeaderModule>('components/admin-page-header.tsx', {
     '@/lib/admin-ui': {adminTitle:'title',adminSubtitle:'subtitle'},
-    '@/components/workspace-refresh': {WorkspaceRefreshButton:Refresh},
-    '@/components/admin-auto-sync': {useAdminAutoSync:()=>({syncing:false,syncNow:async()=>{events.push('sync')}})},
   })
-  for (const page of ['sales','bookings']) {
-    const tree = loaded.default({title:page,onRefresh:()=>{events.push(page)},refreshing:page==='bookings'})
-    const refresh = findElement(tree,Refresh)!
-    assert.equal(refresh.props.refreshing,page==='bookings')
-    await (refresh.props.onRefresh as ()=>Promise<void>)()
-  }
-  assert.deepEqual(events,['sync','sales','sync','bookings'])
+  const tree = loaded.default({title:'Bookings',onRefresh:()=>{calls++},refreshing:true})
+  assert.equal(findElement(tree,'button'), undefined)
+  assert.equal(calls, 0)
 })
 
-test('all workspace headers host Refresh and embedded queues do not duplicate it', () => {
+test('admin and editor workspace headers remove Refresh and keep one shared Sync control', () => {
   const read = (file:string) => readFileSync(file,'utf8')
-  assert.match(read('app/admin/layout.tsx'), /<WorkspaceRefreshTarget \/>\s*<AdminSyncStatus \/>/)
+  assert.match(read('app/admin/layout.tsx'), /<AdminSyncStatus \/>/)
   for (const file of ['app/admin/layout.tsx','components/editor-portal-shell.tsx','components/new-admin/shell.tsx']) {
     assert.match(read(file), /<WorkspaceRefreshProvider>/)
-    assert.match(read(file), /<WorkspaceRefreshTarget \/>/)
+    assert.doesNotMatch(read(file), /WorkspaceRefreshTarget/)
   }
-  for (const file of ['components/editor-queue.tsx','components/editor-dashboard.tsx','components/editor-upload-photos.tsx','components/admin-raw-photo-queue.tsx']) assert.match(read(file), /<WorkspaceRefreshButton /)
-  assert.match(read('components/filtering-dashboard.tsx'), /activeTab === 'editor' \|\| activeTab === 'queue' \? undefined/)
-  assert.match(read('components/new-admin/pages.tsx'), /<WorkspaceRefresh><Button/)
+  assert.doesNotMatch(read('components/admin-page-header.tsx'), /WorkspaceRefreshButton/)
+
+  const syncStatus = read('components/admin-sync-status.tsx')
+  assert.match(syncStatus, /failed \? 'bg-red-500' : 'bg-green-400'/)
+  assert.match(syncStatus, /\{syncing \? 'Syncing…' : 'Sync'\}/)
+  assert.doesNotMatch(syncStatus, /Auto-sync|Sync issue/)
 })

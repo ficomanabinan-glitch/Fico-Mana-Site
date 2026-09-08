@@ -392,9 +392,6 @@ export default function BusinessExpensesPage() {
         </div>
       </section>
 
-      <div className="border border-amber-400/15 bg-amber-400/[0.04] p-4 text-caption leading-relaxed text-amber-100/60">
-        Add storage subscriptions and other running costs here. These expenses are included in your sales and profit reports.
-      </div>
     </div>
   )
 }

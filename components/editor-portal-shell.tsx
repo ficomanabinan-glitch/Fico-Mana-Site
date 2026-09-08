@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { AdminToastProvider } from '@/components/admin-toast-provider'
-import { WorkspaceRefreshProvider, WorkspaceRefreshTarget } from '@/components/workspace-refresh'
+import { WorkspaceRefreshProvider } from '@/components/workspace-refresh'
 import {
   DashboardSidebarNavigation,
   DashboardSidebarProfile,
@@ -249,7 +249,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
                   <p className="truncate text-xs font-semibold text-white/55">{pageTitle}</p>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-3"><WorkspaceRefreshTarget /><p className="hidden text-caption text-white/35 sm:block">{session.workspace.name}</p></div>
+              <div className="flex shrink-0 items-center gap-3"><p className="hidden text-caption text-white/35 sm:block">{session.workspace.name}</p></div>
             </header>
 
             {menu ? (

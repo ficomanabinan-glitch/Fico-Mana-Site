@@ -1,8 +1,6 @@
 'use client'
 
 import { adminSubtitle, adminTitle } from '@/lib/admin-ui'
-import { useAdminAutoSync } from '@/components/admin-auto-sync'
-import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 
 type Props = {
   title: string
@@ -12,14 +10,7 @@ type Props = {
   children?: React.ReactNode
 }
 
-export default function AdminPageHeader({ title, subtitle, onRefresh, refreshing, children }: Props) {
-  const { syncing, syncNow } = useAdminAutoSync()
-
-  const handleRefresh = async () => {
-    await syncNow()
-    onRefresh?.()
-  }
-
+export default function AdminPageHeader({ title, subtitle, children }: Props) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 pb-1">
       <div className="space-y-1">
@@ -28,9 +19,6 @@ export default function AdminPageHeader({ title, subtitle, onRefresh, refreshing
         {subtitle && <p className={adminSubtitle}>{subtitle}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2 empty:hidden">
-        {onRefresh && (
-          <WorkspaceRefreshButton onRefresh={handleRefresh} refreshing={refreshing || syncing} />
-        )}
         {children}
       </div>
     </div>
