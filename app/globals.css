@@ -237,7 +237,7 @@
   }
 
   @media (max-width: 767px) {
-    .client-portal-page {
+    .client-portal-page > div {
       padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
     }
   }

@@ -18,7 +18,7 @@ async function fixture() {
     create table google_drive_settings(id integer,workspace_id uuid,portal_expiry_days integer);
     create table client_portals(id uuid primary key default gen_random_uuid(),public_id uuid default gen_random_uuid(),workspace_id uuid,booking_id varchar,status text,expires_at timestamptz,first_download_at timestamptz,access_email_sent_at timestamptz,download_expiry_days integer,updated_at timestamptz);
     create table deliverable_files(workspace_id uuid,booking_id varchar);
-    create table batch_upload_items(workspace_id uuid,booking_id varchar);
+    create table batch_upload_items(editing_job_id uuid,booking_id varchar);
     insert into workspace_members values('${ws}','${actor}','editor');
     insert into bookings values('ONE','${ws}','Pending Review',null,'${submitted}',null);
     insert into editing_jobs(workspace_id,booking_id,status) values('${ws}','ONE','WAITING_FOR_SELECTION');
@@ -28,6 +28,7 @@ async function fixture() {
   `)
   await db.exec(readFileSync('supabase/migrations/20260908014747_manual_selection_review.sql','utf8'))
   await db.exec(readFileSync('supabase/migrations/20260908185549_approved_selection_reopen.sql','utf8'))
+  await db.exec(readFileSync('supabase/migrations/20260908203450_fix_selection_review_upload_guard.sql','utf8'))
   const review = (action: string, workspace = ws, date = submitted) => db.query<{ result: {changed: boolean} }>(
     'select review_portal_selection($1,$2,$3,$4,$5,$6) result', [workspace,'ONE',actor,action,date,'Please choose a sharper photo.'])
   return { db, review }
@@ -85,6 +86,14 @@ test('reopen is blocked after download begins and preserves the approved selecti
   assert.deepEqual((await f.db.query('select raw_photo_status from bookings')).rows,[{raw_photo_status:'Approved'}])
   assert.deepEqual((await f.db.query('select status,version from photo_selections')).rows,[{status:'SUBMITTED',version:1}])
   assert.deepEqual((await f.db.query('select status from editing_jobs')).rows,[{status:'DOWNLOADED'}])
+})
+
+test('existing batch upload items block reopen through the workspace-scoped editing job',async t => {
+  const f = await fixture(); t.after(() => f.db.close())
+  await f.review('Approve')
+  await f.db.exec("insert into batch_upload_items select id,booking_id from editing_jobs")
+  await assert.rejects(f.review('Reopen'),/already started/)
+  assert.deepEqual((await f.db.query('select raw_photo_status from bookings')).rows,[{raw_photo_status:'Approved'}])
 })
 
 test('a missing client portal rolls back every reopen change',async t => {
