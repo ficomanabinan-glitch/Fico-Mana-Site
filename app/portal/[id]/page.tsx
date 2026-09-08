@@ -59,6 +59,7 @@ export default function ClientPortalPage() {
   const [error, setError] = useState('')
   const [draftPricing, setDraftPricing] = useState<AddonPreview | null>(null)
   const [selectionProgress, setSelectionProgress] = useState<ClientSelectionProgress | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [driveAccess, setDriveAccess] = useState<{ publicId: string; url?: string; warning?: string } | null>(null)
   const [resetting, setResetting] = useState(false)
   const readSequence = useRef(0)
@@ -141,7 +142,7 @@ export default function ClientPortalPage() {
   return (
     <main className="client-portal client-portal-page min-h-screen overflow-x-clip bg-[#171717] text-body text-white">
       <div className="w-full px-3 py-5 sm:px-5 sm:py-8 xl:px-6 2xl:px-8">
-        <header className="mb-4 flex items-end justify-between gap-4 border-b border-white/10 pb-4 xl:hidden">
+        <header className="sticky top-0 z-30 -mx-3 mb-4 flex min-h-[5.75rem] items-center justify-between gap-4 border-b border-white/10 bg-[#171717]/95 px-3 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)] backdrop-blur-xl sm:-mx-5 sm:px-5 md:static md:mx-0 md:min-h-0 md:bg-transparent md:px-0 md:py-0 md:pb-4 md:shadow-none md:backdrop-blur-none xl:hidden">
           <div className="min-w-0">
             <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA</p>
             <h1 className="mt-1 truncate text-2xl font-semibold tracking-heading">{data.booking.customerName}</h1>
@@ -153,8 +154,8 @@ export default function ClientPortalPage() {
         {error ? <div className="mb-4 rounded-control border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200" role="alert">{error}</div> : null}
         {data.warnings?.length ? <div className="mb-4 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-relaxed text-amber-100" role="status"><strong>Some project details are temporarily unavailable:</strong> {data.warnings.join(', ')}.</div> : null}
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(250px,300px)_minmax(0,1fr)] xl:gap-5 2xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:gap-6">
-          <PortalSidebar remaining={money(payment.remaining)}>
+        <div className={`grid min-w-0 gap-4 ${sidebarCollapsed ? 'xl:grid-cols-[3.5rem_minmax(0,1fr)] xl:gap-4 2xl:grid-cols-[3.5rem_minmax(0,1fr)] 2xl:gap-4' : 'xl:grid-cols-[minmax(250px,300px)_minmax(0,1fr)] xl:gap-5 2xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:gap-6'}`}>
+          <PortalSidebar remaining={money(payment.remaining)} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}>
             <PortalContext
               data={data}
               selectionProgress={selectionProgress}
@@ -202,7 +203,7 @@ function PortalContext({ data, selectionProgress, addonAmount, payment, selectio
   return <>
     <div className="px-1 pb-2"><p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA Client Portal</p><h1 className="mt-2 break-words text-2xl font-semibold tracking-heading">{data.booking.customerName}</h1><p className="mt-1 font-mono text-caption text-white/35">{data.booking.id}</p></div>
     <section className="rounded-card border border-white/10 bg-white/[0.025] p-4"><div><p className="text-caption font-semibold uppercase tracking-wider text-white/40">Enhanced Photo Selection</p><p className="mt-2 text-lg font-semibold text-[#C4CEFF]">{selected} / {limit} Selected</p></div>{selectionProgress?.editingPreference ? <div className="mt-3 border-t border-white/[0.07] pt-3"><p className="text-caption text-white/35">Editing Preference</p><p className="mt-1 text-caption font-semibold text-white/70">{selectionProgress.editingPreference}</p></div> : null}{selectionLocked ? <div className="mt-3 rounded-control border border-emerald-500/15 bg-emerald-500/[0.05] p-3 text-caption text-emerald-200"><p className="font-semibold">Selection submitted and locked</p>{data.selection?.submittedAt ? <p className="mt-1 text-emerald-100/55">{new Date(data.selection.submittedAt).toLocaleString('en-PH')}</p> : null}</div> : null}</section>
-    <section className="rounded-card border border-white/10 bg-white/[0.025] p-4"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1"><div><div className="flex items-center gap-2 text-white/40"><CalendarDays className="size-3.5" /><p className="text-caption font-semibold uppercase tracking-wider">Session</p></div><p className="mt-2 text-sm font-semibold">{data.booking.bookingDate}</p><p className="mt-1 text-caption text-white/40">{data.booking.bookingTime}</p></div><div><div className="flex items-center gap-2 text-white/40"><Package className="size-3.5" /><p className="text-caption font-semibold uppercase tracking-wider">Package</p></div><p className="mt-2 text-sm font-semibold">{data.booking.packageName}</p><p className="mt-1 text-caption text-white/40">Booking {data.booking.bookingStatus}</p></div></div></section>
+    <section className="rounded-card border border-white/10 bg-white/[0.025] p-4"><div className="grid grid-cols-2 gap-4"><div className="min-w-0"><div className="flex items-center gap-2 text-white/40"><Package className="size-3.5 shrink-0" /><p className="text-caption font-semibold uppercase tracking-wider">Package</p></div><p className="mt-2 break-words text-sm font-semibold">{data.booking.packageName}</p><p className="mt-1 text-caption text-white/40">Booking {data.booking.bookingStatus}</p></div><div className="min-w-0"><div className="flex items-center gap-2 text-white/40"><CalendarDays className="size-3.5 shrink-0" /><p className="text-caption font-semibold uppercase tracking-wider">Shoot Day</p></div><p className="mt-2 break-words text-sm font-semibold">{data.booking.bookingDate}</p></div></div></section>
     <InfoCard icon={WalletCards} label="Payment Summary"><dl className="space-y-3 text-caption tabular-nums"><Row label="Package" value={money(data.booking.price)} /><Row label="Extras" value={money(addonAmount)} /><Row label="Booking Total" value={money(payment.total)} /><Row label="Paid" value={money(data.booking.amountPaid)} accent="text-emerald-300" /><Row label="Remaining" value={money(payment.remaining)} accent="text-[#C4CEFF]" /><Row label="Status" value={data.booking.paymentStatus} /></dl></InfoCard>
     <PortalQrCode compact portalUrl={data.shareUrl} customerName={data.booking.customerName} bookingId={data.booking.id} />
   </>

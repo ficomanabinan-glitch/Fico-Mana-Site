@@ -25,12 +25,14 @@ test('tablet and mobile details control reflects live balance, opens the same su
   }) } })
   t.after(() => { hooks.unmount(); if (prior) Object.defineProperty(globalThis, 'window', prior); else Reflect.deleteProperty(globalThis, 'window') })
   const component = loadTs<typeof import('../components/portal-sidebar.tsx')>('components/portal-sidebar.tsx', { react: hooks.react, '@/components/ui/sheet': sheets })
-  const render = (remaining = '₱6,000') => hooks.render(() => component.default({ remaining, children: 'Same payment and QR content' }))
+  let collapseRequest: boolean | undefined
+  const render = (remaining = '₱6,000', collapsed = false) => hooks.render(() => component.default({ remaining, collapsed, onCollapsedChange: value => { collapseRequest = value }, children: 'Same payment and QR content' }))
   let tree = render()
   const sheet = () => elements(tree, el => el.type === sheets.Sheet)[0]
   const trigger = elements(tree, el => el.type === sheets.SheetTrigger)[0]
   assert.equal(sheet().props.open, false)
-  assert.match(trigger.props.render.props.className, /min-h-12.*rounded-control/)
+  assert.match(trigger.props.render.props.className, /fixed.*bottom-\[calc\(0\.75rem\+env\(safe-area-inset-bottom,0px\)\)\].*min-h-12.*rounded-control/)
+  assert.match(trigger.props.render.props.className, /md:static.*md:w-full/)
   assert.match(trigger.props.render.props.className, /xl:hidden/)
   assert.match(content(trigger), /₱6,000/)
   sheet().props.onOpenChange(true); tree = render('₱6,400')
@@ -41,7 +43,19 @@ test('tablet and mobile details control reflects live balance, opens the same su
   assert.ok(panel.props.initialFocus, 'Focus the heading so opening does not scroll past the balance to QR actions')
   const aside = elements(tree, el => el.type === 'aside')[0]
   assert.match(aside.props.className, /xl:pr-6 2xl:pr-8/, 'Keep the card-to-scrollbar gutter aligned with the page gutter')
-  assert.equal(aside.props.children, 'Same payment and QR content')
+  assert.match(content(aside), /Same payment and QR content/)
+  const collapse = elements(aside, el => el.type === 'button' && el.props['aria-label'] === 'Collapse client details')[0]
+  assert.equal(collapse.props['aria-expanded'], true)
+  collapse.props.onClick()
+  assert.equal(collapseRequest, true)
+  tree = render('₱6,400', true)
+  const collapsedAside = elements(tree, el => el.type === 'aside')[0]
+  assert.match(collapsedAside.props.className, /xl:pr-0/)
+  assert.doesNotMatch(content(collapsedAside), /Same payment and QR content/)
+  const expand = elements(collapsedAside, el => el.type === 'button' && el.props['aria-label'] === 'Expand client details')[0]
+  assert.equal(expand.props['aria-expanded'], false)
+  expand.props.onClick()
+  assert.equal(collapseRequest, false)
   media.matches = true; listener?.(); tree = render()
   assert.equal(sheet().props.open, false, 'Do not leave an invisible modal trapping focus after resize')
   hooks.unmount()
