@@ -1,5 +1,3 @@
-'use client'
-
 import EditorCapabilityGate from '@/components/editor-capability-gate'
 import EditorQueue from '@/components/editor-queue'
 
