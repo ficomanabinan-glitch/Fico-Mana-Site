@@ -25,7 +25,7 @@ for (const kind of ['sales', 'packages', 'editor', 'editor-sync'] as const) {
   test(`${kind}: an old request cannot clear a newer request after invalidation`, async t => {
     const originalFetch = globalThis.fetch
     const pending: Array<(response: Response) => void> = []
-    const clear = kind === 'sales' ? sales.clearSalesReadCache : kind === 'packages' ? packages.clearManagedPackageCache : editor.invalidateEditorBatchCache
+    const clear = kind === 'sales' ? sales.clearSalesReadCache : kind === 'packages' ? packages.clearManagedPackageCache : () => editor.invalidateEditorBatchCache(true)
     const read = () => kind === 'sales' ? sales.fetchSales('month', '2026-09-07', { force: true }) :
       kind === 'packages' ? packages.fetchManagedPackages({ force: true }) :
       editor.fetchEditorBatches({ force: true, synchronize: kind === 'editor-sync' })

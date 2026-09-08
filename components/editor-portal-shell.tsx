@@ -32,6 +32,7 @@ import {
 import EditorLoadingSkeleton from '@/components/editor-page-skeleton'
 import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
 import { bindStaffReadCache } from '@/lib/staff-cache-session'
+import StaffQueryProvider from '@/components/staff-query-provider'
 
 export type EditorSession = {
   user: { id: string; email: string; displayName: string }
@@ -73,7 +74,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
       .then(async (response) => {
         if (!response.ok) {
           bindStaffReadCache(null)
-          invalidateEditorBatchCache()
+          invalidateEditorBatchCache(true)
           const { createSupabaseBrowserClient } = await import('@/lib/supabase/browser')
           await createSupabaseBrowserClient().auth.signOut()
           router.replace('/editor/login')
@@ -139,6 +140,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
     const items = [
       { label: 'Dashboard', href: '/editor', icon: LayoutDashboard, show: true, exact: true },
       { label: 'Editing Queue', href: '/editor/queue', icon: ListFilter, show: session.capabilities.edit },
+      { label: 'Filtering Queue', href: '/editor/filtering', icon: ListFilter, show: session.capabilities.edit },
       { label: 'Upload Photos', href: '/editor/upload', icon: FolderUp, show: session.capabilities.edit },
       { label: 'Onsite Upload', href: '/editor/onsite', icon: CloudUpload, show: session.capabilities.onsite },
     ]
@@ -177,7 +179,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
 
   const logout = async () => {
     bindStaffReadCache(null)
-    invalidateEditorBatchCache()
+    invalidateEditorBatchCache(true)
     const { createSupabaseBrowserClient } = await import('@/lib/supabase/browser')
     await createSupabaseBrowserClient().auth.signOut()
     router.push('/editor/login')
@@ -195,9 +197,10 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
 
   return (
     <EditorSessionContext.Provider value={session}>
-      <AdminToastProvider key={session.user.id}>
-        <WorkspaceRefreshProvider>
-        <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">
+      <StaffQueryProvider key={session.user.id}>
+        <AdminToastProvider>
+          <WorkspaceRefreshProvider>
+          <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] font-sans text-white">
           <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">
             <div className="shrink-0 border-b border-white/[0.08] p-6">
               <Link href="/editor" prefetch onClick={() => navigate('/editor', false)}>
@@ -261,12 +264,15 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
             ) : null}
 
             <main ref={mainRef} className="min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">
-              {children}
+              <div key={pathname} className="console-route-entry min-w-0 w-full">
+                {children}
+              </div>
             </main>
           </div>
         </div>
-        </WorkspaceRefreshProvider>
-      </AdminToastProvider>
+          </WorkspaceRefreshProvider>
+        </AdminToastProvider>
+      </StaffQueryProvider>
     </EditorSessionContext.Provider>
   )
 }

@@ -1,7 +1,11 @@
-/** Shared client-side cache policy for authenticated admin/editor reads.
- * Private responses remain no-store on the network; only already-authorized
- * browser snapshots use this policy.
+/**
+ * Browser-only freshness policy for authenticated staff reads.
+ *
+ * API responses remain private/no-store. These values only control the
+ * in-memory or tab-local snapshots that keep repeat navigation immediate.
  */
-export const ADMIN_QUERY_STALE_MS = 5 * 60_000
-export const ADMIN_QUERY_GC_MS = 60 * 60_000
-export const ADMIN_BACKGROUND_SYNC_MIN_MS = 15_000
+export const STAFF_READ_FRESH_MS = 5 * 60_000
+export const STAFF_PAGE_WARM_MS = 60 * 60_000
+export const STAFF_PAGE_CACHE_LIMIT = 64
+export const STAFF_BACKGROUND_SYNC_MIN_MS = 15_000
+export const STAFF_BACKGROUND_SYNC_INTERVAL_MS = 3 * 60_000

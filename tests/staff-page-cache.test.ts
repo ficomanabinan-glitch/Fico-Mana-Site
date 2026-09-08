@@ -13,7 +13,9 @@ function setup(t: test.TestContext) {
     if (descriptor) Object.defineProperty(globalThis, 'window', descriptor)
     else Reflect.deleteProperty(globalThis, 'window')
   })
-  const cache = loadTs<Cache>('lib/staff-page-cache.ts', {})
+  const cache = loadTs<Cache>('lib/staff-page-cache.ts', {
+    './admin-cache-policy.ts': { STAFF_PAGE_CACHE_LIMIT: 64, STAFF_PAGE_WARM_MS: 60 * 60_000 },
+  })
   cache.setStaffPageCacheOwner('staff-a')
   return cache
 }
@@ -45,7 +47,21 @@ function mount(cache: Cache) {
     },
     useCallback<T>(fn: T) { return fn },
   }
-  const hooks = loadTs<Hooks>('components/use-cached-page-read.ts', { react, '@/lib/staff-page-cache': cache, '@/lib/editor-read-cache': {} })
+  const queryData = new Map<string, unknown>()
+  const queryClient = {
+    getQueryData: (key: readonly unknown[]) => queryData.get(JSON.stringify(key)),
+    setQueryData: (key: readonly unknown[], value: unknown) => queryData.set(JSON.stringify(key), value),
+  }
+  const hooks = loadTs<Hooks>('components/use-cached-page-read.ts', {
+    react,
+    '@tanstack/react-query': { useQueryClient: () => queryClient },
+    '@/lib/staff-page-cache': cache,
+    '@/lib/editor-read-cache': {},
+    '@/lib/admin-cache-policy': {
+      STAFF_BACKGROUND_SYNC_INTERVAL_MS: 3 * 60_000,
+      STAFF_BACKGROUND_SYNC_MIN_MS: 15_000,
+    },
+  })
   return {
     render(key = 'page:a') { cursor = 0; return hooks.useCachedPageRead<string[]>(key, []) },
     unmount() { cleanups.forEach(cleanup => cleanup()) },
@@ -153,7 +169,9 @@ test('booking views read the shared mutation-aware cache, not separate page copi
 })
 
 test('sales invalidation retains the last summary while sign-out discards it', async t => {
-  const sales = loadTs<typeof import('../lib/sales-read-cache.ts')>('lib/sales-read-cache.ts', {})
+  const sales = loadTs<typeof import('../lib/sales-read-cache.ts')>('lib/sales-read-cache.ts', {
+    './admin-cache-policy.ts': { STAFF_READ_FRESH_MS: 5 * 60_000 },
+  })
   const originalFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = originalFetch })
   const payload = { summary: { bookedSales: 1200 }, settings: {} }

@@ -18,9 +18,8 @@ import {
   PenTool,
   Upload,
 } from 'lucide-react'
-import { getBookings, peekBookings, type Booking } from '@/lib/data-store'
-import { fetchManagedPackages, getCachedManagedPackages } from '@/lib/package-manager-cache'
-import { usesGraduationWorkflow } from '@/lib/package-workflow'
+import { type Booking } from '@/lib/data-store'
+import { fetchFilteringBookings, peekFilteringBookings } from '@/lib/filtering-read-cache'
 import {
   getRawPhotoWorkflowStatus,
   isRawPhotoWorkflowBooking,
@@ -44,7 +43,7 @@ import {
 import AdminPageHeader from '@/components/admin-page-header'
 import AdminBookingCalendar from '@/components/admin-booking-calendar'
 import AdminRawPhotoQueue from '@/components/admin-raw-photo-queue'
-import { useOnAdminDbSync } from '@/components/admin-auto-sync'
+import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import { useAdminToast } from '@/components/admin-toast-provider'
 
 export type FilteringDashTab = 'overview' | 'queue' | 'calendar' | 'editor'
@@ -71,12 +70,8 @@ function workflowBookings(bookings: Booking[]) {
 
 export default function FilteringDashboard({ initialSearch = '', initialTab }: Props) {
   const toast = useAdminToast()
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const eligibleIds = new Set((getCachedManagedPackages() ?? [])
-      .filter(pkg => usesGraduationWorkflow(pkg.category)).map(pkg => pkg.id))
-    return (peekBookings() ?? []).filter(booking => eligibleIds.has(booking.packageId))
-  })
-  const [loading, setLoading] = useState(() => peekBookings() === undefined || getCachedManagedPackages() === null)
+  const [bookings, setBookings] = useState<Booking[]>(() => peekFilteringBookings() ?? [])
+  const [loading, setLoading] = useState(() => peekFilteringBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<FilteringDashTab>(
     initialTab || (initialSearch ? 'queue' : 'overview'),
@@ -87,9 +82,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
-      const [data, packages] = await Promise.all([getBookings(), fetchManagedPackages()])
-      const eligibleIds = new Set(packages.filter(pkg => usesGraduationWorkflow(pkg.category)).map(pkg => pkg.id))
-      setBookings(data.filter(booking => eligibleIds.has(booking.packageId)))
+      setBookings(await fetchFilteringBookings())
     } catch (err) {
       console.error(err)
       if (!silent) toast.error('Sync failed', 'Could not load filtering dashboard data.')
@@ -103,7 +96,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
     fetchData(true)
   }, [fetchData])
 
-  useOnAdminDbSync(() => fetchData(true))
+  usePageBackgroundSync(() => fetchData(true))
 
   const pipeline = useMemo(() => {
     const relevant = workflowBookings(bookings)
@@ -179,10 +172,10 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
         refreshing={refreshing}
       >
         <Link
-          href="/admin/bookings"
+          href="/editor/onsite"
           className={`inline-flex items-center gap-1.5 px-4 py-2.5 ${adminBtnGhost}`}
         >
-          All Bookings <ArrowRight className="w-3.5 h-3.5" />
+          Onsite Upload <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </AdminPageHeader>
 
@@ -258,7 +251,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
       )}
 
       {activeTab === 'editor' && (
-        <EditorQueue />
+        <EditorQueue basePath="/editor" driveSettingsHref={null} />
       )}
     </div>
   )
@@ -491,10 +484,10 @@ function FilteringDaySessions({
           <p className="text-sm font-semibold text-white mt-0.5">{label}</p>
         </div>
         <Link
-          href={`/admin/bookings?date=${date}`}
+          href={`/editor/onsite?date=${date}`}
           className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-caption font-semibold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
         >
-          Open bookings <ArrowRight className="w-3 h-3" />
+          Onsite Upload <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
 
@@ -523,7 +516,7 @@ function FilteringDaySessions({
                           {b.bookingTime} · {b.packageName}
                         </p>
                         <Link
-                          href={`/admin/bookings?search=${encodeURIComponent(b.id)}`}
+                          href={`/editor/filtering?search=${encodeURIComponent(b.id)}&tab=queue`}
                           className="font-mono text-caption text-primary hover:underline mt-1 inline-block"
                         >
                           {b.id}
@@ -538,10 +531,10 @@ function FilteringDaySessions({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link
-                      href={`/admin/bookings?search=${encodeURIComponent(b.id)}`}
+                      href={`/editor/filtering?search=${encodeURIComponent(b.id)}&tab=queue`}
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-white/10 bg-white/5 hover:bg-white/10 text-caption font-semibold uppercase tracking-wider text-white/70"
                     >
-                      Booking
+                      Selection
                     </Link>
                     {b.driveLink && (
                       <a

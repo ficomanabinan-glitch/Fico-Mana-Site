@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { Booking } from '@/lib/data-store'
 import { requireStaffAuth } from '@/lib/auth-api'
+import { getWorkflowAccess } from '@/lib/auth/workflow'
+import { reviewSelection } from '@/lib/selection-review'
 import { loadBookingById } from '@/lib/booking-load'
 import { upsertBooking, addServerNotification } from '@/lib/server-store'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
@@ -20,7 +22,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { error: authError } = await requireStaffAuth(request)
+    const { user, error: authError } = await requireStaffAuth(request)
     if (authError) return authError
 
     const { id } = await params
@@ -29,7 +31,7 @@ export async function POST(
     const reason = body.reason?.trim()
     const notes = body.notes?.trim()
 
-    if (!action || (action === 'Reject' && !reason)) {
+    if (!['Approve', 'Reject'].includes(action || '') || (action === 'Reject' && !reason)) {
       return NextResponse.json(
         { error: 'Action and rejection reason (if rejecting) are required.' },
         { status: 400 },
@@ -39,6 +41,19 @@ export async function POST(
     const booking = await loadBookingById(id)
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    }
+
+    if (isSupabaseConfigured()) {
+      const admin = getSupabaseAdmin()
+      const access = user ? await getWorkflowAccess(user) : null
+      if (!admin || !access) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      const { data: selection, error: selectionError } = await admin.from('photo_selections')
+        .select('id').eq('workspace_id', access.workspaceId).eq('booking_id', id).maybeSingle()
+      if (selectionError) throw selectionError
+      if (selection) {
+        const result = await reviewSelection(access.workspaceId, user!.id, id, { ...body, submittedAt: booking.rawPhotoSubmittedAt })
+        return NextResponse.json({ ...booking, ...result, rawPhotoStatus: action === 'Approve' ? 'Approved' : 'Rejected' }, { headers: { 'Cache-Control': 'private, no-store' } })
+      }
     }
 
     const rawPhotoStatus: Booking['rawPhotoStatus'] =

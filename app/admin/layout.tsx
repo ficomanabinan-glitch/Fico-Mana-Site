@@ -11,7 +11,6 @@ import {
   Clapperboard,
   FileText,
   FolderHeart,
-  Image,
   LayoutDashboard,
   List,
   Menu,
@@ -34,6 +33,7 @@ import { clearSalesReadCache } from '@/lib/sales-read-cache'
 import { clearManagedPackageCache } from '@/lib/package-manager-cache'
 import { bindStaffReadCache } from '@/lib/staff-cache-session'
 import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
+import StaffQueryProvider from '@/components/staff-query-provider'
 import {
   DashboardSidebarNavigation,
   DashboardSidebarProfile,
@@ -54,7 +54,6 @@ const navigationSections = [
       { label: 'Clients', href: '/admin/clients', icon: Users },
       { label: 'Client Portals', href: '/admin/provisioning', icon: FolderHeart },
       { label: 'Verification Queue', href: '/admin/verification', icon: CheckSquare, badgeKey: 'verification' },
-      { label: 'Filtering Queue', href: '/admin/filtering', icon: Image, badgeKey: 'filtering' },
       { label: 'Editor Portal', href: 'https://editor.ficomana.com', icon: PenTool },
       { label: 'Session Calendar', href: '/admin/calendar', icon: CalendarDays },
       { label: 'Shoot Reminders', href: '/admin/shoot-reminders', icon: Bell },
@@ -274,9 +273,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <AdminToastProvider key={staffUser?.id}>
-      <AdminAutoSyncProvider enabled={isLoggedIn}>
-        <WorkspaceRefreshProvider>
+    <StaffQueryProvider key={staffUser?.id}>
+      <AdminToastProvider>
+        <AdminAutoSyncProvider enabled={isLoggedIn}>
+          <WorkspaceRefreshProvider>
         <div className="admin-console flex h-dvh overflow-hidden bg-[#222222] text-white">
           <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">
             <div className="shrink-0 border-b border-white/[0.08] p-6">
@@ -397,11 +397,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
             ) : null}
 
-            <main ref={mainRef} className="relative min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">{children}</main>
+            <main ref={mainRef} className="relative min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">
+              <div key={pathname} className="console-route-entry min-w-0 w-full">{children}</div>
+            </main>
           </div>
         </div>
-        </WorkspaceRefreshProvider>
-      </AdminAutoSyncProvider>
-    </AdminToastProvider>
+          </WorkspaceRefreshProvider>
+        </AdminAutoSyncProvider>
+      </AdminToastProvider>
+    </StaffQueryProvider>
   )
 }

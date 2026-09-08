@@ -1,4 +1,4 @@
-import { ADMIN_QUERY_STALE_MS } from './admin-cache-policy'
+import { STAFF_BACKGROUND_SYNC_MIN_MS, STAFF_READ_FRESH_MS } from './admin-cache-policy.ts'
 
 export type EditorBatchClient = {
   bookingId: string
@@ -39,9 +39,6 @@ export type EditorQueueUiState = {
   packageFilter: string
 }
 
-const CACHE_FRESH_MS = ADMIN_QUERY_STALE_MS
-const SYNC_FRESH_MS = 60_000
-
 let batchCache: { data: EditorBatchSummary[]; cachedAt: number } | null = null
 let batchRequest: Promise<EditorBatchSummary[]> | null = null
 let synchronizedBatchRequest: Promise<EditorBatchSummary[]> | null = null
@@ -60,7 +57,7 @@ export function getCachedEditorBatches() {
 }
 
 export function shouldSynchronizeEditorBatches() {
-  return Date.now() - lastSynchronizedAt >= SYNC_FRESH_MS
+  return Date.now() - lastSynchronizedAt >= STAFF_BACKGROUND_SYNC_MIN_MS
 }
 
 export function getRememberedEditorQueueUi() {
@@ -82,7 +79,7 @@ export async function fetchEditorBatches({
     !synchronize &&
     !force &&
     batchCache &&
-    Date.now() - batchCache.cachedAt < CACHE_FRESH_MS
+    Date.now() - batchCache.cachedAt < STAFF_READ_FRESH_MS
   ) {
     return batchCache.data
   }
@@ -118,20 +115,22 @@ export async function fetchEditorBatches({
   }
 }
 
-export function invalidateEditorBatchCache(preserveUi = false, discardData = false) {
+export function invalidateEditorBatchCache(discardPrivateData = false) {
   cacheGeneration += 1
   // Mutations make the snapshot stale, not unusable. Keep it painted until the
   // replacement arrives; authentication changes pass discardData=true.
   if (batchCache) batchCache = { ...batchCache, cachedAt: 0 }
-  if (discardData) batchCache = null
   batchRequest = null
   synchronizedBatchRequest = null
   lastSynchronizedAt = 0
-  if (!preserveUi) rememberedQueueUi = {
-    groupMode: 'day',
-    dateSortOrder: 'desc',
-    filter: 'ALL',
-    search: '',
-    packageFilter: 'ALL',
+  if (discardPrivateData) {
+    batchCache = null
+    rememberedQueueUi = {
+      groupMode: 'day',
+      dateSortOrder: 'desc',
+      filter: 'ALL',
+      search: '',
+      packageFilter: 'ALL',
+    }
   }
 }

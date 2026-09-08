@@ -1523,15 +1523,16 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     const updates = await Promise.all([
       admin
         .from('editing_jobs')
-        .update({ status: 'READY_FOR_EDITING', selected_count: unique.length, expected_output_count: unique.length, last_error: null, updated_at: submittedAt })
+        .update({ status: 'WAITING_FOR_SELECTION', selected_count: unique.length, expected_output_count: unique.length, last_error: null, updated_at: submittedAt })
         .eq('booking_id', bookingId),
       admin
         .from('bookings')
         .update({
-          raw_photo_status: 'Approved',
+          raw_photo_status: 'Pending Review',
           raw_photo_link: driveFolderUrl(hierarchy.selected.id),
           raw_photo_submitted_at: submittedAt,
-          raw_photo_approved_at: submittedAt,
+          raw_photo_approved_at: null,
+          raw_photo_notes: null,
         })
         .eq('id', bookingId),
     ])

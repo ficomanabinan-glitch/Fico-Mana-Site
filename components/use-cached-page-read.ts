@@ -1,14 +1,28 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import { readStaffPage, staffPageCacheGeneration, writeStaffPage } from '@/lib/staff-page-cache'
 import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
-import { ADMIN_BACKGROUND_SYNC_MIN_MS } from '@/lib/admin-cache-policy'
+import {
+  STAFF_BACKGROUND_SYNC_INTERVAL_MS,
+  STAFF_BACKGROUND_SYNC_MIN_MS,
+} from '@/lib/admin-cache-policy'
+
+function staffPageQueryKey(generation: number, key: string) {
+  return ['staff-page', generation, key] as const
+}
 
 /** Cache successful read results, not form drafts, File objects, or upload state. */
 export function useCachedPageRead<T>(key: string, fallback: T) {
+  const queryClient = useQueryClient()
   const generation = staffPageCacheGeneration()
-  const initial = () => ({ key, generation, data: readStaffPage<T>(key) ?? fallback, pending: true })
+  const initial = () => ({
+    key,
+    generation,
+    data: queryClient.getQueryData<T>(staffPageQueryKey(generation, key)) ?? readStaffPage<T>(key) ?? fallback,
+    pending: true,
+  })
   const [snapshot, setSnapshot] = useState(initial)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
@@ -28,9 +42,10 @@ export function useCachedPageRead<T>(key: string, fallback: T) {
     if (previous.key !== key || previous.generation !== generation) return
     const data = typeof value === 'function' ? (value as (old: T) => T)(previous.data) : value
     writeStaffPage(key, data, generation)
+    queryClient.setQueryData(staffPageQueryKey(generation, key), data)
     latest.current = { ...previous, data }
     setSnapshot(latest.current)
-  }, [key, generation])
+  }, [key, generation, queryClient])
   const setLoading = useCallback((pending: boolean) => {
     if (!mounted.current || generation !== staffPageCacheGeneration()) return
     const previous = latest.current
@@ -39,7 +54,8 @@ export function useCachedPageRead<T>(key: string, fallback: T) {
     setSnapshot(latest.current)
   }, [key, generation])
 
-  const loading = current.pending && readStaffPage<T>(key) === undefined
+  const queryData = queryClient.getQueryData<T>(staffPageQueryKey(generation, key))
+  const loading = current.pending && queryData === undefined && readStaffPage<T>(key) === undefined
   return [current.data, setData, loading, setLoading, current.pending] as const
 }
 
@@ -51,17 +67,17 @@ export function usePageBackgroundSync(refresh: () => void | Promise<unknown>) {
     let inFlight = false
     let lastStarted = 0
     const run = async () => {
-      if (document.visibilityState !== 'visible' || inFlight || Date.now() - lastStarted < ADMIN_BACKGROUND_SYNC_MIN_MS) return
+      if (document.visibilityState !== 'visible' || inFlight || Date.now() - lastStarted < STAFF_BACKGROUND_SYNC_MIN_MS) return
       inFlight = true
       lastStarted = Date.now()
       try { await callback.current() } catch { /* Existing content remains available. */ }
       finally { inFlight = false }
     }
-    const timer = setInterval(() => void run(), 3 * 60_000)
+    const timer = setInterval(() => void run(), STAFF_BACKGROUND_SYNC_INTERVAL_MS)
     const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('fico-workflow-refresh')
     if (channel) channel.onmessage = event => {
       if (event.data !== 'photos-changed') return
-      invalidateEditorBatchCache(true)
+      invalidateEditorBatchCache()
       lastStarted = 0
       void run()
     }

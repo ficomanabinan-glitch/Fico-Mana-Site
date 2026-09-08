@@ -133,9 +133,9 @@ test('Editor queue reuses fresh batches and preserves its filters between routes
   const originalFetch = globalThis.fetch
   context.after(() => {
     globalThis.fetch = originalFetch
-    invalidateEditorBatchCache()
+    invalidateEditorBatchCache(true)
   })
-  invalidateEditorBatchCache()
+  invalidateEditorBatchCache(true)
   let requests = 0
   globalThis.fetch = async () => {
     requests += 1

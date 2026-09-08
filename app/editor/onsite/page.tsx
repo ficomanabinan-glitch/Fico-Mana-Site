@@ -1,5 +1,5 @@
-import EditorCapabilityGate from '@/components/editor-capability-gate'
 import OnsiteUpload from '@/components/onsite-upload'
+import EditorCapabilityGate from '@/components/editor-capability-gate'
 
 export default async function OnsiteUploadPage({
   searchParams,
@@ -8,11 +8,8 @@ export default async function OnsiteUploadPage({
 }) {
   const params = await searchParams
   return (
-    <EditorCapabilityGate capability="onsite" fallbackHref="/editor/queue" skeleton="onsite">
-      <OnsiteUpload
-        initialDate={String(params.date || '')}
-        initialBooking={String(params.booking || '')}
-      />
+    <EditorCapabilityGate capability="onsite" fallback="/editor/queue">
+      <OnsiteUpload initialDate={String(params.date || '')} initialBooking={String(params.booking || '')} />
     </EditorCapabilityGate>
   )
 }

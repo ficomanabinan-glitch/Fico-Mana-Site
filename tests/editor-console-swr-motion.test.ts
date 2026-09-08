@@ -1,39 +1,50 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
 import test from 'node:test'
+import { existsSync, readFileSync } from 'node:fs'
 
-test('editor does not install a route-level skeleton that replaces cached pages', () => {
-  assert.equal(existsSync('app/editor/loading.tsx'), false)
-})
+const read = (path: string) => readFileSync(path, 'utf8')
 
-test('editor protected routes avoid repeated server auth/database waits', () => {
-  for (const path of [
+test('protected Editor pages reuse the persistent shell capability gate', () => {
+  for (const file of [
     'app/editor/queue/page.tsx',
     'app/editor/upload/page.tsx',
     'app/editor/onsite/page.tsx',
+    'app/editor/filtering/page.tsx',
     'app/editor/batch/[batchId]/page.tsx',
   ]) {
-    const source = readFileSync(path, 'utf8')
-    assert.doesNotMatch(source, /getStaffUser|getWorkflowAccess|canUseWorkflow/)
+    const source = read(file)
     assert.match(source, /EditorCapabilityGate/)
+    assert.doesNotMatch(source, /getStaffUser|getWorkflowAccess|canUseWorkflow/)
   }
-  const gate = readFileSync('components/editor-capability-gate.tsx', 'utf8')
-  assert.match(gate, /useEditorSession/)
-  assert.match(gate, /router\.replace\(fallbackHref\)/)
+  assert.equal(existsSync('app/editor/loading.tsx'), false)
 })
 
-test('editor uses the admin typography baseline', () => {
-  const layout = readFileSync('app/editor/layout.tsx', 'utf8')
-  const motion = readFileSync('app/console-motion.css', 'utf8')
-  assert.match(layout, /editor-console/)
-  assert.match(motion, /\.editor-console main[\s\S]*font-family: var\(--font-geist-sans\)/)
-  assert.match(motion, /\.editor-console main h1[\s\S]*font-family: inherit/)
+test('capability gating does not weaken protected Editor APIs', () => {
+  const gate = read('components/editor-capability-gate.tsx')
+  assert.match(gate, /session\?\.capabilities\[capability\]/)
+  assert.match(gate, /router\.replace\(fallback\)/)
+  for (const file of [
+    'app/api/editor-workflow/filtering/route.ts',
+    'app/api/editor-workflow/filtering/[id]/review/route.ts',
+    'app/api/editor-workflow/[...path]/route.ts',
+  ]) {
+    assert.match(read(file), /requireWorkflowAuth/)
+  }
 })
 
-test('admin and editor page roots share subtle upward route motion with reduced-motion support', () => {
-  const motion = readFileSync('app/console-motion.css', 'utf8')
-  assert.match(motion, /\.admin-console main > \*/)
-  assert.match(motion, /translate3d\(0, 6px, 0\)/)
-  assert.match(motion, /180ms cubic-bezier/)
-  assert.match(motion, /prefers-reduced-motion: reduce/)
+test('only pathname-keyed page content moves while console chrome stays stationary', () => {
+  const css = read('app/console-motion.css')
+  assert.match(css, /translateY\(6px\)/)
+  assert.match(css, /180ms cubic-bezier\(\.22, 1, \.36, 1\)/)
+  assert.match(css, /prefers-reduced-motion: reduce/)
+  assert.match(read('app/layout.tsx'), /console-motion\.css/)
+
+  for (const file of ['app/admin/layout.tsx', 'components/editor-portal-shell.tsx']) {
+    const source = read(file)
+    assert.match(source, /<main[\s\S]*<div key=\{pathname\} className="console-route-entry/)
+    const wrapperAt = source.indexOf('<div key={pathname} className="console-route-entry')
+    assert.ok(wrapperAt > source.indexOf('<header'))
+    assert.ok(wrapperAt > source.indexOf('<aside'))
+  }
+  assert.match(read('components/editor-portal-shell.tsx'), /admin-console[^"\n]*font-sans/)
 })

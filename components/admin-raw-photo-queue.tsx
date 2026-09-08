@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getBookings, peekBookings, dismissBookingNotifications, Booking } from '@/lib/data-store'
+import { type Booking } from '@/lib/data-store'
+import { fetchFilteringBookings as getBookings, peekFilteringBookings as peekBookings, invalidateFilteringBookings } from '@/lib/filtering-read-cache'
+import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AdminPageHeader from '@/components/admin-page-header'
 import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
-import { useOnAdminDbSync } from '@/components/admin-auto-sync'
+import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import {
   Check,
   X,
@@ -76,7 +78,7 @@ export default function AdminRawPhotoQueue({
     setExiting(null)
   }
 
-  const fetchQueue = async (silent = false) => {
+  const fetchQueue = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
       const data = await getBookings()
@@ -88,26 +90,27 @@ export default function AdminRawPhotoQueue({
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     fetchQueue(true)
-  }, [])
+  }, [fetchQueue])
 
-  useOnAdminDbSync(() => fetchQueue(true))
+  usePageBackgroundSync(() => fetchQueue(true))
 
   const handleApprove = async (booking: Booking) => {
     if (!window.confirm(`Approve raw photo selection for ${booking.id}?`)) return
 
     setActionLoading(true)
     try {
-      const res = await fetch(`/api/bookings/${booking.id}/review-raw-photo`, {
+      const res = await fetch(`/api/editor-workflow/filtering/${booking.id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'Approve', notes: 'Approved for editing' }),
+        body: JSON.stringify({ action: 'Approve', notes: 'Approved for editing', submittedAt: booking.rawPhotoSubmittedAt }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to approve raw photo.')
+      invalidateFilteringBookings()
 
       setShowDetailModal(false)
       setSelectedBooking(null)
@@ -117,11 +120,7 @@ export default function AdminRawPhotoQueue({
       if (Array.isArray(data.emailErrors) && data.emailErrors.length > 0) {
         toast.warning('Approved — email issue', data.emailErrors.join(' · '))
       }
-      try {
-        await dismissBookingNotifications(booking.id)
-      } catch (err) {
-        console.warn('dismissBookingNotifications failed:', err)
-      }
+      invalidateEditorBatchCache()
       fetchQueue(true)
     } catch (err) {
       console.error(err)
@@ -147,13 +146,14 @@ export default function AdminRawPhotoQueue({
 
     setActionLoading(true)
     try {
-      const res = await fetch(`/api/bookings/${selectedBooking.id}/review-raw-photo`, {
+      const res = await fetch(`/api/editor-workflow/filtering/${selectedBooking.id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'Reject', reason: finalReason, notes: notesText }),
+        body: JSON.stringify({ action: 'Reject', reason: finalReason, notes: notesText, submittedAt: selectedBooking.rawPhotoSubmittedAt }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to reject raw photo.')
+      invalidateFilteringBookings()
 
       const rejectedId = selectedBooking.id
       setShowRejectModal(false)
@@ -168,11 +168,7 @@ export default function AdminRawPhotoQueue({
       } else {
         toast.success('Selection rejected', `${rejectedId} was rejected. Client notified.`)
       }
-      try {
-        await dismissBookingNotifications(rejectedId)
-      } catch (err) {
-        console.warn('dismissBookingNotifications failed:', err)
-      }
+      invalidateEditorBatchCache()
       fetchQueue(true)
     } catch (err) {
       console.error(err)
@@ -180,6 +176,21 @@ export default function AdminRawPhotoQueue({
     } finally {
       setActionLoading(false)
     }
+  }
+
+  const resendRejection = async (booking: Booking) => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/editor-workflow/filtering/${booking.id}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RetryEmail', submittedAt: booking.rawPhotoSubmittedAt }),
+      })
+      const body = await response.json()
+      if (!response.ok || body.emailErrors?.length) throw new Error(body.error || body.emailErrors.join(' · '))
+      toast.success('Email sent', 'The client can reopen their portal from the email.')
+    } catch (error) {
+      toast.error('Email not sent', error instanceof Error ? error.message : 'Try: check email settings and retry.')
+    } finally { setActionLoading(false) }
   }
 
   const filteredBookings = bookings.filter((booking) => {
@@ -213,10 +224,10 @@ export default function AdminRawPhotoQueue({
           refreshing={refreshing}
         >
           <Link
-            href="/admin/bookings"
+            href="/editor/onsite"
             className="inline-flex items-center gap-1.5 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-caption font-semibold uppercase tracking-wider transition-colors"
           >
-            <List className="w-3.5 h-3.5" /> All Bookings
+            <List className="w-3.5 h-3.5" /> Onsite Upload
           </Link>
         </AdminPageHeader>
       )}
@@ -317,7 +328,7 @@ export default function AdminRawPhotoQueue({
                     <div className="min-w-0">
                       <h3 className="font-semibold text-white truncate">{booking.customerName}</h3>
                       <Link
-                        href={`/admin/bookings?search=${encodeURIComponent(booking.id)}`}
+                        href={`/editor/filtering?search=${encodeURIComponent(booking.id)}&tab=queue`}
                         className="text-caption text-primary font-mono mt-0.5 hover:underline"
                       >
                         {booking.id}
@@ -470,14 +481,14 @@ export default function AdminRawPhotoQueue({
               {selectedBooking.rawPhotoStatus === 'Rejected' && (
                 <button
                   type="button"
-                  onClick={() => handleApprove(selectedBooking)}
+                  onClick={() => resendRejection(selectedBooking)}
                   disabled={actionLoading}
                   className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider py-3"
                 >
-                  Approve Instead
+                  Resend Email
                 </button>
               )}
-              {selectedBooking.rawPhotoStatus === 'Approved' && (
+              {selectedBooking.rawPhotoStatus === 'Pending Review' && (
                 <button
                   type="button"
                   onClick={() => {
@@ -487,7 +498,7 @@ export default function AdminRawPhotoQueue({
                   disabled={actionLoading}
                   className="btn-reject-fx flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider py-3"
                 >
-                  Reject Instead
+                  Reject Selection
                 </button>
               )}
               <button

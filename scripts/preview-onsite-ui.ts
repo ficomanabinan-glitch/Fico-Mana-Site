@@ -19,6 +19,7 @@ const fontCss = [...builtCss.matchAll(/@font-face\{font-family:Geist[^}]*\}/g)].
 const fontFiles = new Set([...fontCss.matchAll(/\/media\/([a-zA-Z0-9._-]+\.woff2)/g)].map(match=>match[1]))
 const ui = loadTs('lib/admin-ui.ts', {})
 let stateIndex = 0
+let showUpload = false
 const onsiteReact = { ...React, useState(value: unknown) {
     const index = stateIndex++
     const schedule = { shootDate: '2026-09-08', batch: { id: 'synthetic-batch', jobs: [{
@@ -26,7 +27,9 @@ const onsiteReact = { ...React, useState(value: unknown) {
       bookingTime: '1:30 PM - 3:00 PM · SLOT 1', galleryCount: 22, lastUploadAt: '2026-09-07T15:43:04Z', rawFolderDriveId: 'synthetic-folder',
       lastError: 'The original photo BNI00372.JPG is no longer available. Try: ask the studio to restore or re-upload the original to your RAW folder and click Sync Drive, then submit your selection again.',
     }] } }
-    return [index === 2 ? schedule : index === 3 ? false : value, () => {}]
+    const progress = { 'FM-EXAMPLE': { uploaded: 2, total: 11, failed: [], bytesProcessed: 135 * 1024 * 1024, totalBytes: 550 * 1024 * 1024,
+      activeFiles: [0,1,2].map(index => ({ index, name: `BNI0037${index}.JPG`, loaded: (index + 1) * 8 * 1024 * 1024, total: 50 * 1024 * 1024, verifying: false })), status: 'uploading', lastError: null } }
+    return [index === 2 ? schedule : index === 3 ? false : index === 5 && showUpload ? progress : typeof value === 'function' ? value() : value, () => {}]
   }, useEffect() {}, useMemo: (fn:()=>unknown) => fn(), useCallback: (fn:unknown) => fn, useRef: (value:unknown)=>({current:value}) }
 const onsiteStubs = {
   react: onsiteReact,
@@ -57,9 +60,10 @@ createServer((request,response)=>{
   const font = request.url?.startsWith('/media/') ? request.url.slice(7) : ''
   if(fontFiles.has(font)) { response.writeHead(200, {'Content-Type':'font/woff2'}); response.end(readFileSync(resolve(`${staticRoot}/media`,font))); return }
   if(request.url==='/styles.css') { response.writeHead(200, {'Content-Type':'text/css','Cache-Control':'no-store'}); response.end(fontCss+'\n'+styles.css); return }
-  if(request.url!=='/' && request.url!=='/before' && request.url!=='/queue') { response.writeHead(404); response.end(); return }
+  if(!['/','/before','/queue','/upload','/upload-before'].includes(request.url || '')) { response.writeHead(404); response.end(); return }
   stateIndex=0
-  const html=renderToStaticMarkup(request.url==='/queue' ? createElement(EditorQueue,{basePath:'/editor'}) : createElement(request.url==='/before' ? BeforeOnsiteUpload : OnsiteUpload,{initialDate:'2026-09-08'}))
+  showUpload = request.url?.startsWith('/upload') || false
+  const html=renderToStaticMarkup(request.url==='/queue' ? createElement(EditorQueue,{basePath:'/editor'}) : createElement(request.url==='/before' || request.url==='/upload-before' ? BeforeOnsiteUpload : OnsiteUpload,{initialDate:'2026-09-08'}))
   response.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'})
   response.end(`<!doctype html><html class="dark" style="--font-geist-sans:Geist;--font-geist-mono:'Geist Mono';--font-cormorant:Georgia"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Onsite mobile spacing — synthetic preview</title><link rel="stylesheet" href="/styles.css"></head><body class="admin-console font-sans antialiased"><main class="w-full min-w-0 p-5 md:p-8">${html}</main></body></html>`)
 }).listen(4282,'127.0.0.1',()=>console.log('Read-only onsite UI fixture: http://127.0.0.1:4282'))

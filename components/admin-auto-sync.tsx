@@ -3,9 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { receiveBookingCacheChange, syncAdminDatabase } from '@/lib/data-store'
 import { signalSalesDataChanged } from '@/lib/sales-read-cache'
+import { STAFF_BACKGROUND_SYNC_INTERVAL_MS } from '@/lib/admin-cache-policy'
 
 /** Default poll — 3 min keeps Free Fluid CPU low when Filtering/admin stays open. */
-export const DEFAULT_SYNC_INTERVAL_MS = 3 * 60_000
+export const DEFAULT_SYNC_INTERVAL_MS = STAFF_BACKGROUND_SYNC_INTERVAL_MS
 
 type AdminAutoSyncContextValue = {
   syncing: boolean

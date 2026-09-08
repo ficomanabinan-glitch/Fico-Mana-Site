@@ -3,7 +3,7 @@ import EditorCapabilityGate from '@/components/editor-capability-gate'
 
 export default function EditorBatchPage() {
   return (
-    <EditorCapabilityGate capability="edit" fallbackHref="/editor/onsite" skeleton="batch">
+    <EditorCapabilityGate capability="edit" fallback="/editor/onsite">
       <BatchDetailPage />
     </EditorCapabilityGate>
   )

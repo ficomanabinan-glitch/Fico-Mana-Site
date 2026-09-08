@@ -23,7 +23,12 @@ test('completed onsite upload sends portal email; Retry resends only email and p
     react, '@/components/use-cached-page-read': { useCachedPageRead: () => [dataset, () => {}, false, () => {}], usePageBackgroundSync: () => {} },
     '@/components/admin-toast-provider': { useAdminToast: () => ({ success() {}, warning() {}, error() {} }) },
     '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': {}, '@/lib/raw-upload-client': {},
-    '@/lib/raw-upload-queue': { uploadRawQueue: async () => { uploadCalls++; return { uploaded: 1, failed: partial ? [new File(['x'], 'failed.jpg')] : [] } } },
+    '@/lib/raw-upload-queue': { uploadRawQueue: async (_id: string, _files: File[], onProgress: (state: unknown) => void) => {
+      uploadCalls++
+      const state = { uploaded: 1, total: partial ? 2 : 1, failed: partial ? [new File(['x'], 'failed.jpg')] : [], activeFiles: [], bytesProcessed: 5, totalBytes: 5, status: partial ? 'partial' : 'complete', lastError: null }
+      onProgress(state)
+      return state
+    } },
     '@/lib/onsite-refresh': { notifyOnsitePhotosChanged() {} },
     '@/components/ui/sheet': { Sheet, SheetContent: Sheet, SheetHeader: Sheet, SheetTitle: Sheet, SheetDescription: Sheet, SheetFooter: Sheet },
   })
@@ -37,6 +42,16 @@ test('completed onsite upload sends portal email; Retry resends only email and p
   }
   await upload()
   assert.equal(uploadCalls, 1); assert.equal(emailCalls, 1)
+  const panel = elements(render(), el => el.type === 'aside' && el.props['aria-label'] === 'Upload activity')[0]
+  assert.ok(panel)
+  assert.match(panel.props.className, /fixed bottom-4 left-4 right-4.*sm:left-auto sm:w-96/)
+  assert.equal(elements(render(), el => el.type === 'article').some(card => elements(card, el => el.props.role === 'progressbar').length > 0), false, 'Progress is not placed inside client cards')
+  const panelButton = (label: string) => elements(render(), el => el.type === 'button' && el.props['aria-label'] === label)[0]
+  panelButton('Collapse uploads').props.onClick()
+  assert.equal(panelButton('Expand uploads').props['aria-expanded'], false)
+  panelButton('Expand uploads').props.onClick()
+  panelButton('Dismiss upload activity').props.onClick()
+  assert.equal(elements(render(), el => el.type === 'aside').length, 0)
   assert.match(content(render()), /Upload completed, but the email failed to send. Do you want to retry\?/)
   emailFails = false
   button('Retry').props.onClick(); await tick(); await tick()
@@ -45,6 +60,7 @@ test('completed onsite upload sends portal email; Retry resends only email and p
   assert.match(content(render()), /Email Sent/)
   partial = true
   await upload()
+  assert.equal(elements(render(), el => el.type === 'aside').length, 1, 'A new upload reopens the panel')
   assert.equal(uploadCalls, 2); assert.equal(emailCalls, 2, 'Partial upload waits for failed files to succeed')
   h.unmount()
 })

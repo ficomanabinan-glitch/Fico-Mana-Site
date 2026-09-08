@@ -1,5 +1,5 @@
-import EditorCapabilityGate from '@/components/editor-capability-gate'
 import EditorUploadPhotos from '@/components/editor-upload-photos'
+import EditorCapabilityGate from '@/components/editor-capability-gate'
 
 export default async function EditorUploadPage({
   searchParams,
@@ -8,7 +8,7 @@ export default async function EditorUploadPage({
 }) {
   const params = await searchParams
   return (
-    <EditorCapabilityGate capability="edit" fallbackHref="/editor/onsite" skeleton="queue">
+    <EditorCapabilityGate capability="edit" fallback="/editor/onsite">
       <EditorUploadPhotos
         initialBatchId={String(params.batch || '')}
         initialFailedOnly={params.retry === '1'}

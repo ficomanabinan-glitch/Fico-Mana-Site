@@ -9,6 +9,6 @@ export function bindStaffReadCache(userId: string | null) {
   clearAdminReadCaches()
   clearSalesReadCache()
   clearManagedPackageCache()
-  invalidateEditorBatchCache(false, true)
+  invalidateEditorBatchCache(true)
   return true
 }

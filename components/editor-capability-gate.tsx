@@ -3,20 +3,21 @@
 import { useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditorSession } from '@/components/editor-portal-shell'
-import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 
-type Capability = 'edit' | 'onsite'
-type SkeletonVariant = 'dashboard' | 'queue' | 'onsite' | 'batch'
+type EditorCapability = 'edit' | 'onsite'
 
+/**
+ * The persistent Editor shell has already validated the session. This gate
+ * keeps route transitions client-side while protected APIs still authorize
+ * every read and mutation on the server.
+ */
 export default function EditorCapabilityGate({
   capability,
-  fallbackHref,
-  skeleton,
+  fallback,
   children,
 }: {
-  capability: Capability
-  fallbackHref: string
-  skeleton: SkeletonVariant
+  capability: EditorCapability
+  fallback: string
   children: ReactNode
 }) {
   const session = useEditorSession()
@@ -24,12 +25,9 @@ export default function EditorCapabilityGate({
   const allowed = Boolean(session?.capabilities[capability])
 
   useEffect(() => {
-    if (session && !allowed) router.replace(fallbackHref)
-  }, [allowed, fallbackHref, router, session])
+    if (session && !allowed) router.replace(fallback)
+  }, [allowed, fallback, router, session])
 
-  // EditorPortalShell already validates the authenticated session before it
-  // renders children. This gate only handles capability-based UI routing; all
-  // editor APIs continue to enforce authorization on the server.
-  if (!session || !allowed) return <EditorPageSkeleton variant={skeleton} />
+  if (!session || !allowed) return null
   return <>{children}</>
 }

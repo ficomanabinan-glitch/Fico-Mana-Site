@@ -1,9 +1,9 @@
-import EditorCapabilityGate from '@/components/editor-capability-gate'
 import EditorQueue from '@/components/editor-queue'
+import EditorCapabilityGate from '@/components/editor-capability-gate'
 
 export default function EditorQueuePage() {
   return (
-    <EditorCapabilityGate capability="edit" fallbackHref="/editor/onsite" skeleton="queue">
+    <EditorCapabilityGate capability="edit" fallback="/editor/onsite">
       <EditorQueue basePath="/editor" driveSettingsHref={null} />
     </EditorCapabilityGate>
   )
