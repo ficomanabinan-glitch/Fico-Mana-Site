@@ -11,6 +11,11 @@ export function isPlaceholderCustomerEmail(email: string | undefined): boolean {
   )
 }
 
+/** Compare the confirmation using the same case normalization as the booking API. */
+export function customerEmailsMatch(email: string, confirmation: string): boolean {
+  return Boolean(email.trim() && confirmation.trim()) && email.trim().toLowerCase() === confirmation.trim().toLowerCase()
+}
+
 /** Lightweight browser-safe validation; the API performs the authoritative Zod validation. */
 export function isValidCustomerEmail(email: string | undefined): boolean {
   const value = (email || '').trim()

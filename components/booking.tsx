@@ -38,7 +38,7 @@ import {
   isMakeupSlotFull,
 } from '@/lib/booking-slots'
 import { generateBookingId } from '@/lib/booking-id'
-import { isValidCustomerEmail } from '@/lib/customer-email'
+import { customerEmailsMatch, isValidCustomerEmail } from '@/lib/customer-email'
 
 function getPackageIcon(pkg: BookingPackage) {
   if (pkg.category === 'graduation' && pkg.slotType === 'makeup') return GraduationCap
@@ -139,6 +139,7 @@ function BookingForm() {
   const [selectedSlotId, setSelectedSlotId] = useState('')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [confirmEmail, setConfirmEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [fbName, setFbName] = useState('')
   const [fbLink, setFbLink] = useState('')
@@ -287,6 +288,10 @@ function BookingForm() {
       setFormError('Enter a valid email address, such as name@example.com.')
       return false
     }
+    if (!customerEmailsMatch(email, confirmEmail)) {
+      setFormError('Email addresses do not match. Please check both fields and try again.')
+      return false
+    }
     setFormError('')
     return true
   }
@@ -297,6 +302,7 @@ function BookingForm() {
 
   const submitBooking = async (e?: React.FormEvent) => {
     e?.preventDefault()
+    if (!validateContactStep()) return
     if (!selectedSession || !selectedDate || (requiresDeposit && !receiptFile) || (isMakeupPackage && !selectedSlotId)) return
     setIsSubmitting(true)
     setFormError('')
@@ -399,6 +405,7 @@ function BookingForm() {
     setSelectedSlotId('')
     setName('')
     setEmail('')
+    setConfirmEmail('')
     setPhone('')
     setFbName('')
     setFbLink('')
@@ -893,8 +900,12 @@ function BookingForm() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelClass}>Email Address *</label>
-                  <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+                  <label htmlFor="booking-email" className={labelClass}>Email Address *</label>
+                  <input id="booking-email" name="email" required type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label htmlFor="booking-confirm-email" className={labelClass}>Confirm Email Address *</label>
+                  <input id="booking-confirm-email" name="confirmEmail" required type="email" autoComplete="off" autoCapitalize="none" spellCheck={false} value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} className={inputClass} />
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
