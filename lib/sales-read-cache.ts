@@ -1,3 +1,5 @@
+import { ADMIN_QUERY_STALE_MS } from './admin-cache-policy'
+
 export type SalesPeriod = 'month' | 'quarter' | 'year'
 export const SALES_DATA_CHANGED_EVENT = 'admin:sales-data-changed'
 
@@ -42,7 +44,7 @@ export type SalesSummaryPayload = {
 }
 
 const SALES_CACHE_LIMIT = 12
-const SALES_CACHE_FRESH_MS = 90_000
+const SALES_CACHE_FRESH_MS = ADMIN_QUERY_STALE_MS
 
 type SalesCacheEntry = {
   data: SalesSummaryPayload
