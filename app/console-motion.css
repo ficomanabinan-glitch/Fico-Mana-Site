@@ -11,6 +11,24 @@
 
 .console-route-entry {
   animation: console-route-enter 180ms cubic-bezier(.22, 1, .36, 1);
+  transform-origin: top center;
+}
+
+/* Keep console interactions responsive without adding movement to layout. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .admin-console button:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .admin-console button:not(:disabled) {
+    transition: transform 160ms cubic-bezier(.22, 1, .36, 1);
+  }
+
+  .admin-console button:not(:disabled):active {
+    transform: scale(0.985);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

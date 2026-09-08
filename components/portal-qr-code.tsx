@@ -15,7 +15,7 @@ type PortalQrCodeProps = {
 }
 
 const qrAction =
-  'inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 px-3 py-2.5 text-caption font-semibold uppercase tracking-wider text-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.07] hover:text-white active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70'
+  'inline-flex min-h-11 min-w-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-white/15 px-2 py-2.5 text-[0.625rem] font-semibold uppercase tracking-normal text-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.07] hover:text-white active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 [&>svg]:shrink-0'
 
 function safeFilePart(value: string) {
   return value.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'client'

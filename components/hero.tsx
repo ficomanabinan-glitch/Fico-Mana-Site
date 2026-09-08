@@ -22,11 +22,10 @@ export default function Hero() {
   }
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20, filter: 'blur(8px)' },
+    hidden: { opacity: 0, y: 20 },
     visible: {
       opacity: 1,
       y: 0,
-      filter: 'blur(0px)',
       transition: { duration: 0.9, ease },
     },
   }
@@ -168,7 +167,7 @@ export default function Hero() {
           <motion.span
             className="block h-8 w-px bg-gradient-to-b from-white/50 to-transparent"
             animate={{ scaleY: [0.6, 1, 0.6], opacity: [0.4, 0.9, 0.4] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+            transition={{ duration: 2.2, repeat: 2, ease: 'easeInOut' }}
           />
         </motion.a>
       </motion.div>

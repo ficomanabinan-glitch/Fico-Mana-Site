@@ -237,6 +237,20 @@
   }
 
   @media (max-width: 767px) {
+    .portal-mobile-header {
+      background: #171717;
+      box-shadow: none;
+    }
+
+    .portal-selection-steps {
+      position: sticky;
+      top: 5.75rem;
+      margin-top: 1.25rem;
+      border-radius: 0;
+      background: #171717;
+      box-shadow: 0 -1px 0 #171717, 0 8px 16px rgb(0 0 0 / 15%);
+    }
+
     .client-portal-page > div {
       padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
     }
@@ -439,6 +453,32 @@
   --radius: var(--fico-radius-control);
 }
 
+@keyframes portal-preview-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes portal-preview-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .portal-photo-preview[open] {
+    animation: portal-preview-enter 220ms cubic-bezier(.22, 1, .36, 1) both;
+  }
+
+  .portal-photo-preview[open]::backdrop {
+    animation: portal-preview-backdrop-enter 220ms ease-out both;
+  }
+}
+
 /* Specific mobile action sizing must win over shared button utilities. */
 .onsite-actions > button {
   min-width: 0;
@@ -472,4 +512,16 @@
 .admin-console table {
   display: table !important;
   flex-direction: initial !important;
+}
+
+/* Keep all three surfaces calm and usable for people who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

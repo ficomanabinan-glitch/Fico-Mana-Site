@@ -35,6 +35,9 @@ function GalleryImage({
       type="button"
       onClick={() => onOpen(item)}
       tabIndex={isClone ? -1 : undefined}
+      whileHover={{ scale: 1.012 }}
+      whileTap={{ scale: 0.988 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       className={`relative aspect-[4/5] overflow-hidden rounded-2xl md:rounded-3xl group cursor-pointer text-left ${className}`}
     >
       <div className="relative h-full overflow-hidden">
@@ -44,10 +47,10 @@ function GalleryImage({
           fill
           draggable={false}
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-          className="object-cover transition-transform duration-700 ease-out will-change-transform group-hover:scale-110"
+          className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
         />
       </div>
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors duration-500 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-gradient-to-t from-black/50 via-transparent to-transparent" />
       <div className="absolute inset-0 ring-0 group-hover:ring-2 group-hover:ring-inset group-hover:ring-white/30 transition-all duration-500 pointer-events-none rounded-2xl md:rounded-3xl" />
     </motion.button>
@@ -130,10 +133,20 @@ function GalleryCarousel({
   useEffect(() => {
     let animationFrame = 0
     let previousTime = performance.now()
+    const scroller = scrollerRef.current
+    const sequence = firstSequenceRef.current
+    if (!scroller || !sequence) return
+    let sequenceWidth = sequence.offsetWidth
+    let visible = false
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const resize = new ResizeObserver(entries => {
+      sequenceWidth = entries[0]?.borderBoxSize?.[0]?.inlineSize ?? sequence.offsetWidth
+    })
+    resize.observe(sequence)
 
     const advance = (time: number) => {
-      const scroller = scrollerRef.current
-      const sequenceWidth = firstSequenceRef.current?.offsetWidth ?? 0
+      animationFrame = 0
+      if (!visible || document.hidden || reducedMotion.matches) return
       const elapsed = Math.min(64, Math.max(0, time - previousTime))
       previousTime = time
 
@@ -148,20 +161,36 @@ function GalleryCarousel({
         const pixelsPerMillisecond = 72 / 1000
         scrollPositionRef.current = (scrollPositionRef.current + pixelsPerMillisecond * elapsed) % sequenceWidth
         scroller.scrollLeft = scrollPositionRef.current
-      } else if (scroller) {
-        scrollPositionRef.current = scroller.scrollLeft
-        if (sequenceWidth > 0 && scrollPositionRef.current >= sequenceWidth) {
-          scrollPositionRef.current %= sequenceWidth
-          scroller.scrollLeft = scrollPositionRef.current
-        }
+      } else if (!shouldAdvance && scrollPositionRef.current >= sequenceWidth) {
+        // Use the cached scroll position so the paused loop never forces a layout read.
+        scrollPositionRef.current %= sequenceWidth
+        scroller.scrollLeft = scrollPositionRef.current
       }
 
       animationFrame = window.requestAnimationFrame(advance)
     }
 
-    animationFrame = window.requestAnimationFrame(advance)
+    const updatePlayback = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = 0
+      if (visible && !document.hidden && !reducedMotion.matches) {
+        previousTime = performance.now()
+        animationFrame = window.requestAnimationFrame(advance)
+      }
+    }
+    const visibility = new IntersectionObserver(entries => {
+      visible = entries[0]?.isIntersecting ?? false
+      updatePlayback()
+    })
+    visibility.observe(scroller)
+    document.addEventListener('visibilitychange', updatePlayback)
+    reducedMotion.addEventListener('change', updatePlayback)
     return () => {
       window.cancelAnimationFrame(animationFrame)
+      resize.disconnect()
+      visibility.disconnect()
+      document.removeEventListener('visibilitychange', updatePlayback)
+      reducedMotion.removeEventListener('change', updatePlayback)
     }
   }, [items.length])
 

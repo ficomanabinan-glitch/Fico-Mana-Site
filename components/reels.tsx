@@ -111,6 +111,15 @@ export default function Reels() {
       if (shouldPlayRef.current) playVideo()
     }
 
+    let syncFrame = 0
+    const scheduleSync = () => {
+      if (syncFrame) return
+      syncFrame = window.requestAnimationFrame(() => {
+        syncFrame = 0
+        syncPlayback()
+      })
+    }
+
     syncPlayback()
 
     video.addEventListener('loadeddata', onVideoReady)
@@ -118,13 +127,13 @@ export default function Reels() {
     video.addEventListener('canplaythrough', onVideoReady)
 
     const touchOpts = { passive: true, capture: true } as const
-    window.addEventListener('touchstart', syncPlayback, touchOpts)
-    window.addEventListener('touchmove', syncPlayback, touchOpts)
-    window.addEventListener('scroll', syncPlayback, { passive: true })
-    window.addEventListener('wheel', syncPlayback, { passive: true })
-    window.addEventListener('resize', syncPlayback)
+    window.addEventListener('touchstart', scheduleSync, touchOpts)
+    window.addEventListener('touchmove', scheduleSync, touchOpts)
+    window.addEventListener('scroll', scheduleSync, { passive: true })
+    window.addEventListener('wheel', scheduleSync, { passive: true })
+    window.addEventListener('resize', scheduleSync)
 
-    const observer = new IntersectionObserver(() => syncPlayback(), {
+    const observer = new IntersectionObserver(() => scheduleSync(), {
       threshold: 0,
       rootMargin: `0px 0px ${Math.round(PLAY_LEAD_VH * 100)}% 0px`,
     })
@@ -134,13 +143,14 @@ export default function Reels() {
 
     return () => {
       retryTimers.forEach((id) => window.clearTimeout(id))
+      window.cancelAnimationFrame(syncFrame)
       video.removeEventListener('loadeddata', onVideoReady)
       video.removeEventListener('canplay', onVideoReady)
       video.removeEventListener('canplaythrough', onVideoReady)
-      window.removeEventListener('touchstart', syncPlayback, touchOpts)
-      window.removeEventListener('touchmove', syncPlayback, touchOpts)
-      window.removeEventListener('scroll', syncPlayback)
-      window.removeEventListener('wheel', syncPlayback)
+      window.removeEventListener('touchstart', scheduleSync, touchOpts)
+      window.removeEventListener('touchmove', scheduleSync, touchOpts)
+      window.removeEventListener('scroll', scheduleSync)
+      window.removeEventListener('wheel', scheduleSync)
       window.removeEventListener('resize', syncPlayback)
       observer.disconnect()
       video.pause()

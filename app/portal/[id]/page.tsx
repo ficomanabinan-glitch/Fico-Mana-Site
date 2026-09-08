@@ -142,7 +142,7 @@ export default function ClientPortalPage() {
   return (
     <main className="client-portal client-portal-page min-h-screen overflow-x-clip bg-[#171717] text-body text-white">
       <div className="w-full px-3 py-5 sm:px-5 sm:py-8 xl:px-6 2xl:px-8">
-        <header className="sticky top-0 z-30 -mx-3 mb-4 flex min-h-[5.75rem] items-center justify-between gap-4 border-b border-white/10 bg-[#171717]/95 px-3 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)] backdrop-blur-xl sm:-mx-5 sm:px-5 md:static md:mx-0 md:min-h-0 md:bg-transparent md:px-0 md:py-0 md:pb-4 md:shadow-none md:backdrop-blur-none xl:hidden">
+        <header className="portal-mobile-header sticky top-0 z-30 -mx-3 mb-4 flex min-h-[5.75rem] items-center justify-between gap-4 border-b border-white/10 bg-[#171717]/95 px-3 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)] backdrop-blur-xl sm:-mx-5 sm:px-5 md:static md:mx-0 md:min-h-0 md:bg-transparent md:px-0 md:py-0 md:pb-4 md:shadow-none md:backdrop-blur-none xl:hidden">
           <div className="min-w-0">
             <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA</p>
             <h1 className="mt-1 truncate text-2xl font-semibold tracking-heading">{data.booking.customerName}</h1>

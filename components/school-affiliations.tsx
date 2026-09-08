@@ -43,7 +43,7 @@ export default function SchoolAffiliations() {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: index * 0.05 }}
             viewport={{ once: true }}
-            className="min-w-[220px] md:min-w-0 snap-start border border-white/10 bg-white/[0.03] backdrop-blur-sm p-6 flex flex-col gap-4"
+            className="min-w-[220px] md:min-w-0 snap-start border border-white/10 bg-white/[0.03] p-6 flex flex-col gap-4"
           >
             <div className="w-16 h-16 rounded-full border border-white/15 bg-white overflow-hidden flex items-center justify-center shrink-0">
               <img

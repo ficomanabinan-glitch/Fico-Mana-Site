@@ -37,10 +37,30 @@ export default function Testimonials() {
   const [currentIndex, setCurrentIndex] = useState(0)
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % testimonials.length)
-    }, 6000)
-    return () => clearInterval(interval)
+    const section = document.getElementById('stories')
+    if (!section) return
+    let visible = false
+    let interval: ReturnType<typeof setInterval> | undefined
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const updatePlayback = () => {
+      clearInterval(interval)
+      if (visible && !document.hidden && !reducedMotion.matches) {
+        interval = setInterval(() => setCurrentIndex(prev => (prev + 1) % testimonials.length), 6000)
+      }
+    }
+    const observer = new IntersectionObserver(entries => {
+      visible = entries[0]?.isIntersecting ?? false
+      updatePlayback()
+    })
+    observer.observe(section)
+    document.addEventListener('visibilitychange', updatePlayback)
+    reducedMotion.addEventListener('change', updatePlayback)
+    return () => {
+      clearInterval(interval)
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', updatePlayback)
+      reducedMotion.removeEventListener('change', updatePlayback)
+    }
   }, [])
 
   const current = testimonials[currentIndex]

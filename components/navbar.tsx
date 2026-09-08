@@ -174,12 +174,20 @@ export default function Navbar() {
   }
 
   useEffect(() => {
+    let frame = 0
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 30)
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        setIsScrolled(window.scrollY > 30)
+      })
     }
-    window.addEventListener('scroll', handleScroll)
+    window.addEventListener('scroll', handleScroll, { passive: true })
     handleScroll()
-    return () => window.removeEventListener('scroll', handleScroll)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      window.cancelAnimationFrame(frame)
+    }
   }, [])
 
   const linkClass = (mobile = false) =>
