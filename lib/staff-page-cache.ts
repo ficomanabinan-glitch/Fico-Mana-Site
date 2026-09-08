@@ -8,6 +8,12 @@ const pages = new Map<string, StaffPageEntry>()
 let owner: string | null = null
 let generation = 0
 
+function pruneExpired(now = Date.now()) {
+  for (const [key, entry] of pages) {
+    if (now - entry.touchedAt >= ADMIN_QUERY_GC_MS) pages.delete(key)
+  }
+}
+
 export function setStaffPageCacheOwner(nextOwner: string | null) {
   if (owner === nextOwner) return false
   owner = nextOwner
@@ -37,6 +43,8 @@ export function readStaffPage<T>(key: string): T | undefined {
 
 export function writeStaffPage<T>(key: string, data: T, requestGeneration: number) {
   if (typeof window === 'undefined' || !owner || requestGeneration !== generation || data == null) return false
+  const now = Date.now()
+  pruneExpired(now)
   pages.delete(key)
   pages.set(key, { data, touchedAt: Date.now() })
   if (pages.size > STAFF_PAGE_CACHE_LIMIT) pages.delete(pages.keys().next().value!)

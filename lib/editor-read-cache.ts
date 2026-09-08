@@ -117,6 +117,8 @@ export async function fetchEditorBatches({
 
 export function invalidateEditorBatchCache(discardPrivateData = false) {
   cacheGeneration += 1
+  // Mutations make the snapshot stale, not unusable. Keep it painted until the
+  // replacement arrives; authentication changes pass discardData=true.
   if (batchCache) batchCache = { ...batchCache, cachedAt: 0 }
   batchRequest = null
   synchronizedBatchRequest = null
