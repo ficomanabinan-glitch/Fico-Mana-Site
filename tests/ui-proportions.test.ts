@@ -128,7 +128,7 @@ test('final photo layout uses an editorial desktop split and a merged compact st
   assert.match(portalCss, /top: calc\(var\(--portal-mobile-header-height\) \+ env\(safe-area-inset-top, 0px\)\)/)
 
   assert.match(selection, /xl:grid-cols-5/)
-  assert.match(selection, /aria-current=\{active \? 'step' : undefined\}/)
+  assert.match(selection, /aria-current=\{step === item\.id \? 'step' : undefined\}/)
   assert.match(sidebar, /side="right"/)
   assert.doesNotMatch(sidebar, /<aside|side="bottom"|xl:hidden/)
   assert.match(source('lib/admin-ui.ts'), /adminPage = 'w-full min-w-0/)
