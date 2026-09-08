@@ -1,16 +1,17 @@
-'use client'
-
-import { useSearchParams } from 'next/navigation'
 import EditorCapabilityGate from '@/components/editor-capability-gate'
 import OnsiteUpload from '@/components/onsite-upload'
 
-export default function OnsiteUploadPage() {
-  const params = useSearchParams()
+export default async function OnsiteUploadPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; booking?: string }>
+}) {
+  const params = await searchParams
   return (
     <EditorCapabilityGate capability="onsite" fallbackHref="/editor/queue" skeleton="onsite">
       <OnsiteUpload
-        initialDate={params.get('date') || ''}
-        initialBooking={params.get('booking') || ''}
+        initialDate={String(params.date || '')}
+        initialBooking={String(params.booking || '')}
       />
     </EditorCapabilityGate>
   )
