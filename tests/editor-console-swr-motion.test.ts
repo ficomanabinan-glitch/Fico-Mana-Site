@@ -6,6 +6,22 @@ test('editor does not install a route-level skeleton that replaces cached pages'
   assert.equal(existsSync('app/editor/loading.tsx'), false)
 })
 
+test('editor protected routes avoid repeated server auth/database waits', () => {
+  for (const path of [
+    'app/editor/queue/page.tsx',
+    'app/editor/upload/page.tsx',
+    'app/editor/onsite/page.tsx',
+    'app/editor/batch/[batchId]/page.tsx',
+  ]) {
+    const source = readFileSync(path, 'utf8')
+    assert.doesNotMatch(source, /getStaffUser|getWorkflowAccess|canUseWorkflow/)
+    assert.match(source, /EditorCapabilityGate/)
+  }
+  const gate = readFileSync('components/editor-capability-gate.tsx', 'utf8')
+  assert.match(gate, /useEditorSession/)
+  assert.match(gate, /router\.replace\(fallbackHref\)/)
+})
+
 test('editor uses the admin typography baseline', () => {
   const layout = readFileSync('app/editor/layout.tsx', 'utf8')
   const motion = readFileSync('app/console-motion.css', 'utf8')
