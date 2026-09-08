@@ -34,7 +34,7 @@ test('client identity stays editorial while secondary project context is progres
   assert.match(portal, /className="portal-client-name">\{data\.booking\.customerName\}<\/h1>/)
   assert.match(portal, /<PortalSidebar remaining=\{money\(payment\.remaining\)\}>/)
   assert.doesNotMatch(portal, /sidebarCollapsed/)
-  assert.match(sidebar, />Overview<\/)
+  assert.match(sidebar, />Overview<\//)
   assert.match(sidebar, /side="right"/)
   assert.match(sidebar, /Project information/)
   assert.doesNotMatch(portal, /This unique link exposes/)
