@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import { readStaffPage, staffPageCacheGeneration, writeStaffPage } from '@/lib/staff-page-cache'
 import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
+import { ADMIN_BACKGROUND_SYNC_MIN_MS } from '@/lib/admin-cache-policy'
 
 /** Cache successful read results, not form drafts, File objects, or upload state. */
 export function useCachedPageRead<T>(key: string, fallback: T) {
@@ -50,7 +51,7 @@ export function usePageBackgroundSync(refresh: () => void | Promise<unknown>) {
     let inFlight = false
     let lastStarted = 0
     const run = async () => {
-      if (document.visibilityState !== 'visible' || inFlight || Date.now() - lastStarted < 15_000) return
+      if (document.visibilityState !== 'visible' || inFlight || Date.now() - lastStarted < ADMIN_BACKGROUND_SYNC_MIN_MS) return
       inFlight = true
       lastStarted = Date.now()
       try { await callback.current() } catch { /* Existing content remains available. */ }
