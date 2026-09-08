@@ -1,16 +1,17 @@
-'use client'
-
-import { useSearchParams } from 'next/navigation'
 import EditorCapabilityGate from '@/components/editor-capability-gate'
 import EditorUploadPhotos from '@/components/editor-upload-photos'
 
-export default function EditorUploadPage() {
-  const params = useSearchParams()
+export default async function EditorUploadPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ batch?: string; retry?: string }>
+}) {
+  const params = await searchParams
   return (
     <EditorCapabilityGate capability="edit" fallbackHref="/editor/onsite" skeleton="queue">
       <EditorUploadPhotos
-        initialBatchId={params.get('batch') || ''}
-        initialFailedOnly={params.get('retry') === '1'}
+        initialBatchId={String(params.batch || '')}
+        initialFailedOnly={params.retry === '1'}
       />
     </EditorCapabilityGate>
   )
