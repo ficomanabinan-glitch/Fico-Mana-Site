@@ -1,4 +1,5 @@
 import type { BookingPackageCategory } from '@/lib/booking-packages'
+import { ADMIN_QUERY_STALE_MS } from '@/lib/admin-cache-policy'
 
 export type ManagedPackage = {
   id: string
@@ -24,7 +25,7 @@ type PackageManagerUiState = {
   category: PackageCategoryFilter
 }
 
-const PACKAGE_CACHE_FRESH_MS = 90_000
+const PACKAGE_CACHE_FRESH_MS = ADMIN_QUERY_STALE_MS
 
 let packageCache: { data: ManagedPackage[]; cachedAt: number } | null = null
 let packageRequest: Promise<ManagedPackage[]> | null = null
