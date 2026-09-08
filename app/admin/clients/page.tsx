@@ -71,10 +71,14 @@ export default function ClientsPage() {
                   <div className="mt-1">{client.customerPhone}</div>
                 </td>
                 <td className="p-4 text-white/65">{client.bookingDate}</td>
-                <td className="p-4 text-[#C4CEFF]">{client.packageName}</td>
+                <td className="p-4">
+                  <span className="inline-flex rounded-control border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.06] px-3 py-2 font-semibold text-[#C4CEFF]">
+                    {client.packageName}
+                  </span>
+                </td>
                 <td className="p-4">
                   <Link
-                    className="text-[#C4CEFF] hover:underline"
+                    className="inline-flex min-h-10 items-center justify-center rounded-control border border-white/10 bg-white/[0.03] px-3 py-2 font-semibold text-[#C4CEFF] transition hover:border-[#C4CEFF]/35 hover:bg-[#C4CEFF]/[0.07]"
                     href={`/admin/bookings?search=${encodeURIComponent(client.customerName)}`}
                   >
                     Open bookings

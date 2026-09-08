@@ -30,7 +30,7 @@ test('verified submission link is a normal Drive navigation, never a download, p
   const source = readFileSync('components/portal-drive-photos.tsx', 'utf8')
   assert.doesNotMatch(source, /window\.open|localStorage|sessionStorage|\.zip|download=/)
   const page = readFileSync('app/portal/[id]/page.tsx', 'utf8')
-  assert.match(page, /data\.selection\?\.status==='SUBMITTED'\?<PortalDrivePhotos/)
+  assert.match(page, /data\.selection\?\.status === 'SUBMITTED' && data\.deliverables\.length > 0 \? <PortalDrivePhotos/)
   assert.match(page, /key=\{publicId\}/)
   f.unmount()
 })

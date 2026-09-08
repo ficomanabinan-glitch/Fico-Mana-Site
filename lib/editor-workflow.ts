@@ -1066,7 +1066,7 @@ export async function getPortalPhotoRevision(publicId: string) {
   if (gallery.error) throw gallery.error
   return { generation: Number(photoState?.raw_upload_generation || 0), resetting: Boolean(photoState?.raw_reset_id), reopenedAt: photoState?.reopened_at || null,
     galleryCount: gallery.count || 0, lastUploadAt: gallery.data?.[0]?.created_at || null,
-    expiresAt: portal.expires_at || null, firstDownloadAt: portal.first_download_at || null }
+    expiresAt: portal.expires_at || null, portalReadyEmailSentAt: portal.access_email_sent_at || null }
 }
 
 export async function recordPortalFirstDownload(publicId: string) {
@@ -1074,7 +1074,7 @@ export async function recordPortalFirstDownload(publicId: string) {
   const { error } = await admin.rpc('record_portal_first_download', {
     p_workspace: portal.workspace_id, p_public_id: portal.public_id,
   })
-  if (error) throw new PortalSelectionError('The download expiry could not be saved. Try: download again. If it continues, ask the studio to check the portal expiry setup.', 'PORTAL_DOWNLOAD_UPDATE_FAILED', 503)
+  if (error) throw new PortalSelectionError('The completed download could not be recorded. Try: download again. If it continues, ask the studio to check the portal activity log.', 'PORTAL_DOWNLOAD_UPDATE_FAILED', 503)
 }
 
 export async function getPortalData(publicId: string, offset = 0, limit = 48) {
@@ -1178,7 +1178,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     shareUrl: portalUrl(publicId),
     expiry: expirySettings.error && !portal.download_expiry_days ? null : {
       days: Number(portal.download_expiry_days || expirySettings.data?.portal_expiry_days || 30),
-      firstDownloadAt: portal.first_download_at || null,
+      portalReadyEmailSentAt: portal.access_email_sent_at || null,
       expiresAt: portal.expires_at || null,
     },
     warnings: [...new Set(warnings)],
@@ -1379,21 +1379,34 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     }
     const preferenceMap = new Map((input.preferences || []).map((item) => [item.fileId, item.preference]))
     const printAllocations = input.printAllocations || []
-    if (printAllocations.length !== Object.keys(PRINT_CATEGORY_LIMITS).length) {
+    const standardCategories = ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R'] as const
+    const walletAllocations = printAllocations.filter(allocation => allocation.category === 'WALLET_SIZE')
+    if (printAllocations.length < Object.keys(PRINT_CATEGORY_LIMITS).length || printAllocations.length > 7 || walletAllocations.length < 1 || walletAllocations.length > 4) {
       throw new PortalSelectionError('Choose a photo for every free print category.', 'SELECTION_INVALID', 400)
     }
-    const allocationByCategory = new Map<string, (typeof printAllocations)[number]>()
+    for (const category of standardCategories) {
+      if (printAllocations.filter(allocation => allocation.category === category).length !== 1) {
+        throw new PortalSelectionError('Each standard free print category requires one photo.', 'SELECTION_INVALID', 400)
+      }
+    }
+    const allocationKeys = new Set<string>()
     for (const allocation of printAllocations) {
-      if (allocationByCategory.has(allocation.category)) {
-        throw new PortalSelectionError('Each free print category can be selected only once.', 'SELECTION_INVALID', 400)
+      const allocationKey = `${allocation.category}:${allocation.fileId}`
+      if (allocationKeys.has(allocationKey)) {
+        throw new PortalSelectionError('The same photo cannot be assigned twice in one print category.', 'SELECTION_INVALID', 400)
       }
       if (!included.includes(allocation.fileId)) {
         throw new PortalSelectionError('Free print allocations must use an included enhanced photo.', 'SELECTION_INVALID', 400)
       }
-      if (allocation.quantity !== PRINT_CATEGORY_LIMITS[allocation.category]) {
+      const validWalletQuantity = allocation.category === 'WALLET_SIZE' && (allocation.quantity === 1 || (walletAllocations.length === 1 && allocation.quantity === 4))
+      if ((allocation.category !== 'WALLET_SIZE' && allocation.quantity !== PRINT_CATEGORY_LIMITS[allocation.category]) || (allocation.category === 'WALLET_SIZE' && !validWalletQuantity)) {
         throw new PortalSelectionError(`${PRINT_CATEGORY_LABELS[allocation.category]} allows at most ${PRINT_CATEGORY_LIMITS[allocation.category]}.`, 'SELECTION_INVALID', 400)
       }
-      allocationByCategory.set(allocation.category, allocation)
+      allocationKeys.add(allocationKey)
+    }
+    const walletCopyCount = walletAllocations.reduce((sum, allocation) => sum + allocation.quantity, 0)
+    if (walletCopyCount < 1 || walletCopyCount > PRINT_CATEGORY_LIMITS.WALLET_SIZE) {
+      throw new PortalSelectionError('Wallet Size allows one to four photos.', 'SELECTION_INVALID', 400)
     }
     const { data: gallery, error: galleryError } = await admin
       .from('gallery_files')

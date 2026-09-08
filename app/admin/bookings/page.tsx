@@ -686,11 +686,20 @@ function BookingsManagement() {
       }
 
       const emails =
-        shouldEmail && driveLink
+        !galleryOnly && shouldEmail && driveLink
           ? [{ action: 'gallery_link' as const, booking: updatedBooking, driveLink }]
           : []
 
       const { saved, emailErrors } = await runAdminTransaction(updatedBooking, emails)
+      let portalEmailError = ''
+      if (galleryOnly) {
+        const portalResponse = await fetch(`/api/editor-workflow/raw/${encodeURIComponent(saved.id)}/portal-email`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const portalBody = (await portalResponse.json().catch(() => ({}))) as { error?: string; status?: string }
+        if (!portalResponse.ok) portalEmailError = portalBody.error || 'The Client Portal email could not be sent.'
+      }
 
       setSelectedBooking(saved)
       setEditDriveLink(saved.driveLink || '')
@@ -701,12 +710,14 @@ function BookingsManagement() {
       setShowCompleteModal(false)
       fetchBookings(true)
 
-      const emailMsg = formatEmailResult(emailErrors)
+      const emailMsg = portalEmailError || formatEmailResult(emailErrors)
       if (emailMsg) {
         toast.warning('Saved — email issue', emailMsg)
+      } else if (galleryOnly) {
+        toast.success('Client Portal sent', `${saved.id} · portal emailed to ${saved.customerEmail}.`)
       } else if (shouldEmail && driveLink) {
         toast.success(
-          galleryOnly || alreadyCompleted ? 'Gallery emailed' : 'Session completed',
+          alreadyCompleted ? 'Gallery emailed' : 'Session completed',
           `${saved.id} · gallery emailed to ${saved.customerEmail}.`,
         )
       } else {
@@ -1057,7 +1068,7 @@ function BookingsManagement() {
             </div>
 
             {/* Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="min-w-0 flex-1 overflow-y-auto p-4 space-y-6 sm:p-6">
               {/* Contact Info Card */}
               <div className="rounded-card border border-white/10 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-1.5 gap-2">
@@ -1210,7 +1221,7 @@ function BookingsManagement() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-y-4 text-xs">
+                <div className="grid min-w-0 grid-cols-1 gap-4 text-xs sm:grid-cols-2">
                   <div>
                     <p className="text-white/40 font-medium">Package</p>
                     <p className="font-semibold text-primary mt-0.5">{selectedBooking.packageName}</p>
@@ -1338,9 +1349,10 @@ function BookingsManagement() {
                       type="button"
                       onClick={handleSaveStaffNotes}
                       disabled={saveLoading}
-                      className="text-caption font-semibold uppercase tracking-wider text-primary hover:underline"
+                      className={`${adminBtnPrimary} inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 sm:w-auto`}
                     >
-                      Save staff notes
+                      <Save className="size-3.5" />
+                      {saveLoading ? 'Saving notes…' : 'Save Staff Notes'}
                     </button>
                   </div>
 
@@ -1530,8 +1542,16 @@ function BookingsManagement() {
                   disabled={selectedBooking.bookingStatus === 'Cancelled' || saveLoading}
                   className="rounded-control bg-primary hover:bg-[#03008F] text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 col-span-2 sm:col-span-3"
                 >
-                  <Link2 className="w-3.5 h-3.5" /> Send Google Drive Link
+                  <Link2 className="w-3.5 h-3.5" /> Send Client Portal
                 </button>
+                <a
+                  href={`/admin/portal/${encodeURIComponent(selectedBooking.id)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-control col-span-2 flex items-center justify-center gap-1 border border-[#C4CEFF]/25 bg-[#C4CEFF]/[0.06] py-2.5 font-bold uppercase tracking-wider text-[#C4CEFF] transition-all hover:border-[#C4CEFF]/45 hover:bg-[#C4CEFF]/10 active:scale-95 sm:col-span-3"
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5" /> Open Client Portal
+                </a>
                 <button
                   type="button"
                   onClick={() => handleUpdateStatus(selectedBooking, 'Completed')}
@@ -1571,7 +1591,7 @@ function BookingsManagement() {
               </div>
               <p className="text-caption text-white/35">
                 Use <strong className="text-white/55">Send Shoot Reminder</strong> on the morning of the session (email says “today”).
-                Use <strong className="text-white/55">Send Google Drive Link</strong> anytime after payment to email the raw gallery. Cancel keeps the record; Delete permanently removes it.
+                Use <strong className="text-white/55">Send Client Portal</strong> after photos are ready. The Google Drive folder remains an internal studio record. Cancel keeps the record; Delete permanently removes it.
               </p>
             </div>
           </div>
@@ -1584,7 +1604,7 @@ function BookingsManagement() {
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white text-lg">
-                  {completeModalMode === 'gallery' ? 'Send Google Drive Link' : 'Complete Session'}
+                  {completeModalMode === 'gallery' ? 'Send Client Portal' : 'Complete Session'}
                 </h3>
                 <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
@@ -1599,7 +1619,7 @@ function BookingsManagement() {
 
             <p className="text-xs text-white/60 leading-relaxed">
               {completeModalMode === 'gallery'
-                ? 'Paste the Google Drive raw gallery folder, confirm name + email, then send it to the client. Works even if payment was already recorded.'
+                ? 'Confirm the client details and internal RAW folder, then email the secure Client Portal.'
                 : "Paste the Google Drive folder of this client's raw gallery. Confirm name + email so we can email them the link and the page to submit their 5 chosen photos."}
             </p>
 
@@ -1629,13 +1649,13 @@ function BookingsManagement() {
                 className="rounded-control w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
               <p className="text-caption text-white/40">
-                Required to email the raw gallery. Saved on the booking for filtering / editor later.
+                Required to email the Client Portal. Saved on the booking for filtering and editor use.
               </p>
             </div>
 
             <div className="space-y-2">
               <label htmlFor="completeDrive" className="text-caption font-semibold tracking-label text-white/45 uppercase">
-                Google Drive Gallery Link (raw files)
+                Internal Google Drive Gallery Link (RAW files)
               </label>
               <input
                 id="completeDrive"
@@ -1646,7 +1666,7 @@ function BookingsManagement() {
                 className="rounded-control w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
               />
               <p className="text-caption text-white/40">
-                Share the folder as <strong className="text-white/60">Anyone with the link</strong> (Viewer).
+                This folder is stored for the studio workflow. The client email receives the secure portal link.
               </p>
             </div>
 
@@ -1673,10 +1693,10 @@ function BookingsManagement() {
                     sendEmail: completeModalMode === 'gallery' ? true : completeSendEmail,
                   })
                 }
-                className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider py-3 disabled:opacity-50"
+                className="rounded-control w-full bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider py-3 disabled:opacity-50"
               >
                 {completeModalMode === 'gallery'
-                  ? 'Save & Email Drive Link'
+                  ? 'Save & Send Client Portal'
                   : completeSendEmail
                     ? 'Complete & Email Client'
                     : 'Complete Session'}
@@ -1686,7 +1706,7 @@ function BookingsManagement() {
                   type="button"
                   disabled={saveLoading}
                   onClick={() => handleConfirmComplete({ sendEmail: false })}
-                  className="w-full border border-white/10 text-white/70 hover:text-white hover:bg-white/[0.04] text-caption font-semibold uppercase tracking-wider py-2.5 disabled:opacity-50"
+                  className="rounded-control w-full border border-white/10 text-white/70 hover:text-white hover:bg-white/[0.04] text-caption font-semibold uppercase tracking-wider py-2.5 disabled:opacity-50"
                 >
                   Complete without email
                 </button>
@@ -1705,7 +1725,7 @@ function BookingsManagement() {
 
       {showDeleteModal && deleteTarget && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-          <div className="border border-red-500/30 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
+          <div className="rounded-card border border-red-500/30 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white text-lg">Delete booking</h3>

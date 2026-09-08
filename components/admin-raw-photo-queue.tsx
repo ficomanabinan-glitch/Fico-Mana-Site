@@ -225,7 +225,7 @@ export default function AdminRawPhotoQueue({
         >
           <Link
             href="/editor/onsite"
-            className="inline-flex items-center gap-1.5 border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-caption font-semibold uppercase tracking-wider transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-control border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-caption font-semibold uppercase tracking-wider transition-colors"
           >
             <List className="w-3.5 h-3.5" /> Onsite Upload
           </Link>
@@ -283,7 +283,7 @@ export default function AdminRawPhotoQueue({
         })}
       </div>
 
-      <div className="border border-white/10 bg-white/[0.01] p-4">
+      <div className="rounded-card border border-white/10 bg-white/[0.01] p-4">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
           <input
@@ -305,7 +305,7 @@ export default function AdminRawPhotoQueue({
           <div className={adminSpinner} />
         </div>
       ) : filteredBookings.length === 0 ? (
-        <div className="border border-white/10 bg-white/[0.01] p-16 text-center shadow-sm">
+        <div className="rounded-card border border-white/10 bg-white/[0.01] p-16 text-center shadow-sm">
           <div className="w-16 h-16 bg-white/[0.03] border border-white/10 flex items-center justify-center text-white/40 rounded-full mx-auto mb-4">
             <ImageIcon className="w-7 h-7" />
           </div>
@@ -321,7 +321,7 @@ export default function AdminRawPhotoQueue({
             return (
               <div
                 key={booking.id}
-                className={`border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''}`}
+                className={`rounded-card border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''}`}
               >
                 <div className="p-5 space-y-4 flex-1">
                   <div className="flex justify-between items-start border-b border-white/10 pb-3 gap-2">
@@ -373,7 +373,7 @@ export default function AdminRawPhotoQueue({
                   </span>
 
                   {status === 'Rejected' && booking.rawPhotoNotes && (
-                    <div className="text-caption p-2 bg-red-950/20 border border-red-500/10 text-red-200 italic">
+                    <div className="rounded-control text-caption p-2 bg-red-950/20 border border-red-500/10 text-red-200 italic">
                       &ldquo;{booking.rawPhotoNotes}&rdquo;
                     </div>
                   )}
@@ -384,7 +384,7 @@ export default function AdminRawPhotoQueue({
                     href={booking.rawPhotoLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full bg-[#0500D0]/10 hover:bg-[#0500D0]/20 border border-[#0500D0]/30 text-white text-xs font-semibold py-2.5 flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider"
+                    className="w-full rounded-control bg-[#0500D0]/10 hover:bg-[#0500D0]/20 border border-[#0500D0]/30 text-white text-xs font-semibold py-2.5 flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider"
                   >
                     Open Photo Folder (5 Picks) <ExternalLink className="w-3.5 h-3.5" />
                   </a>
@@ -435,7 +435,7 @@ export default function AdminRawPhotoQueue({
 
       {showDetailModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-6">
+          <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-6">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
                 <h3 className="font-bold text-white text-lg">Raw Photo Details</h3>
@@ -507,7 +507,7 @@ export default function AdminRawPhotoQueue({
                   setShowDetailModal(false)
                   setSelectedBooking(null)
                 }}
-                className="flex-1 border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3 hover:bg-white/[0.03]"
+                className="flex-1 rounded-control border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3 hover:bg-white/[0.03]"
               >
                 Close
               </button>
@@ -520,7 +520,7 @@ export default function AdminRawPhotoQueue({
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
           <form
             onSubmit={handleRejectSubmit}
-            className="border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
+            className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
           >
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
@@ -536,7 +536,7 @@ export default function AdminRawPhotoQueue({
               </button>
             </div>
 
-            <div className="bg-red-500/10 border border-red-500/30 p-3 text-xs text-red-200 flex gap-2">
+            <div className="rounded-control bg-red-500/10 border border-red-500/30 p-3 text-xs text-red-200 flex gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <p>The client will be emailed with this reason and a link to submit another raw photo.</p>
             </div>
@@ -567,7 +567,7 @@ export default function AdminRawPhotoQueue({
                 rows={3}
                 value={customReason}
                 onChange={(e) => setCustomReason(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 focus:border-primary focus:outline-none p-3 text-xs resize-none text-white"
+                className="w-full rounded-control bg-black/40 border border-white/10 focus:border-primary focus:outline-none p-3 text-xs resize-none text-white"
               />
             </div>
 
@@ -575,7 +575,7 @@ export default function AdminRawPhotoQueue({
               <button
                 type="button"
                 onClick={() => setShowRejectModal(false)}
-                className="flex-1 border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3"
+                className="flex-1 rounded-control border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3"
               >
                 Cancel
               </button>

@@ -80,7 +80,7 @@ export const portalSelectionSchema = z
           .object({ category: portalPrintCategorySchema, fileId: z.string().uuid(), quantity: z.number().int().min(1).max(4) })
           .strict(),
       )
-      .max(4)
+      .max(7)
       .default([]),
     addons: z
       .array(

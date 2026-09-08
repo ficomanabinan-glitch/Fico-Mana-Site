@@ -25,6 +25,25 @@ test('manifest creates seven pending print slots, with four individually named w
   assert.deepEqual(manifest, manifestTools.buildPrintManifest(input), 'Repeated builds are deterministic')
 })
 
+test('wallet prints can use one to four different included photos with stable names', () => {
+  const walletGallery = [
+    ...gallery,
+    { id: 'g4', file_name: '0924.CR3' },
+  ]
+  const splitWallet = [
+    ...allocations.slice(0, 3),
+    { category: 'WALLET_SIZE', gallery_file_id: 'g3', quantity: 1 },
+    { category: 'WALLET_SIZE', gallery_file_id: 'g4', quantity: 1 },
+  ]
+  const manifest = manifestTools.buildPrintManifest({ ...input, gallery: walletGallery, allocations: splitWallet })
+  const wallet = manifest.outputs.filter(output => output.category === 'WALLET_SIZE')
+  assert.deepEqual(wallet.map(output => [output.name_prefix, output.source_gallery_file_id]), [
+    ['WALLET SIZE 1', 'g3'],
+    ['WALLET SIZE 2', 'g4'],
+  ])
+  assert.equal(new Set(wallet.map(output => output.key)).size, 2)
+})
+
 test('print instructions reject foreign gallery IDs, duplicate categories, and broken quantities', () => {
   assert.throws(() => manifestTools.buildPrintManifest({ ...input, gallery: [] }), /incomplete/)
   assert.throws(() => manifestTools.buildPrintManifest({ ...input, allocations: [allocations[0], allocations[0]] }), /invalid/)

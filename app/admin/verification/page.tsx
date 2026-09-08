@@ -21,7 +21,7 @@ import {
 import { bookingMatchesSearch, enrichBookingDisplay, isLikelyInvalidReceipt } from '@/lib/booking-display'
 import ReceiptPreview from '@/components/receipt-preview'
 import { receiptAccessUrl, receiptDownloadUrl } from '@/lib/security/receipt-reference'
-import { adminPage, adminCardHover, adminSelect, adminInput } from '@/lib/admin-ui'
+import { adminPage, adminCardHover, adminSelect, adminInput, adminPanel } from '@/lib/admin-ui'
 import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
 import {
   REJECTION_REASONS,
@@ -249,7 +249,7 @@ export default function PaymentVerificationQueue() {
       />
 
       {bookings.length === 0 ? (
-        <div className="border border-white/10 bg-[#222222] p-16 text-center shadow-sm">
+        <div className={`${adminPanel} p-10 text-center sm:p-16`}>
           <div className="w-16 h-16 bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-400 rounded-full mx-auto mb-4">
             <Check className="w-8 h-8" />
           </div>
@@ -258,7 +258,7 @@ export default function PaymentVerificationQueue() {
         </div>
       ) : (
         <>
-          <div className="border border-white/10 bg-[#222222] p-4 mb-5">
+          <div className={`${adminPanel} mb-5 p-4`}>
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <input
@@ -276,7 +276,7 @@ export default function PaymentVerificationQueue() {
           </div>
 
           {visibleBookings.length === 0 ? (
-            <div className="border border-white/10 bg-[#222222] p-12 text-center">
+            <div className={`${adminPanel} p-12 text-center`}>
               <p className="text-sm text-white/50">No bookings match your search.</p>
             </div>
           ) : (
@@ -284,7 +284,7 @@ export default function PaymentVerificationQueue() {
               {visibleBookings.map((booking) => {
                 const display = enrichBookingDisplay(booking)
                 return (
-                  <div key={booking.id} className={`border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''} ${isLikelyInvalidReceipt(display.receiptUrl) ? 'ring-1 ring-red-500/40' : ''}`}>
+                  <div key={booking.id} className={`rounded-card border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''} ${isLikelyInvalidReceipt(display.receiptUrl) ? 'ring-1 ring-red-500/40' : ''}`}>
                     <div
                       className="h-48 bg-white/[0.05] relative overflow-hidden group cursor-pointer border-b border-white/10"
                       onClick={() => {
@@ -334,7 +334,7 @@ export default function PaymentVerificationQueue() {
                           type="button"
                           onClick={() => handleRejectForged(display)}
                           disabled={actionLoading}
-                          className="btn-reject-fx w-full bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
+                          className="btn-reject-fx w-full rounded-control bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
                         >
                           <AlertCircle className="w-3.5 h-3.5" /> Reject — Forged / Not a receipt
                         </button>
@@ -370,7 +370,7 @@ export default function PaymentVerificationQueue() {
 
       {receiptModalBooking && selectedBooking && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="border border-white/10 bg-[#222222] shadow-2xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[90vh]">
+          <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[90vh]">
             <div className="md:w-1/2 bg-white/[0.05] border-r border-white/10 relative min-h-[300px] flex items-center justify-center">
               {receiptModalBooking.receiptUrl && receiptModalBooking.receiptUrl.endsWith('.pdf') ? (
                 <div className="p-12 text-center text-white/50 space-y-4">
@@ -447,7 +447,7 @@ export default function PaymentVerificationQueue() {
                   </div>
                   <div>
                     <p className="text-white/40 font-medium text-caption uppercase tracking-wider">GCash Transaction Ref</p>
-                    <p className="font-mono font-bold text-white/90 bg-black/40 border border-white/10 px-2 py-0.5 inline-block">{receiptModalBooking.transactionRef || 'Not provided'}</p>
+                    <p className="font-mono font-bold text-white/90 bg-black/40 border border-white/10 rounded-control px-2 py-0.5 inline-block">{receiptModalBooking.transactionRef || 'Not provided'}</p>
                   </div>
                   <div>
                     <p className="text-white/40 font-medium text-caption uppercase tracking-wider">Total Package Price</p>
@@ -465,7 +465,7 @@ export default function PaymentVerificationQueue() {
                   {selectedBooking.note && (
                     <div className="col-span-2 border-t border-white/10 pt-3">
                       <p className="text-white/40 font-medium text-caption uppercase tracking-wider mb-1">Pre-shoot Request Note</p>
-                      <p className="bg-white/[0.03] p-3 border border-white/10 rounded text-white/70 leading-relaxed italic">
+                      <p className="bg-white/[0.03] p-3 border border-white/10 rounded-control text-white/70 leading-relaxed italic">
                         "{selectedBooking.note}"
                       </p>
                     </div>
@@ -475,7 +475,7 @@ export default function PaymentVerificationQueue() {
 
               <div className="space-y-3 pt-6 border-t border-white/10">
                 {isLikelyInvalidReceipt(receiptModalBooking.receiptUrl) && (
-                  <div className="bg-red-500/10 border border-red-500/40 p-3 text-xs text-red-200 flex gap-2">
+                  <div className="rounded-control bg-red-500/10 border border-red-500/40 p-3 text-xs text-red-200 flex gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <p>This file does not look like a GCash/BPI screenshot. Use <strong>Reject — Forged</strong> if it is not genuine payment proof.</p>
                   </div>
@@ -485,7 +485,7 @@ export default function PaymentVerificationQueue() {
                     type="button"
                     onClick={() => handleRejectForged(selectedBooking)}
                     disabled={actionLoading}
-                    className="btn-reject-fx w-full bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-xs font-bold uppercase tracking-wider py-3 flex items-center justify-center gap-1"
+                    className="btn-reject-fx w-full rounded-control bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-xs font-bold uppercase tracking-wider py-3 flex items-center justify-center gap-1"
                   >
                     <AlertCircle className="w-4 h-4" /> Reject — Forged / Fake Receipt
                   </button>
@@ -541,7 +541,7 @@ export default function PaymentVerificationQueue() {
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
           <form
             onSubmit={handleRejectSubmit}
-            className="relative border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
+            className="relative rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
           >
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
@@ -558,7 +558,7 @@ export default function PaymentVerificationQueue() {
             </div>
 
             <div className="space-y-4">
-              <div className="bg-red-500/10 border border-red-500/30 p-3 text-xs text-red-200 flex gap-2">
+              <div className="rounded-control bg-red-500/10 border border-red-500/30 p-3 text-xs text-red-200 flex gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
                   Rejecting this payment will email the client with the specified reason and instructions to re-upload. The booking status will return to <strong>Pending Payment</strong>.
@@ -609,7 +609,7 @@ export default function PaymentVerificationQueue() {
               <button
                 type="button"
                 onClick={() => setShowRejectModal(false)}
-                className="flex-1 border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3 hover:bg-white/[0.03]"
+                className="flex-1 rounded-control border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3 hover:bg-white/[0.03]"
               >
                 Cancel
               </button>

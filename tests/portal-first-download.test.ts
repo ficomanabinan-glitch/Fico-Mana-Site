@@ -148,12 +148,12 @@ test('actual portal ZIP route tracks only nonempty completed client downloads, n
   assert.equal(records,1)
 })
 
-test('notice shows configured duration before first download and the exact GMT+8 deadline afterwards', () => {
-  assert.match(portalExpiryNotice({days:45,firstDownloadAt:null,expiresAt:null}),/45 days after your first completed Download All/)
+test('notice shows the portal-ready-email start rule and the exact GMT+8 deadline afterwards', () => {
+  assert.match(portalExpiryNotice({days:45,portalReadyEmailSentAt:null,expiresAt:null}),/45-day portal expiry begins/)
   const first='2026-09-08T00:00:00Z',end='2026-10-08T00:00:00Z'
-  const notice=portalExpiryNotice({days:30,firstDownloadAt:first,expiresAt:end},Date.parse(first))
+  const notice=portalExpiryNotice({days:30,portalReadyEmailSentAt:first,expiresAt:end},Date.parse(first))
   assert.match(notice,/October 8, 2026/);assert.match(notice,/8:00/);assert.match(notice,/GMT\+8/);assert.match(notice,/30 days remaining/)
-  assert.match(portalExpiryNotice({days:30,firstDownloadAt:first,expiresAt:end},Date.parse(end)),/expired/)
+  assert.match(portalExpiryNotice({days:30,portalReadyEmailSentAt:first,expiresAt:end},Date.parse(end)),/expired/)
 })
 
 test('delivery never schedules expiry; UI uses existing rounded tokens and centers status rows', () => {
@@ -161,9 +161,9 @@ test('delivery never schedules expiry; UI uses existing rounded tokens and cente
     assert.doesNotMatch(readFileSync(file,'utf8'),/setPortalExpiryFromDelivery/)
   }
   const page=readFileSync('app/portal/[id]/page.tsx','utf8')
-  assert.match(page,/rounded-control border border-white\/10[^\n]+Project Status/)
   assert.match(page,/<PortalExpiryNotice expiry=\{data.expiry\}/)
   const selection=readFileSync('components/client-photo-selection.tsx','utf8')
+  assert.match(selection,/sticky top-4 hidden[^\n]+rounded-card[\s\S]*?Project status/)
   assert.match(selection,/rounded-control border px-4[^\n]+Included Photos/)
   assert.match(selection,/rounded-control border border-emerald[^\n]+Selection submitted and locked/)
   assert.match(readFileSync('app/admin/provisioning/page.tsx','utf8'),/<tr key=\{item.bookingId\} className="align-middle/)

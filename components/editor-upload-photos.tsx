@@ -222,7 +222,7 @@ export default function EditorUploadPhotos({
 
       <div className="border-b border-white/[0.08] pb-5">
         <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Upload Photos</p>
-        <h1 className="mt-2 font-serif text-3xl font-bold">Return edited batches to Google Drive</h1>
+        <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Return edited batches to Google Drive</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/40">
           Drop the unzipped batch folder to upload each client’s EDITED photos to Google Drive.
         </p>
@@ -342,7 +342,7 @@ export default function EditorUploadPhotos({
             <ProgressCell label="Data" value={`${formatBytes(progress?.bytesDone || 0)} / ${formatBytes(progress?.bytesTotal || 0)}`} />
           </div>
           {results.length || runErrors.length ? (
-            <div className="mt-5 divide-y divide-white/[0.06] border border-white/[0.07]">
+            <div className="mt-5 divide-y divide-white/[0.06] overflow-hidden rounded-control border border-white/[0.07]">
               {results.map((result, index) => (
                 <div key={`${result.bookingId}-${index}`} className="flex flex-col gap-2 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -430,7 +430,7 @@ export default function EditorUploadPhotos({
 
 function ProgressCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-white/[0.07] bg-black/10 p-3">
+    <div className="rounded-control border border-white/[0.07] bg-black/10 p-3">
       <p className="text-caption font-semibold uppercase tracking-wider text-white/25">{label}</p>
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </div>

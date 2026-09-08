@@ -48,25 +48,36 @@ export function buildPrintManifest(input: {
 }) {
   const outputs: PrintOutput[] = []
   const seen = new Set<string>()
+  const walletAllocations = input.allocations.filter(allocation => allocation.category === 'WALLET_SIZE')
+  const walletFiles = new Set(walletAllocations.map(allocation => allocation.gallery_file_id))
+  if (input.allocations.length && (walletAllocations.length < 1 || walletAllocations.length > 4 || walletFiles.size !== walletAllocations.length)) {
+    throw new Error('The saved Wallet Size choices are invalid. Try: ask the administrator to review the client selection.')
+  }
+  let walletCopy = 0
   for (const allocation of input.allocations) {
-    if (!Object.hasOwn(PRINTS, allocation.category) || seen.has(allocation.category)) {
+    const isWallet = allocation.category === 'WALLET_SIZE'
+    if (!Object.hasOwn(PRINTS, allocation.category) || (!isWallet && seen.has(allocation.category))) {
       throw new Error('The saved print choices are invalid. Try: ask the administrator to review the client selection.')
     }
     seen.add(allocation.category)
     const rule = PRINTS[allocation.category as keyof typeof PRINTS]
     const file = input.gallery.find(row => row.id === allocation.gallery_file_id)
-    if (!file || allocation.quantity !== rule.quantity) {
+    const validQuantity = isWallet
+      ? allocation.quantity === 1 || (walletAllocations.length === 1 && allocation.quantity === rule.quantity)
+      : allocation.quantity === rule.quantity
+    if (!file || !validQuantity) {
       throw new Error('A saved print choice is incomplete. Try: ask the administrator to review the client selection.')
     }
     for (let copy = 1; copy <= allocation.quantity; copy++) {
+      const copyNumber = isWallet ? ++walletCopy : copy
       outputs.push({
-        key: `${allocation.category}:${copy}`,
+        key: `${allocation.category}:${copyNumber}`,
         category: allocation.category,
         size: rule.size,
-        copy_number: copy,
+        copy_number: copyNumber,
         source_gallery_file_id: file.id,
         source_file_name: file.file_name,
-        name_prefix: allocation.category === 'WALLET_SIZE' ? `${rule.prefix} ${copy}` : rule.prefix,
+        name_prefix: isWallet ? `${rule.prefix} ${copyNumber}` : rule.prefix,
         status: 'awaiting_enhanced_upload',
         enhanced_file_id: null,
         enhanced_checksum: null,

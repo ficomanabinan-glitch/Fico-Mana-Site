@@ -153,12 +153,12 @@ export default function EditorDashboard() {
       <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editor Dashboard</p>
-          <h1 className="mt-2 font-serif text-page-title font-semibold tracking-heading text-balance">Today’s upload and editing work</h1>
+          <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Today’s upload and editing work</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/40">
             Check today’s clients, downloads, and uploads.
           </p>
         </div>
-        <span className="inline-flex w-fit items-center gap-2 border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-caption font-semibold uppercase text-emerald-300">
+        <span className="inline-flex w-fit items-center gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-caption font-semibold uppercase text-emerald-300">
           <CheckCircle2 className="size-3.5" />{session?.role} access active
         </span>
       </div>

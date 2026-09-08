@@ -16,7 +16,7 @@ export default function PortalDeliverableGallery({ files }: { files: ClientGalle
 
   return <>
     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-      {files.map(file => <article key={file.id} className="group overflow-hidden rounded-xl border border-white/10 transition-all hover:-translate-y-0.5 hover:border-[#C4CEFF]/40">
+      {files.map(file => <article key={file.id} className="group overflow-hidden rounded-card border border-white/10 transition-all hover:-translate-y-0.5 hover:border-[#C4CEFF]/40">
         <PhotoSelectButton file={file} locked
           onSelect={() => setPreviewId(file.id)} onPreview={photo => setPreviewId(photo.id)}>
           <div className="aspect-[4/5] overflow-hidden bg-black/20">
@@ -29,13 +29,13 @@ export default function PortalDeliverableGallery({ files }: { files: ClientGalle
         <div className="flex items-center justify-between gap-2 bg-[#1d1d1d] p-2.5">
           <p className="min-w-0 truncate text-caption text-white/45">{file.fileName}</p>
           <button type="button" onClick={() => setPreviewId(file.id)} aria-label={`Preview ${file.fileName}`}
-            title="Preview photo (or press and hold the image)"
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/10 text-[#C4CEFF] transition hover:border-[#C4CEFF]/40 hover:bg-white/5">
+            title="Preview photo"
+            className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-control border border-white/10 text-[#C4CEFF] transition hover:border-[#C4CEFF]/40 hover:bg-white/5">
             <ZoomIn className="size-4"/>
           </button>
         </div>
       </article>)}
     </div>
-    {previewFile ? <PortalPhotoPreview key={previewFile.id} file={previewFile} onClose={() => setPreviewId(null)}/> : null}
+    {previewFile ? <PortalPhotoPreview key={previewFile.id} file={previewFile} files={files} onFileChange={file => setPreviewId(file.id)} onClose={() => setPreviewId(null)}/> : null}
   </>
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
-import { X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Plus, X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
 import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, zoomPhotoWithWheel, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
 
@@ -30,7 +30,23 @@ export function PhotoSelectButton({ file, locked, onSelect, onPreview, children,
   </button>
 }
 
-export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile | null; onClose: () => void }) {
+export function PortalPhotoPreview({
+  file,
+  files = [],
+  selected = false,
+  locked = true,
+  onToggleSelection,
+  onFileChange,
+  onClose,
+}: {
+  file: ClientGalleryFile | null
+  files?: ClientGalleryFile[]
+  selected?: boolean
+  locked?: boolean
+  onToggleSelection?: () => void
+  onFileChange?: (file: ClientGalleryFile) => void
+  onClose: () => void
+}) {
   const dialog = useRef<HTMLDialogElement>(null)
   const viewport = useRef<HTMLDivElement>(null)
   const photo = useRef<HTMLImageElement>(null)
@@ -40,6 +56,12 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
   const gesture = useRef<{ view: PhotoView; points: PhotoPoint[] } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [failed, setFailed] = useState(false)
+  const currentIndex = file ? files.findIndex(item => item.id === file.id) : -1
+  const navigate = useCallback((offset: -1 | 1) => {
+    if (currentIndex < 0 || !onFileChange) return
+    const next = files[currentIndex + offset]
+    if (next) onFileChange(next)
+  }, [currentIndex, files, onFileChange])
   const bounds = useCallback(() => ({
     width: viewport.current?.clientWidth ?? 0,
     height: viewport.current?.clientHeight ?? 0,
@@ -94,17 +116,30 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
     if (viewport.current) observer.observe(viewport.current)
     return () => { observer.disconnect(); activePointers.clear(); element.close(); document.body.style.overflow = overflow }
   }, [file, applyView])
+  useEffect(() => {
+    if (!file || !onFileChange || currentIndex < 0) return
+    const onKey = (event: KeyboardEvent) => {
+      if (currentView.current.scale > 1 || event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.key === 'ArrowLeft' && currentIndex > 0) { event.preventDefault(); navigate(-1) }
+      if (event.key === 'ArrowRight' && currentIndex < files.length - 1) { event.preventDefault(); navigate(1) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [file, files.length, currentIndex, navigate, onFileChange])
   if (!file) return null
   return <dialog ref={dialog} aria-labelledby="portal-preview-title" onCancel={event => { event.preventDefault(); onClose() }}
     onClick={event => { if (event.target === dialog.current) onClose() }}
     className="m-auto w-[94vw] max-w-5xl overflow-hidden rounded-xl border border-white/15 bg-[#171717] p-0 text-white shadow-2xl backdrop:bg-black/85">
     <div className="flex items-center justify-between gap-3 border-b border-white/10 p-3 sm:p-4">
-      <h3 id="portal-preview-title" className="min-w-0 truncate text-xs font-semibold">{file.fileName}</h3>
+      <div className="flex min-w-0 items-center gap-2">
+        {files.length > 1 ? <><button type="button" aria-label="Previous photo" disabled={currentIndex <= 0} onClick={() => navigate(-1)} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ChevronLeft className="size-4"/></button><button type="button" aria-label="Next photo" disabled={currentIndex < 0 || currentIndex >= files.length - 1} onClick={() => navigate(1)} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ChevronRight className="size-4"/></button></> : null}
+        <h3 id="portal-preview-title" className="min-w-0 truncate text-xs font-semibold">{file.fileName}</h3>
+      </div>
       <div className="flex shrink-0 items-center gap-2">
-        <button type="button" aria-label="Zoom out" disabled={view.scale <= 1} onClick={() => zoomTo(Math.max(1, view.scale - 1))} className="rounded-lg border border-white/15 p-2 hover:bg-white/10 disabled:opacity-30"><ZoomOut className="size-4"/></button>
+        <button type="button" aria-label="Zoom out" disabled={view.scale <= 1} onClick={() => zoomTo(Math.max(1, view.scale - 1))} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ZoomOut className="size-4"/></button>
         <span className="w-10 text-center text-caption">{Math.round(view.scale * 100)}%</span>
-        <button type="button" aria-label="Zoom in" disabled={view.scale >= MAX_PHOTO_ZOOM} onClick={() => zoomTo(Math.min(MAX_PHOTO_ZOOM, view.scale + 1))} className="rounded-lg border border-white/15 p-2 hover:bg-white/10 disabled:opacity-30"><ZoomIn className="size-4"/></button>
-        <button type="button" autoFocus aria-label="Close photo preview" onClick={onClose} className="rounded-lg border border-white/15 p-2 hover:bg-white/10"><X className="size-4"/></button>
+        <button type="button" aria-label="Zoom in" disabled={view.scale >= MAX_PHOTO_ZOOM} onClick={() => zoomTo(Math.min(MAX_PHOTO_ZOOM, view.scale + 1))} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ZoomIn className="size-4"/></button>
+        <button type="button" autoFocus aria-label="Close photo preview" onClick={onClose} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10"><X className="size-4"/></button>
       </div>
     </div>
     <div ref={viewport} role="region" aria-label="Photo preview. Pinch or scroll to zoom and drag to move. Arrow keys move a zoomed photo."
@@ -138,5 +173,6 @@ export function PortalPhotoPreview({ file, onClose }: { file: ClientGalleryFile 
           className="pointer-events-none block w-full select-none object-contain" style={{ maxHeight: '75dvh', transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`, transformOrigin: 'center', willChange: dragging ? 'transform' : undefined }}/>
       }
     </div>
+    {onToggleSelection ? <div className="flex items-center justify-between gap-3 border-t border-white/10 p-3 sm:p-4"><p className="min-w-0 truncate text-caption text-white/45">{currentIndex >= 0 ? `${currentIndex + 1} of ${files.length}` : file.fileName}</p><button type="button" disabled={locked} onClick={onToggleSelection} aria-pressed={selected} className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-control px-4 text-caption font-semibold uppercase transition disabled:cursor-default disabled:opacity-50 ${selected ? 'border border-[#C4CEFF]/30 bg-[#C4CEFF]/10 text-[#C4CEFF]' : 'bg-primary text-white hover:bg-[#0300a8]'}`}>{selected ? <Check className="size-4"/> : <Plus className="size-4"/>}{selected ? 'Selected' : 'Select Photo'}</button></div> : null}
   </dialog>
 }

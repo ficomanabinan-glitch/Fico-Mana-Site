@@ -373,8 +373,8 @@ function ExpenseBar({ label, value, total }: { label: string; value: number; tot
 }
 
 const CHART_WIDTH = 840
-const CHART_HEIGHT = 320
-const CHART_MARGIN = { top: 20, right: 24, bottom: 54, left: 88 }
+const CHART_HEIGHT = 238
+const CHART_MARGIN = { top: 16, right: 20, bottom: 42, left: 70 }
 
 function compactPeso(value: number) {
   return new Intl.NumberFormat('en-PH', {
@@ -454,7 +454,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
 
   return (
     <section className={`${adminPanel} overflow-hidden`}>
-      <div className="flex flex-col gap-4 border-b border-white/[0.08] p-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-white/[0.08] p-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-caption font-semibold uppercase tracking-label text-white/35">Financial trend</p>
           <h2 className="mt-1 text-base font-semibold">Revenue, expenses &amp; net profit</h2>
@@ -504,7 +504,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
       ) : null}
 
       <div
-        className="overflow-x-auto p-3 sm:p-5"
+        className="overflow-x-auto p-3 sm:p-4"
         role="group"
         tabIndex={0}
         aria-label="Seven-day financial trend. Click a day to keep it selected, or use the left and right arrow keys."
@@ -521,7 +521,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
       >
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-          className="min-w-[720px] cursor-crosshair"
+          className="min-w-[640px] cursor-crosshair"
           role="img"
           aria-label="Curved line graph of revenue, expenses, and net profit over seven days"
           onPointerMove={(event) => {

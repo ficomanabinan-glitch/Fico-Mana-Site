@@ -69,15 +69,15 @@ export default function ReportsPage() {
       <section className={`${adminPanel} p-5`}>
         <h2 className="text-sm font-semibold text-white">Operations summary</h2>
         <div className="mt-4 grid md:grid-cols-3 gap-3 text-xs">
-          <div className="border border-white/10 p-4">
+          <div className="rounded-control border border-white/10 bg-black/10 p-4">
             <p className="text-white/40">Completed sessions</p>
             <p className="mt-2 text-xl font-bold">{report.completed}</p>
           </div>
-          <div className="border border-white/10 p-4">
+          <div className="rounded-control border border-white/10 bg-black/10 p-4">
             <p className="text-white/40">Open / other statuses</p>
             <p className="mt-2 text-xl font-bold">{Math.max(0, report.bookings - report.completed)}</p>
           </div>
-          <div className="border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.05] p-4 text-[#C4CEFF]">
+          <div className="rounded-control border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.05] p-4 text-[#C4CEFF]">
             Figures are based on your bookings and payments.
           </div>
         </div>

@@ -7,7 +7,7 @@ function storage() {
   return { values, getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }
 }
 const key = portalDraftKey('portal-a', 'selection-a', null, 5)
-const choices: PortalDraftChoices = { included: ['photo-1', 'photo-2'], extras: ['photo-extra'], editingPreference: 'less', printSelections: { TOGA_PICTURE_4R: 'photo-1', WALLET_SIZE: 'photo-2' }, addonQuantities: { print: 2 }, acknowledged: true, step: 'prints' }
+const choices: PortalDraftChoices = { included: ['photo-1', 'photo-2'], extras: ['photo-extra'], editingPreference: 'less', printSelections: { TOGA_PICTURE_4R: 'photo-1' }, walletSelections: ['photo-1', 'photo-2'], addonQuantities: { print: 2 }, acknowledged: true, step: 'prints' }
 
 test('draft keeps all chosen options for exactly 15 minutes; reading/reloading never extends expiry', () => {
   const browser = storage(), now = 1_000_000
@@ -41,7 +41,7 @@ test('corrupt, oversized, expired, future and invalid selection drafts are remov
   const browser = storage(), now = 1_000_000
   for (const invalid of ['{broken', 'x'.repeat(32_001), JSON.stringify(null), JSON.stringify({ savedAt: now + 1, expiresAt: now + 1 + PORTAL_DRAFT_TTL_MS, choices }),
     JSON.stringify({ savedAt: now, expiresAt: now + PORTAL_DRAFT_TTL_MS + 1, choices }),
-    ...[{ included: ['photo-1', 'photo-1'] }, { editingPreference: 'unknown' }, { extras: ['photo-1'] }, { printSelections: { WALLET_SIZE: 'foreign-photo' } }, { addonQuantities: { print: -1 } }, { step: 'unknown' }]
+    ...[{ included: ['photo-1', 'photo-1'] }, { editingPreference: 'unknown' }, { extras: ['photo-1'] }, { walletSelections: ['foreign-photo'] }, { walletSelections: ['photo-1', 'photo-1'] }, { addonQuantities: { print: -1 } }, { step: 'unknown' }]
       .map(patch => JSON.stringify({ savedAt: now, expiresAt: now + PORTAL_DRAFT_TTL_MS, choices: { ...choices, ...patch } })),
   ]) {
     browser.setItem(key, invalid)

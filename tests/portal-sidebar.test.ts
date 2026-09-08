@@ -4,16 +4,15 @@ import { readFileSync } from 'node:fs'
 import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 
-test('desktop sidebar uses the existing column width and stays within a short viewport', () => {
+test('desktop context stays sticky at the three-zone breakpoint and mobile leaves room for its action bar', () => {
   const css = readFileSync('app/globals.css', 'utf8')
-  const start = css.indexOf('@media (min-width: 1024px)')
-  const sidebar = css.slice(start, css.indexOf('.fico-portal-dock', start))
+  const start = css.indexOf('@media (min-width: 1280px)')
+  const sidebar = css.slice(start, css.indexOf('.fico-portal-sheet-content', start))
   for (const text of ['.fico-portal-sidebar', 'position: sticky', 'align-self: start', 'max-height: calc(100dvh', 'overflow-y: auto', 'scrollbar-width: thin']) assert.ok(sidebar.includes(text))
-  assert.match(css, /grid-template-columns: minmax\(0, 1\.618fr\) minmax\(18rem, 1fr\)/)
-  assert.match(css, /@media \(max-width: 1023px\)[\s\S]*?\.client-portal-page[\s\S]*?padding-bottom: calc\(5\.5rem \+ env\(safe-area-inset-bottom/)
+  assert.match(css, /@media \(max-width: 767px\)[\s\S]*?\.client-portal-page[\s\S]*?padding-bottom: calc\(5\.5rem \+ env\(safe-area-inset-bottom/)
 })
 
-test('mobile dock reflects live balance, opens the same summary/QR content and closes on desktop resize', t => {
+test('tablet and mobile details control reflects live balance, opens the same summary/QR content and closes on desktop resize', t => {
   const hooks = componentHarness()
   const sheets = { Sheet: () => null, SheetTrigger: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null }
   const media = { matches: false }
@@ -31,8 +30,8 @@ test('mobile dock reflects live balance, opens the same summary/QR content and c
   const sheet = () => elements(tree, el => el.type === sheets.Sheet)[0]
   const trigger = elements(tree, el => el.type === sheets.SheetTrigger)[0]
   assert.equal(sheet().props.open, false)
-  assert.match(trigger.props.render.props.className, /fixed inset-x-0 bottom-0/)
-  assert.match(trigger.props.render.props.className, /lg:hidden/)
+  assert.match(trigger.props.render.props.className, /min-h-12.*rounded-control/)
+  assert.match(trigger.props.render.props.className, /xl:hidden/)
   assert.match(content(trigger), /₱6,000/)
   sheet().props.onOpenChange(true); tree = render('₱6,400')
   assert.equal(sheet().props.open, true)

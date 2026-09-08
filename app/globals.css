@@ -219,18 +219,7 @@
     min-width: 0;
   }
 
-  /* Keep operational layouts full-width. Only contextual portal panels split. */
-  .fico-portal-columns {
-    display: grid;
-    gap: var(--fico-space-6);
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  @media (min-width: 1024px) {
-    .fico-portal-columns {
-      grid-template-columns: minmax(0, 1.618fr) minmax(18rem, 1fr);
-    }
-
+  @media (min-width: 1280px) {
     .fico-portal-sidebar {
       position: sticky;
       top: var(--fico-space-6);
@@ -243,17 +232,11 @@
     }
   }
 
-  .fico-portal-dock {
-    min-height: calc(4.5rem + env(safe-area-inset-bottom, 0px));
-    padding-top: 0.75rem;
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  }
-
   .fico-portal-sheet-content {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
 
-  @media (max-width: 1023px) {
+  @media (max-width: 767px) {
     .client-portal-page {
       padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
     }

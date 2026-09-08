@@ -8,7 +8,7 @@ import AdminPageHeader from '@/components/admin-page-header'
 import ShootReminderSettings from '@/components/shoot-reminder-settings'
 import EmailTestSettings from '@/components/email-test-settings'
 import ShootStorageCleanup from '@/components/shoot-storage-cleanup'
-import { adminBtnGhost, adminPage, adminPanel } from '@/lib/admin-ui'
+import { adminBtnGhost, adminCard, adminPage, adminPanel } from '@/lib/admin-ui'
 
 type DriveHealth = {
   connected: boolean
@@ -149,7 +149,7 @@ function StatusCard({
   tone: 'good' | 'warning'
 }) {
   return (
-    <div className="border border-white/10 bg-white/[0.02] p-5">
+    <div className={`${adminCard} p-5`}>
       <Icon className={tone === 'good' ? 'size-5 text-emerald-300' : 'size-5 text-amber-300'} />
       <p className="mt-4 text-caption font-semibold uppercase tracking-wider text-white/35">{title}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>

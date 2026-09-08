@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
-test('Private Portal information keeps its message inside a rounded card', () => {
+test('client identity remains compact while all contextual panels use rounded cards', () => {
   const portal = source('app/portal/[id]/page.tsx')
-  assert.match(portal, /rounded-card border border-\[#C4CEFF\]\/15 bg-\[#C4CEFF\]\/\[0\.04\] p-5/)
-  assert.match(portal, /Private Portal<\/p><p[^>]*>This unique link exposes/)
+  assert.match(portal, /FICO MANA Client Portal<\/p><h1[^>]*>\{data\.booking\.customerName\}<\/h1>/)
+  assert.match(portal, /rounded-card border border-white\/10 bg-white\/\[0\.025\] p-4/)
+  assert.doesNotMatch(portal, /This unique link exposes/)
 })
 
 test('client portal statuses are rounded badges without pretending to be action buttons', () => {
@@ -69,13 +70,16 @@ test('shared typography is rounded and responsive without a forced phi multiplie
   assert.match(source('lib/admin-ui.ts'), /text-page-title font-semibold/)
 })
 
-test('photo layout uses a contextual desktop split and keeps mobile and operations unconstrained', () => {
-  const css = source('app/globals.css')
-  assert.match(css, /\.fico-portal-columns \{[^}]*grid-template-columns: minmax\(0, 1fr\)/)
-  assert.match(css, /@media \(min-width: 1024px\) \{\s*\.fico-portal-columns/)
-  assert.match(css, /minmax\(0, 1\.618fr\) minmax\(18rem, 1fr\)/)
+test('photo layout uses the requested desktop, tablet, and mobile hierarchy', () => {
   const portal = source('app/portal/[id]/page.tsx')
-  assert.match(portal, /fico-portal-columns/)
+  const selection = source('components/client-photo-selection.tsx')
+  const sidebar = source('components/portal-sidebar.tsx')
+  assert.match(portal, /xl:grid-cols-\[minmax\(230px,280px\)_minmax\(0,1fr\)\]/)
+  assert.match(selection, /md:grid-cols-\[minmax\(0,1fr\)_minmax\(240px,300px\)\]/)
+  assert.match(selection, /xl:grid-cols-\[minmax\(0,1fr\)_minmax\(270px,340px\)\]/)
+  assert.match(selection, /sticky top-4 hidden min-w-0 overflow-hidden rounded-card[^>]+md:block/)
+  assert.match(sidebar, /xl:hidden/)
+  assert.match(sidebar, /side="bottom"/)
   assert.doesNotMatch(portal, /lg:col-span-2/)
   assert.match(source('lib/admin-ui.ts'), /adminPage = 'w-full min-w-0/)
   assert.match(source('lib/admin-ui.ts'), /fico-table overflow-x-auto/)

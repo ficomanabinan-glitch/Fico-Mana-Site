@@ -11,6 +11,7 @@ type PortalQrCodeProps = {
   bookingId: string
   className?: string
   heading?: string
+  compact?: boolean
 }
 
 const qrAction =
@@ -26,6 +27,7 @@ export default function PortalQrCode({
   bookingId,
   className,
   heading = 'Your Portal QR',
+  compact = false,
 }: PortalQrCodeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [message, setMessage] = useState('')
@@ -68,13 +70,13 @@ export default function PortalQrCode({
         <QRCodeCanvas
           ref={canvasRef}
           value={portalUrl}
-          size={288}
+          size={compact ? 184 : 288}
           level="Q"
           marginSize={3}
           bgColor="#ffffff"
           fgColor="#050505"
           title={`FICO MANA client portal for ${customerName}`}
-          style={{ width: '100%', height: 'auto', maxWidth: '288px' }}
+          style={{ width: '100%', height: 'auto', maxWidth: compact ? '184px' : '288px' }}
         />
       </div>
       <p className="mt-3 text-center font-mono text-caption text-white/35">{bookingId}</p>

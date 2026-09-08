@@ -8,6 +8,20 @@ import { packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
 
 export const onsitePortalEmailSubject = (bookingId: string) => `Your photos are ready to select — FICO MANA ${bookingId}`
 
+async function recordFirstPortalReadyEmail(
+  admin: SupabaseClient,
+  portal: { public_id: unknown; access_email_sent_at?: unknown },
+  workspaceId: string,
+  sentAt: string,
+) {
+  const { error } = await admin.rpc('record_portal_ready_email', {
+    p_workspace: workspaceId,
+    p_public_id: String(portal.public_id),
+    p_sent_at: portal.access_email_sent_at ? String(portal.access_email_sent_at) : sentAt,
+  })
+  return error
+}
+
 export async function sendPortalAccessIfNeeded(
   admin: SupabaseClient,
   bookingId: string,
@@ -31,10 +45,11 @@ export async function sendPortalAccessIfNeeded(
   }
   const subject = onsitePortalEmailSubject(bookingId)
   const [portalResult, galleryResult, historyResult] = await Promise.all([
-    admin.from('client_portals').select('id,public_id,status').eq('booking_id', bookingId).maybeSingle(),
+    admin.from('client_portals').select('id,public_id,status,access_email_sent_at').eq('workspace_id', actor.workspaceId).eq('booking_id', bookingId).maybeSingle(),
     admin.from('gallery_files').select('id').eq('booking_id', bookingId).limit(1),
-    admin.from('email_logs').select('id').eq('booking_id', bookingId)
-      .eq('subject', subject).eq('recipient_email', recipient).eq('status', 'SENT').limit(1),
+    admin.from('email_logs').select('id,sent_at').eq('booking_id', bookingId)
+      .eq('subject', subject).eq('recipient_email', recipient).eq('status', 'SENT')
+      .order('sent_at', { ascending: true }).limit(1),
   ])
   if (portalResult.error || galleryResult.error || historyResult.error) {
     throw new Error('The portal email status could not be checked. Try: retry the email.')
@@ -47,7 +62,12 @@ export async function sendPortalAccessIfNeeded(
     return { sent: false, error: 'No uploaded photos are available. Try: finish uploading and Sync Drive before retrying the email.' }
   }
   // Old provisioning emails must not suppress this photos-ready notification.
-  if (historyResult.data?.length) return { sent: false, alreadySent: true }
+  if (historyResult.data?.length) {
+    const firstSentAt = String(historyResult.data[0]?.sent_at || new Date().toISOString())
+    const expiryError = await recordFirstPortalReadyEmail(admin, portal, actor.workspaceId, firstSentAt)
+    if (expiryError) return { sent: false, error: 'The portal email was already sent, but its expiry could not be saved. Try: retry this action.' }
+    return { sent: false, alreadySent: true }
+  }
   const url = portalUrl(String(portal.public_id))
   const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;border:2px solid #0500D0;border-radius:16px;background:#fff;color:#171717;">
     <h2 style="color:#0500D0;text-align:center;">FICO MANA</h2>
@@ -62,8 +82,10 @@ export async function sendPortalAccessIfNeeded(
   const result = await sendEmail({ bookingId, to: recipient, subject, html, idempotencyKey })
   if (!result.success) return { sent: false, error: 'The portal email could not be sent. Try: check the client email and the email service settings, then retry.' }
   const sentAt = new Date().toISOString()
-  const { error } = await admin.from('client_portals')
-    .update({ access_email_sent_at: sentAt, updated_at: sentAt }).eq('id', portal.id)
-  if (error) console.error('Portal email accepted, but the portal timestamp could not be updated.')
+  const expiryError = await recordFirstPortalReadyEmail(admin, portal, actor.workspaceId, sentAt)
+  if (expiryError) {
+    console.error('Portal email accepted, but the portal expiry could not be started.', expiryError)
+    return { sent: false, error: 'The portal email was sent, but its expiry could not be saved. Try: retry this action.' }
+  }
   return { sent: true }
 }

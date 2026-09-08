@@ -45,13 +45,13 @@ test('delivered cards match selection card corners and have separate magnifying-
   const cards = elements(tree, el => el.type === 'article')
   assert.equal(cards.length, files.length)
   for (const [index, card] of cards.entries()) {
-    assert.match(card.props.className, /overflow-hidden rounded-xl border/)
+    assert.match(card.props.className, /overflow-hidden rounded-card border/)
     const imageButton = elements(card, el => el.type === f.preview.PhotoSelectButton)[0]
     assert.equal(elements(imageButton.props.children, el => el.type === 'button').length, 0, 'no nested buttons')
     const previewButton = elements(card, el => el.type === 'button')[0]
     assert.equal(previewButton.props['aria-label'], `Preview ${files[index].fileName}`)
-    assert.equal(previewButton.props.title, 'Preview photo (or press and hold the image)')
-    assert.match(previewButton.props.className, /size-8.*rounded-lg.*text-\[#C4CEFF\]/)
+    assert.equal(previewButton.props.title, 'Preview photo')
+    assert.match(previewButton.props.className, /size-11.*rounded-control.*text-\[#C4CEFF\]/)
     assert.equal(previewButton.props.children.type.displayName, 'ZoomIn')
     const footer = elements(card, el => el.type === 'div' && el.props.className.includes('bg-[#1d1d1d]'))[0]
     assert.match(footer.props.className, /gap-2.*p-2.5/)
@@ -106,10 +106,10 @@ test('the portal keeps Download All separate from delivered-photo previews', () 
   assert.match(source, /<PortalDeliverableGallery key=\{publicId\} files=\{data.deliverables\}/)
   assert.match(source, /<a href=\{data.downloadAllUrl\}/)
   assert.doesNotMatch(source, /href=\{file.previewUrl\} target="_blank"/)
-  assert.match(source, /rounded-xl border border-emerald-500\/20 bg-emerald-500\/\[0.05\]/)
+  assert.match(source, /rounded-control border border-emerald-500\/20 bg-emerald-500\/\[0.05\]/)
 })
 
 test('the portal expiry notice states the deadline without explaining preview behavior', () => {
-  assert.equal(portalExpiryNotice({ days: 30, firstDownloadAt: null, expiresAt: null }),
-    'Your portal and QR link will expire 30 days after your first completed Download All.')
+  assert.equal(portalExpiryNotice({ days: 30, portalReadyEmailSentAt: null, expiresAt: null }),
+    'Your 30-day portal expiry begins when FICO MANA sends your portal-ready email.')
 })

@@ -21,7 +21,7 @@ test('client portal QR uses the existing signed portal URL without an external Q
 
   assert.match(workflow, /shareUrl: portalUrl\(publicId\)/)
   assert.match(workflow, /Portal expired\./)
-  assert.match(portalPage, /<PortalQrCode portalUrl=\{data\.shareUrl\}/)
+  assert.match(portalPage, /<PortalQrCode compact portalUrl=\{data\.shareUrl\}/)
   assert.match(qrCode, /QRCodeCanvas/)
   assert.match(qrCode, /value=\{portalUrl\}/)
   assert.match(qrCode, /level="Q"/)
