@@ -1064,6 +1064,22 @@ export async function sendPortalSelectionRejectedEmail(input: { bookingId: strin
     idempotencyKey: `selection-rejected-${input.revision}` })
 }
 
+export async function sendPortalSelectionReopenedEmail(input: { bookingId: string; name: string; email: string; url: string; revision: string }) {
+  const html = brandedEmail('Your photo selection is open again', `
+    <p>Hi <strong>${escapeEmailText(input.name)}</strong>,</p>
+    <p>FICO MANA has reopened the photo selection for booking <strong>${escapeEmailText(input.bookingId)}</strong>.</p>
+    <p>You can now review or replace your selected photos. When you are finished, submit the selection again for studio review.</p>
+    <p style="margin:24px 0"><a href="${escapeEmailText(input.url)}" style="display:inline-block;border-radius:12px;background:#0500D0;color:#fff;padding:14px 24px;text-decoration:none;font-weight:bold">Open Your Portal</a></p>
+  `)
+  return sendEmail({
+    bookingId: input.bookingId,
+    to: input.email,
+    subject: `Your photo selection is open again — ${input.bookingId}`,
+    html,
+    idempotencyKey: `selection-reopened-${input.revision}`,
+  })
+}
+
 export async function sendRawPhotoRejectedEmail(booking: any, reason: string, customDetails?: string) {
   if (isPlaceholderCustomerEmail(booking.customerEmail)) {
     return { success: true }

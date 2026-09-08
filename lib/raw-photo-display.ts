@@ -25,6 +25,8 @@ export function rawPhotoStatusBadgeClass(status: RawPhotoStatus | 'Pending Revie
       return 'bg-green-500/15 text-green-400 border-green-500/30'
     case 'Rejected':
       return 'bg-red-500/15 text-red-400 border-red-500/30'
+    case 'Reopened':
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
     default:
       return 'bg-amber-500/15 text-amber-400 border-amber-500/30'
   }

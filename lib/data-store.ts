@@ -52,7 +52,7 @@ export interface Booking extends Record<string, unknown> {
   paymentHistory: PaymentRecord[]
   driveLink?: string
   rawPhotoLink?: string
-  rawPhotoStatus?: 'Pending Review' | 'Approved' | 'Rejected'
+  rawPhotoStatus?: 'Pending Review' | 'Approved' | 'Rejected' | 'Reopened'
   rawPhotoNotes?: string
   rawPhotoSubmittedAt?: string
   /** When editors approved the 5-pick — starts the 12-day edit window. */

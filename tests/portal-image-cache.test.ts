@@ -34,6 +34,7 @@ function fixture() {
   let limited = false
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     '@/lib/onsite-photo-reset': {},
+    '@/lib/selection-review': { SelectionReviewError: class SelectionReviewError extends Error {}, reviewSelection: async () => ({ success: true }) },
     "@/lib/portal-download-stream": {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {},

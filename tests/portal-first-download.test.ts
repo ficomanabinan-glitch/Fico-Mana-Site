@@ -122,6 +122,7 @@ test('actual portal ZIP route tracks only nonempty completed client downloads, n
   let records=0, available=true, driveFailed=false
   const code=loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts',{
     archiver,'next/server':{NextResponse:{json:Response.json}},
+    '@/lib/selection-review':{SelectionReviewError:class SelectionReviewError extends Error{},reviewSelection:async()=>({success:true})},
     '@/lib/portal-download-stream':{trackCompletedPortalDownload},
     '@/lib/editor-workflow':{
       preparePortalDeliverables:async()=>available?[{name:'sample.JPG',driveFileId:'synthetic-photo'}]:[],

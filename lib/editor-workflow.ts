@@ -1596,50 +1596,6 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
   }
 }
 
-export async function reopenPhotoSelection(workspaceId: string, bookingId: string, actorId: string) {
-  const admin = adminClient()
-  const { data: job } = await admin
-    .from('editing_jobs')
-    .select('id,batch_id,status')
-    .eq('workspace_id', workspaceId)
-    .eq('booking_id', bookingId)
-    .maybeSingle()
-  if (!job) throw new Error('Editing job not found.')
-  const { data: selection } = await admin
-    .from('photo_selections')
-    .select('id,version')
-    .eq('workspace_id', workspaceId)
-    .eq('booking_id', bookingId)
-    .maybeSingle()
-  if (!selection) throw new Error('Photo selection not found.')
-  const reopenedAt = nowIso()
-  const { error } = await admin
-    .from('photo_selections')
-    .update({
-      status: 'OPEN',
-      client_status: 'Selection In Progress',
-      no_revision_acknowledged: false,
-      no_revision_acknowledged_at: null,
-      reopened_at: reopenedAt,
-      version: Number(selection.version || 1) + 1,
-      updated_at: reopenedAt,
-    })
-    .eq('id', selection.id)
-  if (error) throw new Error(error.message)
-  if (job.status !== 'DELIVERED') {
-    await admin
-      .from('editing_jobs')
-      .update({ status: 'WAITING_FOR_SELECTION', last_error: null, updated_at: reopenedAt })
-      .eq('id', job.id)
-  }
-  await admin.from('bookings').update({ raw_photo_status: 'Pending Review', raw_photo_approved_at: null }).eq('id', bookingId)
-  await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'SELECTION_REOPENED', {
-    bookingId,
-    batchId: job.batch_id,
-  })
-  return { success: true }
-}
-
 const ALLOWED_JOB_TRANSITIONS: Record<EditingJobStatus, EditingJobStatus[]> = {
   WAITING_FOR_SELECTION: [],
   READY_FOR_EDITING: ['DOWNLOADED', 'EDITING'],

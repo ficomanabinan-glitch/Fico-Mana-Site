@@ -30,7 +30,6 @@ import {
   recordPortalFirstDownload,
   reconcileBookingFolders,
   recordMatchReviews,
-  reopenPhotoSelection,
   resolveMatchReview,
   saveRawFile,
   setClientSelectionStatus,
@@ -61,6 +60,7 @@ import { rejectUntrustedMutation } from '@/lib/security/request-security'
 import { startRawUpload, completeRawUpload } from '@/lib/raw-upload-server'
 import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from '@/lib/raw-upload-contract'
 import { beginOnsitePhotoReset, continueOnsitePhotoReset } from '@/lib/onsite-photo-reset'
+import { reviewSelection, SelectionReviewError } from '@/lib/selection-review'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -550,7 +550,12 @@ async function handle(request: NextRequest, path: string[]) {
     if (path[0] === 'selections' && path[1] && path[2] === 'reopen' && method === 'POST') {
       const denied = requireCapability('admin')
       if (denied) return denied
-      return json(await reopenPhotoSelection(workspaceId, decodeURIComponent(path[1]), actorId))
+      const body = (await request.json().catch(() => ({}))) as { submittedAt?: unknown }
+      return json(await reviewSelection(workspaceId, actorId, decodeURIComponent(path[1]), {
+        action: 'Reopen',
+        notes: 'Reopened by the studio',
+        submittedAt: body.submittedAt,
+      }))
     }
     if (path[0] === 'selections' && path[1] && path[2] === 'status' && method === 'PATCH') {
       const denied = requireCapability('admin')
@@ -607,6 +612,7 @@ async function handle(request: NextRequest, path: string[]) {
     if (error instanceof PortalSelectionError) return json({ error: error.message, code: error.code, requestId }, error.status)
     if (error instanceof RawUploadError) return json({ error: error.message, requestId }, error.status)
     if (error instanceof GraduationWorkflowOnlyError) return json({ error: error.message, requestId }, 409)
+    if (error instanceof SelectionReviewError) return json({ error: error.message, requestId }, 409)
     console.error(`Editor workflow ${request.method} /${path.join('/')} [${requestId}]:`, error)
     return errorResponse(error, 'Editor workflow request failed.', requestId)
   }

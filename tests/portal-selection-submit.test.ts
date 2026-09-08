@@ -13,6 +13,7 @@ test('fresh devices can load the bare portal URL and legacy signed URLs without 
   const seenQuotas: string[][] = []
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     '@/lib/onsite-photo-reset': {},
+    '@/lib/selection-review': { SelectionReviewError: class SelectionReviewError extends Error {}, reviewSelection: async () => ({ success: true }) },
     "@/lib/portal-download-stream": {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/editor-workflow': f.workflow, '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},
@@ -376,6 +377,7 @@ test('production API exposes only safe selection errors with no-store, preserves
   t.after(() => { if (previous === undefined) delete testEnv.NODE_ENV; else testEnv.NODE_ENV = previous })
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     '@/lib/onsite-photo-reset': {},
+    '@/lib/selection-review': { SelectionReviewError: class SelectionReviewError extends Error {}, reviewSelection: async () => ({ success: true }) },
     "@/lib/portal-download-stream": {},
     'next/server': { NextResponse: { json: Response.json } }, archiver: {},
     '@/lib/editor-workflow': f.workflow, '@/lib/package-workflow': packageWorkflow, '@/lib/auth-api': {}, '@/lib/auth/workflow': {}, '@/lib/google-drive': {},

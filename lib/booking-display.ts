@@ -150,6 +150,7 @@ export function getRawPhotoWorkflowStatus(booking: Booking): RawPhotoWorkflowSta
   if (booking.editedPhotoLink) return 'delivered'
   if (booking.rawPhotoStatus === 'Approved') return 'approved'
   if (booking.rawPhotoStatus === 'Rejected') return 'rejected'
+  if (booking.rawPhotoStatus === 'Reopened') return 'awaiting_selection'
   if (booking.rawPhotoLink || booking.rawPhotoStatus === 'Pending Review') return 'pending_review'
   if (booking.driveLink) return 'awaiting_selection'
   if (RAW_PHOTO_ACTIVE_STATUSES.has(booking.bookingStatus)) return 'awaiting_gallery'

@@ -19,6 +19,7 @@ import {
   Clock,
   ChevronRight,
   List,
+  RotateCcw,
 } from 'lucide-react'
 import {
   adminCardHover,
@@ -188,6 +189,53 @@ export default function AdminRawPhotoQueue({
       const body = await response.json()
       if (!response.ok || body.emailErrors?.length) throw new Error(body.error || body.emailErrors.join(' · '))
       toast.success('Email sent', 'The client can reopen their portal from the email.')
+    } catch (error) {
+      toast.error('Email not sent', error instanceof Error ? error.message : 'Try: check email settings and retry.')
+    } finally { setActionLoading(false) }
+  }
+
+  const handleReopen = async (booking: Booking) => {
+    if (!window.confirm(`Reopen photo selection for ${booking.id}? The client will be notified and can submit a new selection.`)) return
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/editor-workflow/filtering/${booking.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'Reopen', notes: 'Reopened by the studio', submittedAt: booking.rawPhotoSubmittedAt }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || 'Could not reopen the selection.')
+      invalidateFilteringBookings()
+      invalidateEditorBatchCache()
+      setBookings((current) => current.map((item) => item.id === booking.id
+        ? { ...item, rawPhotoStatus: 'Reopened', rawPhotoNotes: undefined, rawPhotoApprovedAt: undefined }
+        : item))
+      setShowDetailModal(false)
+      setSelectedBooking(null)
+      if (Array.isArray(body.emailErrors) && body.emailErrors.length > 0) {
+        toast.warning('Selection reopened — email issue', body.emailErrors.join(' · '))
+      } else {
+        toast.success('Selection reopened', `${booking.id} is open for a new selection. Client notified.`)
+      }
+      void fetchQueue(true)
+    } catch (error) {
+      console.error(error)
+      toast.error('Reopen failed', error instanceof Error ? error.message : 'Could not reopen the selection. Try: sync the queue and try again.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const resendReopenEmail = async (booking: Booking) => {
+    setActionLoading(true)
+    try {
+      const response = await fetch(`/api/editor-workflow/filtering/${booking.id}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RetryReopenEmail', submittedAt: booking.rawPhotoSubmittedAt }),
+      })
+      const body = await response.json()
+      if (!response.ok || body.emailErrors?.length) throw new Error(body.error || body.emailErrors.join(' · '))
+      toast.success('Email sent', 'The client was notified that the portal is open again.')
     } catch (error) {
       toast.error('Email not sent', error instanceof Error ? error.message : 'Try: check email settings and retry.')
     } finally { setActionLoading(false) }
@@ -414,7 +462,29 @@ export default function AdminRawPhotoQueue({
                     </div>
                   )}
 
-                  {(status === 'Approved' || status === 'Rejected') && (
+                  {status === 'Approved' && (
+                    <button
+                      type="button"
+                      onClick={() => void handleReopen(booking)}
+                      disabled={actionLoading}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-control border border-amber-400/25 bg-amber-400/[0.07] py-2.5 text-caption font-semibold uppercase tracking-wider text-amber-200 transition hover:border-amber-300/45 hover:bg-amber-400/[0.12] disabled:opacity-40"
+                    >
+                      <RotateCcw className="size-3.5" /> Reopen
+                    </button>
+                  )}
+
+                  {status === 'Reopened' && (
+                    <button
+                      type="button"
+                      onClick={() => void resendReopenEmail(booking)}
+                      disabled={actionLoading}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-control border border-white/10 py-2.5 text-caption font-semibold uppercase tracking-wider text-white/65 transition hover:border-white/25 hover:text-white disabled:opacity-40"
+                    >
+                      Resend Email
+                    </button>
+                  )}
+
+                  {(status === 'Approved' || status === 'Rejected' || status === 'Reopened') && (
                     <button
                       type="button"
                       onClick={() => {
@@ -484,6 +554,26 @@ export default function AdminRawPhotoQueue({
                   onClick={() => resendRejection(selectedBooking)}
                   disabled={actionLoading}
                   className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider py-3"
+                >
+                  Resend Email
+                </button>
+              )}
+              {selectedBooking.rawPhotoStatus === 'Approved' && (
+                <button
+                  type="button"
+                  onClick={() => void handleReopen(selectedBooking)}
+                  disabled={actionLoading}
+                  className="flex-1 rounded-control border border-amber-400/25 bg-amber-400/[0.07] py-3 text-xs font-bold uppercase tracking-wider text-amber-200 hover:bg-amber-400/[0.12] disabled:opacity-40"
+                >
+                  Reopen
+                </button>
+              )}
+              {selectedBooking.rawPhotoStatus === 'Reopened' && (
+                <button
+                  type="button"
+                  onClick={() => void resendReopenEmail(selectedBooking)}
+                  disabled={actionLoading}
+                  className="flex-1 rounded-control border border-white/10 py-3 text-xs font-bold uppercase tracking-wider text-white/80 hover:bg-white/[0.03] disabled:opacity-40"
                 >
                   Resend Email
                 </button>
