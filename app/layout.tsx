@@ -3,6 +3,7 @@ import type { Viewport } from 'next'
 import { Geist, Geist_Mono, Cormorant_Garamond } from 'next/font/google'
 import { rootMetadata } from '@/lib/site-metadata'
 import './globals.css'
+import './console-motion.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({
