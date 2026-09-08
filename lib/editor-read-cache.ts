@@ -1,3 +1,5 @@
+import { ADMIN_QUERY_STALE_MS } from './admin-cache-policy'
+
 export type EditorBatchClient = {
   bookingId: string
   clientId: string
@@ -37,7 +39,7 @@ export type EditorQueueUiState = {
   packageFilter: string
 }
 
-const CACHE_FRESH_MS = 30_000
+const CACHE_FRESH_MS = ADMIN_QUERY_STALE_MS
 const SYNC_FRESH_MS = 60_000
 
 let batchCache: { data: EditorBatchSummary[]; cachedAt: number } | null = null
@@ -116,10 +118,12 @@ export async function fetchEditorBatches({
   }
 }
 
-export function invalidateEditorBatchCache(preserveUi = false) {
+export function invalidateEditorBatchCache(preserveUi = false, discardData = false) {
   cacheGeneration += 1
+  // Mutations make the snapshot stale, not unusable. Keep it painted until the
+  // replacement arrives; authentication changes pass discardData=true.
   if (batchCache) batchCache = { ...batchCache, cachedAt: 0 }
-  batchCache = null
+  if (discardData) batchCache = null
   batchRequest = null
   synchronizedBatchRequest = null
   lastSynchronizedAt = 0
