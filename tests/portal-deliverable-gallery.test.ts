@@ -11,67 +11,34 @@ const files = [1, 2].map(id => ({ id: String(id), fileName: `EDITED-${id}.JPG`, 
 function setup() {
   const hooks = componentHarness()
   const preview = { PhotoSelectButton: () => null, PortalPhotoPreview: () => null }
+  const PrivateImage = () => null
   const { default: Gallery } = loadTs<typeof import('../components/portal-deliverable-gallery.tsx')>(
-    'components/portal-deliverable-gallery.tsx', { react: hooks.react, '@/components/portal-photo-preview': preview })
-  return { preview, unmount: hooks.unmount, render: (photos = files) => hooks.render(() => Gallery({ files: photos })) }
+    'components/portal-deliverable-gallery.tsx', { react: hooks.react, './portal-photo-preview': preview, './portal-private-image': PrivateImage, './portal-workspace.module.css': {} })
+  return { preview, PrivateImage, unmount: hooks.unmount, render: (photos = files) => hooks.render(() => Gallery({ files: photos })) }
 }
 
-test('delivered photos open the existing preview in place, reuse protected image URLs, and keep the grid styling', t => {
-  const f = setup(); t.after(f.unmount)
-  let tree = f.render()
-  const tiles = elements(tree, el => el.type === f.preview.PhotoSelectButton)
-  assert.equal(tiles.length, 2)
-  assert.ok(tiles.every(tile => tile.props.locked === true), 'delivered photos never change selection choices')
-  assert.equal(elements(tree, el => el.type === 'a').length, 0, 'no new tab or download is triggered by previewing')
-  assert.match(elements(tree, el => el.type === 'article')[0].props.className, /hover:-translate-y-0.5/)
-  assert.match(elements(tree, el => el.type === 'div')[0].props.className, /grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4/)
-  const images = elements(tree, el => el.type === 'img')
-  assert.deepEqual(images.map(image => image.props.src), files.map(file => file.previewUrl))
-  assert.ok(images.every(image => image.props.loading === 'lazy' && image.props.decoding === 'async' && image.props.draggable === false))
-  tiles[0].props.onPreview(files[0]); tree = f.render()
-  let viewer = elements(tree, el => el.type === f.preview.PortalPhotoPreview)[0]
-  assert.equal(viewer.props.file, files[0])
-  viewer.props.onClose(); tree = f.render()
-  assert.equal(elements(tree, el => el.type === f.preview.PortalPhotoPreview).length, 0)
-  tiles[1].props.onPreview(files[1]); tree = f.render()
-  viewer = elements(tree, el => el.type === f.preview.PortalPhotoPreview)[0]
-  assert.equal(viewer.key, files[1].id, 'each photo mounts its own fresh zoom state')
-  assert.equal(viewer.props.file.previewUrl, files[1].previewUrl)
+test('published hero and filmstrip reuse private URLs and open the existing preview without selection or new tabs', t => {
+  const f=setup();t.after(f.unmount);let tree=f.render()
+  assert.equal(elements(tree,el=>el.type==='a').length,0)
+  const images=elements(tree,el=>el.type===f.PrivateImage)
+  assert.equal(images[0].props.src,files[0].previewUrl)
+  assert.deepEqual(images.slice(1).map(image=>image.props.src),files.map(file=>file.previewUrl))
+  const button=(name:string)=>elements(tree,el=>el.type==='button'&&el.props['aria-label']===name)[0]
+  button('View EDITED-2.JPG').props.onClick();tree=f.render()
+  assert.equal(button('View EDITED-2.JPG').props['aria-pressed'],true)
+  button('Preview EDITED-2.JPG').props.onClick();tree=f.render()
+  const viewer=elements(tree,el=>el.type===f.preview.PortalPhotoPreview)[0]
+  assert.equal(viewer.key,'2');assert.equal(viewer.props.file.previewUrl,files[1].previewUrl)
+  assert.equal(viewer.props.onToggleSelection,undefined)
+  viewer.props.onClose();tree=f.render()
+  assert.equal(elements(tree,el=>el.type===f.preview.PortalPhotoPreview).length,0)
 })
-
-test('delivered cards match selection card corners and have separate magnifying-glass preview buttons', t => {
-  const f = setup(); t.after(f.unmount)
-  let tree = f.render()
-  const cards = elements(tree, el => el.type === 'article')
-  assert.equal(cards.length, files.length)
-  for (const [index, card] of cards.entries()) {
-    assert.match(card.props.className, /overflow-hidden rounded-card border/)
-    const imageButton = elements(card, el => el.type === f.preview.PhotoSelectButton)[0]
-    assert.equal(elements(imageButton.props.children, el => el.type === 'button').length, 0, 'no nested buttons')
-    const previewButton = elements(card, el => el.type === 'button')[0]
-    assert.equal(previewButton.props['aria-label'], `Preview ${files[index].fileName}`)
-    assert.equal(previewButton.props.title, 'Preview photo')
-    assert.match(previewButton.props.className, /size-11.*rounded-control.*text-\[#C4CEFF\]/)
-    assert.equal(previewButton.props.children.type.displayName, 'ZoomIn')
-    const footer = elements(card, el => el.type === 'div' && el.props.className.includes('bg-[#1d1d1d]'))[0]
-    assert.match(footer.props.className, /gap-2.*p-2.5/)
-    previewButton.props.onClick(); tree = f.render()
-    const viewer = elements(tree, el => el.type === f.preview.PortalPhotoPreview)[0]
-    assert.equal(viewer.props.file.id, files[index].id)
-    viewer.props.onClose(); tree = f.render()
-  }
-})
-
-test('background updates remove a deleted delivered-photo preview and cannot reopen it later', t => {
-  const f = setup(); t.after(f.unmount)
-  let tree = f.render()
-  elements(tree, el => el.type === f.preview.PhotoSelectButton)[0].props.onPreview(files[0])
-  tree = f.render()
-  assert.equal(elements(tree, el => el.type === f.preview.PortalPhotoPreview).length, 1)
-  tree = f.render([])
-  assert.equal(elements(tree, el => el.type === f.preview.PortalPhotoPreview).length, 0)
-  tree = f.render()
-  assert.equal(elements(tree, el => el.type === f.preview.PortalPhotoPreview).length, 0)
+test('removed deliverables close the preview and do not reopen on subsequent refresh', t=>{
+  const f=setup();t.after(f.unmount);let tree=f.render()
+  elements(tree,el=>el.type==='button'&&el.props['aria-label']==='Preview EDITED-1.JPG')[0].props.onClick()
+  tree=f.render();assert.equal(elements(tree,el=>el.type===f.preview.PortalPhotoPreview).length,1)
+  tree=f.render([]);assert.equal(tree,null)
+  tree=f.render();assert.equal(elements(tree,el=>el.type===f.preview.PortalPhotoPreview).length,0)
 })
 
 test('delivered-photo tap, long press and keyboard preview never select or double-open a photo', t => {
@@ -111,5 +78,5 @@ test('the portal keeps Download All separate from delivered-photo previews', () 
 
 test('the portal expiry notice states the deadline without explaining preview behavior', () => {
   assert.equal(portalExpiryNotice({ days: 30, portalReadyEmailSentAt: null, expiresAt: null }),
-    'Your 30-day portal expiry begins when FICO MANA sends your portal-ready email.')
+    'Your 30-day portal access period begins when FICO MANA releases your final enhanced photographs. Selecting photos and receiving the portal-ready email do not start the countdown.')
 })

@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarDays, Download, ExternalLink, FileText, Package, WalletCards,
+  Download, ExternalLink, FileText,
 } from 'lucide-react'
 import PortalQrCode from '@/components/portal-qr-code'
-import PortalSidebar from '@/components/portal-sidebar'
+import PortalOverview from '@/components/portal-overview'
+import styles from '@/components/portal-workspace.module.css'
 import PortalDrivePhotos from '@/components/portal-drive-photos'
 import PortalExpiryNotice from '@/components/portal-expiry-notice'
 import PortalDeliverableGallery from '@/components/portal-deliverable-gallery'
@@ -59,7 +60,6 @@ export default function ClientPortalPage() {
   const [error, setError] = useState('')
   const [draftPricing, setDraftPricing] = useState<AddonPreview | null>(null)
   const [selectionProgress, setSelectionProgress] = useState<ClientSelectionProgress | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [driveAccess, setDriveAccess] = useState<{ publicId: string; url?: string; warning?: string } | null>(null)
   const [resetting, setResetting] = useState(false)
   const readSequence = useRef(0)
@@ -114,6 +114,7 @@ export default function ClientPortalPage() {
     galleryCount: data.galleryTotal,
     expiresAt: data.expiry?.expiresAt,
     portalReadyEmailSentAt: data.expiry?.portalReadyEmailSentAt,
+    deliverablesUploadedAt: data.expiry?.deliverablesUploadedAt,
   } : null, () => {
     readSequence.current++
     if (data?.selection) clearPortalDraft(portalDraftKey(publicId, data.selection.id, data.selection.reopenedAt, data.selection.includedLimit))
@@ -136,59 +137,24 @@ export default function ClientPortalPage() {
   if (error && !data) return <AccessMessage title="Portal unavailable" message={error} onRetry={() => void load(0)} />
   if (!data) return <AccessMessage title="Portal unavailable" message="This project could not be loaded. Try: refresh this page or ask FICO MANA staff to reopen your private portal link." onRetry={() => void load(0)} />
 
-  const selectedCount = selectionProgress?.selectedCount ?? data.selection?.selectedItems.filter(item => !item.extraEdit).length ?? 0
-  const includedLimit = selectionProgress?.includedLimit ?? data.selection?.includedLimit ?? 5
-
-  return (
-    <main className="client-portal client-portal-page min-h-screen overflow-x-clip bg-[#171717] text-body text-white">
-      <div className="w-full px-3 py-5 sm:px-5 sm:py-8 xl:px-6 2xl:px-8">
-        <header className="portal-mobile-header sticky top-0 z-30 -mx-3 mb-4 flex min-h-[5.75rem] items-center justify-between gap-4 border-b border-white/10 bg-[#171717]/95 px-3 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.2)] backdrop-blur-xl sm:-mx-5 sm:px-5 md:static md:mx-0 md:min-h-0 md:bg-transparent md:px-0 md:py-0 md:pb-4 md:shadow-none md:backdrop-blur-none xl:hidden">
-          <div className="min-w-0">
-            <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA</p>
-            <h1 className="mt-1 truncate text-2xl font-semibold tracking-heading">{data.booking.customerName}</h1>
-            <p className="mt-1 font-mono text-caption text-white/35">{data.booking.id}</p>
-          </div>
-          <div className="shrink-0 text-right"><p className="text-sm font-semibold text-[#C4CEFF]">{selectedCount} / {includedLimit}</p><p className="text-caption text-white/35">Selected</p></div>
-        </header>
-
-        {error ? <div className="mb-4 rounded-control border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200" role="alert">{error}</div> : null}
-        {data.warnings?.length ? <div className="mb-4 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-relaxed text-amber-100" role="status"><strong>Some project details are temporarily unavailable:</strong> {data.warnings.join(', ')}.</div> : null}
-
-        <div className={`grid min-w-0 gap-4 ${sidebarCollapsed ? 'xl:grid-cols-[3.5rem_minmax(0,1fr)] xl:gap-4 2xl:grid-cols-[3.5rem_minmax(0,1fr)] 2xl:gap-4' : 'xl:grid-cols-[minmax(250px,300px)_minmax(0,1fr)] xl:gap-5 2xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] 2xl:gap-6'}`}>
-          <PortalSidebar remaining={money(payment.remaining)} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}>
-            <PortalContext
-              data={data}
-              selectionProgress={selectionProgress}
-              addonAmount={addonAmount}
-              payment={payment}
-              selectionLocked={selectionLocked}
-            />
-          </PortalSidebar>
-
-          <section className="min-w-0 space-y-5">
-            {data.expiry ? <PortalExpiryNotice expiry={data.expiry} /> : null}
-            <ClientPhotoSelection
-              paymentSummary={{ packageAmount: data.booking.price, amountPaid: data.booking.amountPaid }}
-              publicId={publicId}
-              selection={data.selection}
-              gallery={data.gallery}
-              galleryTotal={data.galleryTotal}
-              loadingMore={loadingMore}
-              addons={data.addonCatalog}
-              projectStatus={stageLabel(data.editingStatus)}
-              onLoadMore={() => void load(data.gallery.length)}
-              onSubmitted={photos => { setDriveAccess({ publicId, ...photos }); return load(0) }}
-              onPricingChange={setDraftPricing}
-              onProgressChange={setSelectionProgress}
-            />
-            {data.selection?.status === 'SUBMITTED' && data.deliverables.length > 0 ? <PortalDrivePhotos key={publicId} publicId={publicId} initialUrl={driveAccess?.publicId === publicId ? driveAccess.url : undefined} warning={driveAccess?.publicId === publicId ? driveAccess.warning : undefined} /> : null}
+  return <main className="client-portal">
+    <ClientPhotoSelection
+      publicId={publicId} selection={data.selection} gallery={data.gallery} galleryTotal={data.galleryTotal}
+      loadingMore={loadingMore} addons={data.addonCatalog} projectStatus={stageLabel(data.editingStatus)}
+      paymentSummary={{ packageAmount: data.booking.price, amountPaid: data.booking.amountPaid }}
+      onLoadMore={() => void load(data.gallery.length)}
+      onSubmitted={photos => { setDriveAccess({ publicId, ...photos }); return load(0) }}
+      onPricingChange={setDraftPricing} onProgressChange={setSelectionProgress}
+      headerContent={<div className={styles.identity}>
+        <div className={styles.identityText}><p className={styles.brand}>FICO MANA Client Portal</p><div className={styles.clientLine}><p className={styles.clientName}>{data.booking.customerName}</p><span className={styles.metadata}>{data.booking.id}</span></div></div>
+        <PortalOverview><PortalContext data={data} selectionProgress={selectionProgress} addonAmount={addonAmount} payment={payment} selectionLocked={selectionLocked} />{data.expiry ? <PortalExpiryNotice expiry={data.expiry} /> : null}</PortalOverview>
+      </div>}
+      notices={<>{error ? <div className={styles.notice} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}{data.warnings?.length ? <div className={styles.notice} role="status">Some project details are temporarily unavailable: {data.warnings.join(', ')}.</div> : null}{data.expiry?.expiresAt ? <PortalExpiryNotice expiry={data.expiry} /> : null}</>}
+      footerContent={<div className="mt-8 space-y-6">{data.selection?.status === 'SUBMITTED' && data.deliverables.length > 0 ? <PortalDrivePhotos key={publicId} publicId={publicId} initialUrl={driveAccess?.publicId === publicId ? driveAccess.url : undefined} warning={driveAccess?.publicId === publicId ? driveAccess.warning : undefined} /> : null}
             {data.deliverables.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02]"><h2 className="text-card-title font-semibold tracking-heading">Final Deliverables</h2><div className="mt-4 flex flex-col gap-3 rounded-control border border-emerald-500/20 bg-emerald-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-emerald-200">Your Photos Are Ready</p><p className="mt-1 text-caption text-white/40">{data.deliverables.length} edited photo{data.deliverables.length === 1 ? '' : 's'}</p></div><a href={data.downloadAllUrl} className={`${portalPrimaryAction} inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-caption font-semibold uppercase`}><Download className="size-3.5" />Download All</a></div><PortalDeliverableGallery key={publicId} files={data.deliverables} /></section> : null}
-            {data.resources.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02]"><div className="flex items-center gap-2"><FileText className="size-4 text-[#C4CEFF]" /><h2 className="text-card-title font-semibold tracking-heading">Project Files &amp; Updates</h2></div><div className="mt-4 divide-y divide-white/[0.07] overflow-hidden rounded-control border border-white/[0.07]">{data.resources.map(resource => <div key={resource.id} className="p-4"><p className="text-caption font-semibold uppercase tracking-wider text-white/35">{resource.resource_type.replace(/_/g, ' ')}</p><p className="mt-1 text-sm font-semibold">{resource.title}</p>{resource.content ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/45">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="group mt-3 inline-flex items-center gap-1.5 rounded-control border border-transparent px-2 py-1.5 text-caption font-semibold uppercase text-[#C4CEFF] transition hover:border-[#C4CEFF]/20 hover:bg-[#C4CEFF]/[0.07] hover:text-white">Open Resource <ExternalLink className="size-3" /></a> : null}</div>)}</div></section> : null}
-          </section>
-        </div>
-      </div>
-    </main>
-  )
+            {data.resources.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02]"><div className="flex items-center gap-2"><FileText className="size-4 text-[#C4CEFF]" /><h2 className="text-card-title font-semibold tracking-heading">Project Files &amp; Updates</h2></div><div className="mt-4 divide-y divide-white/[0.07] overflow-hidden rounded-control border border-white/[0.07]">{data.resources.map(resource => <div key={resource.id} className="p-4"><p className="text-caption font-semibold uppercase tracking-wider text-white/35">{resource.resource_type.replace(/_/g, ' ')}</p><p className="mt-1 text-sm font-semibold">{resource.title}</p>{resource.content ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/45">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="group mt-3 inline-flex items-center gap-1.5 rounded-control border border-transparent px-2 py-1.5 text-caption font-semibold uppercase text-[#C4CEFF] transition hover:border-[#C4CEFF]/20 hover:bg-[#C4CEFF]/[0.07] hover:text-white">Open Resource <ExternalLink className="size-3" /></a> : null}</div>)}</div></section> : null}</div>}
+    />
+  </main>
 }
 
 function PortalContext({ data, selectionProgress, addonAmount, payment, selectionLocked }: {
@@ -201,13 +167,9 @@ function PortalContext({ data, selectionProgress, addonAmount, payment, selectio
   const selected = selectionProgress?.selectedCount ?? data.selection?.selectedItems.filter(item => !item.extraEdit).length ?? 0
   const limit = selectionProgress?.includedLimit ?? data.selection?.includedLimit ?? 5
   return <>
-    <div className="px-1 pb-2"><p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">FICO MANA Client Portal</p><h1 className="mt-2 break-words text-2xl font-semibold tracking-heading">{data.booking.customerName}</h1><p className="mt-1 font-mono text-caption text-white/35">{data.booking.id}</p></div>
-    <section className="rounded-card border border-white/10 bg-white/[0.025] p-4"><div><p className="text-caption font-semibold uppercase tracking-wider text-white/40">Enhanced Photo Selection</p><p className="mt-2 text-lg font-semibold text-[#C4CEFF]">{selected} / {limit} Selected</p></div>{selectionProgress?.editingPreference ? <div className="mt-3 border-t border-white/[0.07] pt-3"><p className="text-caption text-white/35">Editing Preference</p><p className="mt-1 text-caption font-semibold text-white/70">{selectionProgress.editingPreference}</p></div> : null}{selectionLocked ? <div className="mt-3 rounded-control border border-emerald-500/15 bg-emerald-500/[0.05] p-3 text-caption text-emerald-200"><p className="font-semibold">Selection submitted and locked</p>{data.selection?.submittedAt ? <p className="mt-1 text-emerald-100/55">{new Date(data.selection.submittedAt).toLocaleString('en-PH')}</p> : null}</div> : null}</section>
-    <section className="rounded-card border border-white/10 bg-white/[0.025] p-4"><div className="grid grid-cols-2 gap-4"><div className="min-w-0"><div className="flex items-center gap-2 text-white/40"><Package className="size-3.5 shrink-0" /><p className="text-caption font-semibold uppercase tracking-wider">Package</p></div><p className="mt-2 break-words text-sm font-semibold">{data.booking.packageName}</p><p className="mt-1 text-caption text-white/40">Booking {data.booking.bookingStatus}</p></div><div className="min-w-0"><div className="flex items-center gap-2 text-white/40"><CalendarDays className="size-3.5 shrink-0" /><p className="text-caption font-semibold uppercase tracking-wider">Shoot Day</p></div><p className="mt-2 break-words text-sm font-semibold">{data.booking.bookingDate}</p></div></div></section>
-    <InfoCard icon={WalletCards} label="Payment Summary"><dl className="space-y-3 text-caption tabular-nums"><Row label="Package" value={money(data.booking.price)} /><Row label="Extras" value={money(addonAmount)} /><Row label="Booking Total" value={money(payment.total)} /><Row label="Paid" value={money(data.booking.amountPaid)} accent="text-emerald-300" /><Row label="Remaining" value={money(payment.remaining)} accent="text-[#C4CEFF]" /><Row label="Status" value={data.booking.paymentStatus} /></dl></InfoCard>
-    <PortalQrCode compact portalUrl={data.shareUrl} customerName={data.booking.customerName} bookingId={data.booking.id} />
+    <section className={styles.overviewSection}><p className={styles.brand}>FICO MANA Client Portal</p><h2 className={styles.clientName}>{data.booking.customerName}</h2><p className={styles.metadata}>{data.booking.id}</p></section>
+    <section className={styles.overviewSection}><p className={styles.kicker}>Your session</p><dl><div className={styles.summaryRow}><dt>Package</dt><dd>{data.booking.packageName}</dd></div><div className={styles.summaryRow}><dt>Shoot day</dt><dd>{data.booking.bookingDate}</dd></div><div className={styles.summaryRow}><dt>Booking</dt><dd>{data.booking.bookingStatus}</dd></div><div className={styles.summaryRow}><dt>Portal state</dt><dd>{selectionLocked ? 'Selection submitted' : stageLabel(data.editingStatus)}</dd></div><div className={styles.summaryRow}><dt>Included photographs</dt><dd>{selected} / {limit}</dd></div>{selectionProgress?.editingPreference ? <div className={styles.summaryRow}><dt>Editing preference</dt><dd>{selectionProgress.editingPreference}</dd></div> : null}</dl></section>
+    <section className={styles.overviewSection}><p className={styles.kicker}>Payment details</p><dl>{[['Package', money(data.booking.price)], ['Extras', money(addonAmount)], ['Booking total', money(payment.total)], ['Paid', money(data.booking.amountPaid)], ['Remaining', money(payment.remaining)], ['Status', data.booking.paymentStatus]].map(([label,value]) => <div className={styles.summaryRow} key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>
+    <PortalQrCode compact className={styles.overviewQr} portalUrl={data.shareUrl} customerName={data.booking.customerName} bookingId={data.booking.id} />
   </>
 }
-
-function InfoCard({icon:Icon,label,children}:{icon:React.ComponentType<{className?:string}>;label:string;children:React.ReactNode}){return <div className="fico-card border border-white/10 bg-white/[0.02]"><div className="flex items-center gap-2 text-white/45"><Icon className="size-4"/><span className="text-caption font-semibold uppercase tracking-wider">{label}</span></div><div className="mt-4">{children}</div></div>}
-function Row({label,value,accent='text-white'}:{label:string;value:string;accent?:string}){return <div className="flex justify-between gap-4 border-b border-white/[0.06] pb-3 last:border-0 last:pb-0"><dt className="text-white/40">{label}</dt><dd className={`text-right font-semibold ${accent}`}>{value}</dd></div>}

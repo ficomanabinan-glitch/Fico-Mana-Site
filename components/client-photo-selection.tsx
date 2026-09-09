@@ -1,16 +1,23 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ImgHTMLAttributes } from 'react'
-import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Image as ImageIcon, Lock, Plus, ShoppingBag, ZoomIn } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, Lock } from 'lucide-react'
 
-import { PhotoSelectButton, PortalPhotoPreview } from '@/components/portal-photo-preview'
+import { PortalPhotoPreview } from '@/components/portal-photo-preview'
 import { availableSelectionStep, canVisitSelectionStep } from '@/lib/selection-step-navigation'
 import { calculateClientAddons, initialEditingPreference, portalPaymentSummary, type AddonPreview } from '@/lib/client-selection-summary'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import PortalPhotoContactSheet from '@/components/portal-photo-contact-sheet'
+import PortalPrintPicker from '@/components/portal-print-picker'
+import PortalAddonPicker from '@/components/portal-addon-picker'
+import PortalReview from '@/components/portal-review'
+import { useAdminToast } from '@/components/admin-toast-provider'
+import { addonPhotoError } from '@/lib/addon-photo-rules'
+import styles from '@/components/portal-workspace.module.css'
 import { clearPortalDraft, portalDraftKey, readPortalDraft, writePortalDraft, type PortalDraftChoices } from '@/lib/portal-selection-draft'
 
 export type ClientGalleryFile = { id: string; fileName: string; mimeType: string; previewUrl: string }
-export type ClientAddon = { id: string; name: string; description: string; price: number; pricingType: 'fixed' | 'per_photo' | 'per_piece'; maxQuantity: number }
+export type ClientAddon = { id: string; name: string; description: string; price: number; pricingType: 'fixed' | 'per_photo' | 'per_piece'; maxQuantity: number; photoLimit?: number }
 export type ClientSelection = {
   id: string
   status: 'OPEN' | 'SUBMITTED' | 'SUBMITTING' | 'COPY_FAILED'
@@ -24,7 +31,7 @@ export type ClientSelection = {
   selectedIds: string[]
   selectedItems: Array<{ fileId: string; preference: 'standard' | 'less' | 'raw'; extraEdit: boolean }>
   printAllocations: Array<{ category: PrintCategory; fileId: string; quantity: number; label: string }>
-  addonOrders: Array<{ addonId: string | null; name: string; quantity: number; photoCount: number; total: number }>
+  addonOrders: Array<{ addonId: string | null; name: string; quantity: number; photoCount: number; photoIds?: string[]; total: number }>
   totalAddonAmount: number
 }
 
@@ -76,6 +83,9 @@ export function ClientPhotoSelection({
   onSubmitted,
   onPricingChange,
   onProgressChange,
+  headerContent,
+  notices,
+  footerContent,
 }: {
   publicId: string
   selection: ClientSelection | null
@@ -89,7 +99,11 @@ export function ClientPhotoSelection({
   onSubmitted: (photos?: { url?: string; warning?: string }) => Promise<void>
   onPricingChange?: (summary: AddonPreview) => void
   onProgressChange?: (progress: ClientSelectionProgress) => void
+  headerContent?: ReactNode
+  notices?: ReactNode
+  footerContent?: ReactNode
 }) {
+  const toast = useAdminToast()
   const locked = selection?.status === 'SUBMITTED' || selection?.status === 'SUBMITTING'
   const includedLimit = Math.min(5, Math.max(0, selection?.includedLimit || 5))
   const initialItems = selection?.selectedItems || []
@@ -102,11 +116,26 @@ export function ClientPhotoSelection({
   const [printSelections, setPrintSelections] = useState<Partial<Record<PrintCategory, string>>>(() => Object.fromEntries((selection?.printAllocations || []).filter(item => item.category !== 'WALLET_SIZE').map((item) => [item.category, item.fileId])))
   const [walletSelections, setWalletSelections] = useState<string[]>(() => [...new Set((selection?.printAllocations || []).filter(item => item.category === 'WALLET_SIZE').map(item => item.fileId))])
   const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>(() => Object.fromEntries((selection?.addonOrders || []).filter((item) => item.addonId && item.name.toLowerCase() !== 'extra edit').map((item) => [String(item.addonId), item.quantity])))
+  const [addonPhotos, setAddonPhotos] = useState<Record<string, string[]>>(() => Object.fromEntries((selection?.addonOrders || []).filter(item => item.addonId).map(item => [String(item.addonId), item.photoIds || []])))
   const [acknowledged, setAcknowledged] = useState(Boolean(selection?.noRevisionAcknowledged))
   const [submitting, setSubmitting] = useState(false)
   // PINs are transient: never put them in the 15-minute draft or a URL.
   const [submissionPin, setSubmissionPin] = useState('')
   const [confirmationOpen, setConfirmationOpen] = useState(false)
+  const [readyPromptOpen, setReadyPromptOpen] = useState(false)
+  const readyPromptSeen = useRef(false)
+  const workspaceRoot = useRef<HTMLElement>(null)
+  const workspaceHeader = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const header = workspaceHeader.current
+    const root = workspaceRoot.current
+    if (!header || !root) return
+    const measure = () => root.style.setProperty('--portal-header-height', `${header.getBoundingClientRect().height}px`)
+    const observer = new ResizeObserver(measure)
+    observer.observe(header)
+    measure()
+    return () => observer.disconnect()
+  }, [])
   const confirmationTitle = useRef<HTMLHeadingElement>(null)
   useEffect(() => { setSubmissionPin('') }, [publicId, step, locked])
   const [message, setMessage] = useState('')
@@ -115,8 +144,8 @@ export function ClientPhotoSelection({
   const [draftFinished, setDraftFinished] = useState(false)
   const lastSavedDraft = useRef('')
   const draftKey = portalDraftKey(publicId, selection?.id || '', selection?.reopenedAt, includedLimit)
-  const draft = useMemo<PortalDraftChoices>(() => ({ included, extras, editingPreference, printSelections, walletSelections, addonQuantities, acknowledged, step }),
-    [included, extras, editingPreference, printSelections, walletSelections, addonQuantities, acknowledged, step])
+  const draft = useMemo<PortalDraftChoices>(() => ({ included, extras, editingPreference, printSelections, walletSelections, addonQuantities, addonPhotos, acknowledged, step }),
+    [included, extras, editingPreference, printSelections, walletSelections, addonQuantities, addonPhotos, acknowledged, step])
 
   useEffect(() => {
     if (!selection?.id) return
@@ -131,6 +160,7 @@ export function ClientPhotoSelection({
       printSelections: Object.fromEntries(selection.printAllocations.filter(item => item.category !== 'WALLET_SIZE').map(item => [item.category, item.fileId])),
       walletSelections: [...new Set(selection.printAllocations.filter(item => item.category === 'WALLET_SIZE').map(item => item.fileId))],
       addonQuantities: Object.fromEntries(selection.addonOrders.filter(item => item.addonId && item.name.toLowerCase() !== 'extra edit').map(item => [String(item.addonId), item.quantity])),
+      addonPhotos: Object.fromEntries(selection.addonOrders.filter(item => item.addonId).map(item => [String(item.addonId), item.photoIds || []])),
       acknowledged: selection.noRevisionAcknowledged,
       step: locked ? 'review' : 'photos',
     }
@@ -141,6 +171,7 @@ export function ClientPhotoSelection({
     setPrintSelections(choices.printSelections)
     setWalletSelections(choices.walletSelections)
     setAddonQuantities(choices.addonQuantities)
+    setAddonPhotos(choices.addonPhotos || {})
     setAcknowledged(choices.acknowledged)
     updateStep(locked ? choices.step : availableSelectionStep(choices.step,
       choices.included.length === includedLimit && Boolean(choices.editingPreference),
@@ -173,9 +204,17 @@ export function ClientPhotoSelection({
   const addonTypeCount = chosenAddonIds.length + (extras.length > 0 ? 1 : 0)
   const photosComplete = included.length === includedLimit && Boolean(editingPreference)
   const printsComplete = PRINTS.filter(item => item.category !== 'WALLET_SIZE').every((item) => included.includes(printSelections[item.category] || '')) && walletSelections.length >= 1 && walletSelections.length <= 4 && walletSelections.every(id => included.includes(id))
-  const canVisitStep = (target: Step) => canVisitSelectionStep(step, target, photosComplete, printsComplete, addonTypeCount <= 4, locked)
+  const addonsComplete = addonTypeCount <= 4 && chosenAddonIds.every(id => {
+    const addon = addons.find(item => item.id === id)
+    return Boolean(addon && !addonPhotoError(addon, addonPhotos[id] || [], [...included, ...extras]))
+  })
+  const canVisitStep = (target: Step) => canVisitSelectionStep(step, target, photosComplete, printsComplete, addonsComplete, locked)
   const setStep = (target: Step) => {
-    if (canVisitStep(target)) updateStep(target)
+    if (canVisitStep(target)) {
+      updateStep(target)
+      setMessage('')
+      workspaceRoot.current?.scrollIntoView({ block: 'start' })
+    }
   }
   const selectedAll = [...included, ...extras]
   const pricing = useMemo<AddonPreview>(() => locked ? {
@@ -197,7 +236,7 @@ export function ClientPhotoSelection({
       submittedAt: selection?.submittedAt,
     })
   }, [step, included.length, includedLimit, editingPreference, locked, selection?.submittedAt, onProgressChange])
-  const canSubmit = !locked && !draftFinished && Boolean(editingPreference) && included.length === includedLimit && printsComplete && acknowledged && addonTypeCount <= 4
+  const canSubmit = !locked && !draftFinished && Boolean(editingPreference) && included.length === includedLimit && printsComplete && acknowledged && addonsComplete
   const selectedPhoto = (id: string): ClientGalleryFile => galleryMap.get(id) || {
     id, fileName: 'Selected photo', mimeType: 'image/jpeg',
     previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(id)}?kind=gallery`,
@@ -209,10 +248,15 @@ export function ClientPhotoSelection({
   }, [gallery, galleryMap, activeFileId, included])
 
   const togglePhoto = (fileId: string) => {
-    if (locked) return
+    if (locked || submitting || draftFinished) return
     setMessage('')
+    if (included.includes(fileId) || extras.includes(fileId)) {
+      setAddonPhotos(current => Object.fromEntries(Object.entries(current).map(([id, photos]) => [id, photos.filter(photo => photo !== fileId)])))
+    }
     if (included.includes(fileId)) {
-      setIncluded((current) => current.filter((id) => id !== fileId))
+      // Keep ordered selection: the earliest extra fills a vacated included slot.
+      setIncluded([...included.filter(id => id !== fileId), ...extras.slice(0, 1)])
+      setExtras(extras.slice(1))
       setPrintSelections((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => id !== fileId)))
       setWalletSelections(current => current.filter(id => id !== fileId))
       return
@@ -223,6 +267,10 @@ export function ClientPhotoSelection({
     }
     if (included.length < includedLimit) {
       setIncluded((current) => [...current, fileId])
+      if (included.length + 1 === includedLimit && !readyPromptSeen.current && window.matchMedia('(max-width: 900px)').matches) {
+        readyPromptSeen.current = true
+        setReadyPromptOpen(true)
+      }
       return
     }
     if (!extraEditAddon) {
@@ -233,18 +281,24 @@ export function ClientPhotoSelection({
       setMessage('You may select up to four different add-on types.')
       return
     }
+    const extraLimit = Math.min(200, extraEditAddon.maxQuantity)
+    if (extras.length >= extraLimit) {
+      setMessage(`You may choose up to ${extraLimit} extra enhanced photos. Remove one before adding another.`)
+      return
+    }
     setExtras((current) => [...current, fileId])
   }
 
   const toggleAddon = (addon: ClientAddon) => {
-    if (locked) return
+    if (locked || submitting || draftFinished) return false
     const active = Boolean(addonQuantities[addon.id])
     if (!active && addonTypeCount >= 4) {
       setMessage('You may select up to four different add-on types, including Extra Edit.')
-      return
+      return false
     }
     setMessage('')
     setAddonQuantities((current) => ({ ...current, [addon.id]: active ? 0 : 1 }))
+    return true
   }
 
   const submit = async () => {
@@ -256,8 +310,8 @@ export function ClientPhotoSelection({
     setSubmitting(true)
     setMessage('')
     try {
-      const requestedAddons = chosenAddonIds.map((id) => ({ addonId: id, quantity: addonQuantities[id], photoCount: 0 }))
-      if (extras.length && extraEditAddon) requestedAddons.push({ addonId: extraEditAddon.id, quantity: extras.length, photoCount: extras.length })
+      const requestedAddons = chosenAddonIds.map((id) => ({ addonId: id, quantity: addonQuantities[id], photoCount: 0, photoIds: addonPhotos[id] || [] }))
+      if (extras.length && extraEditAddon) requestedAddons.push({ addonId: extraEditAddon.id, quantity: extras.length, photoCount: extras.length, photoIds: [] })
       const response = await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/selection`, {
         method: 'POST',
         credentials: 'include',
@@ -287,6 +341,8 @@ export function ClientPhotoSelection({
         if (body.code === 'RATE_LIMIT_UNAVAILABLE') throw new Error('Submission checks are temporarily unavailable. Try: wait a moment and submit again. Your choices have not been submitted.')
         throw new Error(body.error || 'Could not submit your selection. Try: wait a moment and submit again.')
       }
+      toast.success('Selection submitted', 'Your photographs and print choices are now with FICO MANA.')
+      updateStep('review')
       await onSubmitted({ url: body.allPhotosUrl, warning: body.allPhotosWarning })
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Selection submission failed.')
@@ -304,104 +360,46 @@ export function ClientPhotoSelection({
   }
 
   const nextStep: Step | null = step === 'photos' ? 'prints' : step === 'prints' ? 'addons' : step === 'addons' ? 'review' : null
-  const nextDisabled = step === 'photos' ? !photosComplete : step === 'prints' ? !printsComplete : step === 'addons' ? addonTypeCount > 4 : !canSubmit
-  const progressionHint = step === 'photos'
-    ? included.length === includedLimit ? editingPreference ? 'Ready to continue' : 'Choose an editing preference' : `${includedLimit - included.length} more needed`
-    : step === 'prints' ? printsComplete ? 'Prints assigned' : 'Finish the free print choices'
-      : step === 'addons' ? addonTypeCount > 4 ? 'Remove one add-on to continue' : 'Add-ons are optional'
-        : canSubmit ? 'Ready to submit' : 'Review and acknowledge the selection'
+  const nextDisabled = step === 'photos' ? !photosComplete : step === 'prints' ? !printsComplete : step === 'addons' ? !addonsComplete : !canSubmit
   const continueWorkflow = () => {
     if (nextDisabled) return
     if (nextStep) setStep(nextStep)
     else requestSubmission()
   }
 
-  if (!selection) return <div className="mt-5 rounded-card border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Photo selection is still being prepared for this booking.</div>
+  if (!selection) return <section className={styles.portal}><header className={styles.topbar}><div className={styles.shell}>{headerContent}</div></header><div className={styles.shell}>{notices}<p className={styles.empty}>Photo selection is still being prepared for this booking.</p>{footerContent}</div></section>
 
-  const selectionNavigation = <div className="portal-selection-steps sticky top-[5.75rem] z-20 mt-5 grid min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] gap-1 rounded-control border border-white/[0.08] bg-[#1d1d1d]/95 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur md:top-3 xl:top-6" aria-label="Selection steps">{STEPS.map((item, index) => {const completed=index<STEPS.findIndex(candidate=>candidate.id===step)||locked;return <button key={item.id} type="button" disabled={!canVisitStep(item.id)} onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined} className={`min-h-11 min-w-0 overflow-hidden rounded-control px-1 py-2 text-[0.625rem] font-semibold uppercase tracking-normal transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/60 disabled:cursor-not-allowed disabled:opacity-35 sm:px-2 sm:text-caption sm:tracking-wide ${step === item.id ? 'bg-primary text-white' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}><span className="hidden sm:inline">{completed ? '✓ ' : `${index + 1}. `}</span><span className="break-words">{item.label}</span></button>})}</div>
+  const selectionNavigation = <nav className={styles.navigation} aria-label="Selection workflow">{STEPS.map((item, index) => <button key={item.id} type="button" className={styles.step} disabled={!canVisitStep(item.id)} onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined}><small>{String(index + 1).padStart(2, '0')}</small><span>{item.label.toUpperCase()}</span></button>)}</nav>
 
-  return <section className="w-full min-w-0 max-w-full rounded-card border border-white/10 bg-white/[0.02] p-3 sm:p-4 lg:p-5">
-    <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] md:items-start xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(440px,640px)]">
-    <div className="min-w-0">
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <div><div className="flex items-center gap-2"><ImageIcon className="size-4 text-[#C4CEFF]"/><h2 className="text-card-title font-semibold tracking-heading">Enhanced Photo Selection</h2></div><p className="mt-2 max-w-2xl text-xs leading-relaxed text-white/45">Choose {includedLimit} included photos. After those are filled, any additional photo you select is automatically priced as an Extra Edit.</p></div>
-      <div className={`w-full shrink-0 rounded-control border px-4 py-2.5 text-center lg:w-auto ${locked ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-[#C4CEFF]/20 bg-[#C4CEFF]/5'}`}><p className="text-caption uppercase tracking-wider text-white/35">Included Photos</p><p className={`mt-1 text-sm font-bold ${locked ? 'text-emerald-300' : 'text-[#C4CEFF]'}`}>{included.length} / {includedLimit} selected</p>{extras.length ? <p className="mt-1 text-caption text-amber-300">+ {extras.length} Extra Edit</p> : null}</div>
-    </div>
-
-    {locked ? <div className="mt-4 flex items-start gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="mt-0.5 size-3.5 shrink-0"/><span>Selection submitted and locked{selection.submittedAt ? ` · ${new Date(selection.submittedAt).toLocaleString('en-PH')}` : ''}. Status: {selection.clientStatus}.</span></div> : null}
+  return <section ref={workspaceRoot} className={styles.portal}>
+    <header ref={workspaceHeader} className={styles.topbar}><div className={styles.shell}>{headerContent}{selectionNavigation}</div></header>
+    <div className={`${styles.shell} ${styles.main}`}>
+      {notices}
+          {locked ? <div className="mt-4 flex items-start gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="mt-0.5 size-3.5 shrink-0"/><span>Selection submitted and locked{selection.submittedAt ? ` · ${new Date(selection.submittedAt).toLocaleString('en-PH')}` : ''}. Status: {projectStatus || selection.clientStatus}.</span></div> : null}
     {selection.status === 'COPY_FAILED' ? <div className="mt-4 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-200">Your previous submission could not be completed. Try: review your choices and submit again. If a photo is unavailable, ask the studio to restore the original first.</div> : null}
     {message ? <div role="alert" className="mt-4 flex items-start gap-2 rounded-control border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200"><AlertTriangle className="mt-0.5 size-3.5 shrink-0"/>{message}</div> : null}
 
-    <label className="mt-5 block rounded-xl border border-white/[0.08] bg-black/10 p-4">
-      <span className="text-caption font-semibold uppercase tracking-wider text-[#C4CEFF]">Editing preference</span>
-      <select value={editingPreference} disabled={locked || submitting} onChange={(event) => setEditingPreference(event.target.value as Preference)} className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#252525] px-3 text-xs text-white outline-none focus:border-[#C4CEFF]/50">
-        {!editingPreference ? <option value="">{locked ? 'Previously saved mixed preferences' : 'Choose one editing preference…'}</option> : null}
-        {PREFERENCES.map((preference) => <option key={preference.id} value={preference.id}>{preference.label}</option>)}
-      </select>
-      <span className="mt-2 block text-caption text-white/35">{locked && !editingPreference ? 'Your previously submitted preferences are preserved.' : 'Applies to all included photos and Extra Edits.'}</span>
-      {editingPreference === 'standard' ? <span className="mt-1 block text-caption text-white/25">See our posted samples on our Social Media.</span> : null}
-    </label>
 
-{selectionNavigation}
-
-    {step === 'photos' ? <div className="mt-5">
-      {gallery.length === 0 ? <div className="rounded-card border border-white/[0.07] bg-black/10 p-8 text-center text-xs text-white/35">Your studio gallery is still being prepared.</div> : <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">{gallery.map((file) => {
-        const includedPhoto = included.includes(file.id)
-        const extraPhoto = extras.includes(file.id)
-        const active = includedPhoto || extraPhoto
-        return <article key={file.id} className={`group relative overflow-hidden rounded-card border transition duration-200 ${includedPhoto ? 'border-[#C4CEFF] ring-1 ring-[#C4CEFF]/25' : extraPhoto ? 'border-amber-400/70 ring-1 ring-amber-400/20' : activeFile?.id === file.id ? 'border-white/30' : 'border-white/10 hover:-translate-y-0.5 hover:border-[#C4CEFF]/40'}`}>
-          <PhotoSelectButton file={file} locked={locked || submitting} onDesktopPreview={() => setActiveFileId(file.id)} onSelect={() => { setActiveFileId(file.id); togglePhoto(file.id) }} onPreview={() => setPreviewFile(file)}>
-            <div className="aspect-[4/5] overflow-hidden bg-black/20">
-              {/* Authenticated portal previews intentionally bypass the public Next image optimizer. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={file.previewUrl} alt={file.fileName} draggable={false} loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]"/>
-            </div>
-            <div className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/75 px-2 py-1 text-caption font-semibold uppercase backdrop-blur">{includedPhoto ? 'Included' : extraPhoto ? `Extra ${money(extraEditAddon?.price || 0)}` : included.length < includedLimit ? 'Select' : `Extra ${money(extraEditAddon?.price || 0)}`}</div>
-          </PhotoSelectButton>
-          <button type="button" disabled={locked || submitting} onClick={() => { setActiveFileId(file.id); togglePhoto(file.id) }} aria-label={`${active ? 'Deselect' : 'Select'} ${file.fileName}`} aria-pressed={active} className={`absolute right-2 top-2 flex md:hidden size-11 cursor-pointer items-center justify-center rounded-full border shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-default ${active ? extraPhoto ? 'border-amber-200 bg-amber-300 text-black' : 'border-white bg-[#C4CEFF] text-black' : 'border-white/25 bg-black/70 text-white hover:border-white/60'}`}>{active ? <Check className="size-4"/> : <Plus className="size-4"/>}</button>
-          <div className="flex items-center justify-between gap-2 bg-[#1d1d1d] p-2.5"><p className="min-w-0 truncate text-caption text-white/50">{file.fileName}</p><button type="button" onClick={() => setPreviewFile(file)} aria-label={`Zoom ${file.fileName}`} title="Open full photo preview" className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-control border border-white/10 text-[#C4CEFF] transition hover:border-[#C4CEFF]/40 hover:bg-white/5"><ZoomIn className="size-4"/></button></div>
-        </article>
-      })}</div>}
-      {gallery.length < galleryTotal ? <button onClick={onLoadMore} disabled={loadingMore} className="mt-4 w-full cursor-pointer rounded-lg border border-white/10 px-4 py-3 text-caption font-semibold uppercase text-white/60 transition hover:border-[#C4CEFF]/35 hover:bg-[#C4CEFF]/[0.05] disabled:cursor-not-allowed disabled:opacity-40">{loadingMore ? 'Loading more…' : `Load More Photos (${gallery.length} / ${galleryTotal})`}</button> : null}
-      <StepFooter back={null} next="prints" onStep={setStep} nextDisabled={!locked && !photosComplete} nextHint={included.length !== includedLimit ? `Select ${includedLimit - included.length} more included photo${includedLimit - included.length === 1 ? '' : 's'}.` : !editingPreference ? 'Choose an editing preference.' : extras.length ? `${extras.length} extra edit${extras.length === 1 ? '' : 's'} added.` : 'Included selection complete.'}/>
-    </div> : null}
-
-    {step === 'prints' ? <div className="mt-5 space-y-4">
-      <div className="rounded-xl border border-[#C4CEFF]/15 bg-[#C4CEFF]/[0.04] p-4 text-xs leading-relaxed text-white/50">Allocate each free print from your {includedLimit} included enhanced photos. The same photo may be used in more than one category.</div>
-      {PRINTS.map((print) => {
-        if (print.category === 'WALLET_SIZE') return <div key={print.category} className="block rounded-xl border border-white/[0.08] bg-black/10 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-caption font-semibold uppercase tracking-wider text-[#C4CEFF]">WALLET SIZE — UP TO 4 PHOTOS / FREE</p><p className="mt-1 text-caption text-white/35">Choose one to four different included photos.</p></div><span className="rounded-full border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.06] px-3 py-1 text-caption font-semibold text-[#C4CEFF]">{walletSelections.length} / 4 selected</span></div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">{included.map((id, index) => {const file=selectedPhoto(id);const active=walletSelections.includes(id);return <button key={id} type="button" disabled={locked || submitting || included.length !== includedLimit} onClick={() => setWalletSelections(current => active ? current.filter(value => value !== id) : current.length < 4 ? [...current, id] : current)} aria-label={`${active ? 'Remove' : 'Use'} ${file.fileName} ${active ? 'from' : 'for'} wallet prints`} aria-pressed={active} className={`group relative overflow-hidden rounded-control border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/60 disabled:cursor-default disabled:opacity-50 ${active?'border-[#C4CEFF] ring-1 ring-[#C4CEFF]/20':'border-white/10 hover:border-[#C4CEFF]/35'}`}><PrivatePortalImage src={file.previewUrl} alt={file.fileName} width={120} height={150} loading="lazy" decoding="async" className="aspect-[4/5] w-full object-cover"/><span className="block truncate bg-[#1d1d1d] px-2 py-2 text-caption text-white/50">{index+1}. {file.fileName}</span>{active?<span className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-full bg-[#C4CEFF] text-black"><Check className="size-4"/></span>:null}</button>})}</div>
+      {!locked && selection.reopenedAt ? <div className={styles.notice} role="status">Your portal has been reopened. Review your choices and submit your selection again.</div> : null}
+      {step === 'photos' ? <>
+        <div className={styles.heading}><div className={styles.headingCopy}><p className={styles.kicker}>01 · Your photographs</p><h1>Choose the photographs that feel most like you.</h1><p className={styles.description}>Select {includedLimit} included photographs for professional enhancement.{extraEditAddon ? ` You may keep choosing more for ${money(extraEditAddon.price)} per additional enhanced photo.` : ''}</p></div>
+          <label className={styles.preference}><span className={styles.label}>Editing preference</span><select className={styles.select} value={editingPreference} disabled={locked || submitting || draftFinished} onChange={event => setEditingPreference(event.target.value as Preference)}>{!editingPreference ? <option value="">{locked ? 'Previously saved mixed preferences' : 'Choose one editing preference…'}</option> : null}{PREFERENCES.map(preference => <option key={preference.id} value={preference.id}>{preference.label}</option>)}</select><span className={styles.note}>Standard enhancement follows FICO MANA’s published editing samples.</span></label>
         </div>
-        const fileId = printSelections[print.category]
-        const file = fileId ? selectedPhoto(fileId) : null
-        return <div key={print.category} className="block rounded-xl border border-white/[0.08] bg-black/10 p-4">
-          <label htmlFor={`print-${print.category}`} className="text-caption font-semibold uppercase tracking-wider text-[#C4CEFF]">{print.label}</label>
-          <p className="mt-1 text-caption text-white/35">Choose {print.quantity} cop{print.quantity === 1 ? 'y' : 'ies'}.</p>
-          <select id={`print-${print.category}`} disabled={locked || submitting || included.length !== includedLimit} value={fileId || ''} onChange={(event) => setPrintSelections((current) => ({ ...current, [print.category]: event.target.value }))} className="mt-3 h-11 w-full rounded-lg border border-white/10 bg-[#252525] px-3 text-xs text-white outline-none focus:border-[#C4CEFF]/50">
-            <option value="">Choose an included photo…</option>{included.map((id, index) => <option key={id} value={id}>Photo {index + 1} · {galleryMap.get(id)?.fileName || id}</option>)}
-          </select>
-          {file ? <button type="button" onClick={() => setPreviewFile(file)} aria-label={`Preview ${print.label}: ${file.fileName}`} className="mt-3 flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-black/10 p-2 text-left transition hover:border-[#C4CEFF]/40">
-            {/* Authenticated images stay behind the private portal endpoint. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={file.previewUrl} alt={`Selected for ${print.label}`} width={72} height={90} loading="lazy" decoding="async" className="h-[90px] w-[72px] shrink-0 rounded object-contain"/>
-            <span className="min-w-0"><span className="block break-all text-caption text-white/65">{file.fileName}</span><span className="mt-1 flex items-center gap-1 text-caption text-[#C4CEFF]"><ZoomIn className="size-3"/>View photo · {print.quantity} cop{print.quantity === 1 ? 'y' : 'ies'}</span></span>
-          </button> : null}
-        </div>
-      })}
-      <StepFooter back="photos" next="addons" onStep={setStep} nextDisabled={!printsComplete} nextHint={printsComplete ? 'All free prints allocated.' : 'Choose a photo for every free print category.'}/>
-    </div> : null}
+        <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
+      </> : null}
+      {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
 
-    {step === 'addons' ? <div className="mt-5"><div className="flex flex-col gap-2 rounded-xl border border-white/[0.08] bg-black/10 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-semibold">Optional paid add-ons</p><p className="mt-1 text-caption text-white/35">Choose up to four different add-on types. Zero is okay.</p></div><p className="text-sm font-bold text-[#C4CEFF]">{addonTypeCount} / 4 types</p></div>{extras.length && extraEditAddon ? <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-4"><div><p className="text-xs font-semibold text-amber-200">Extra Edit</p><p className="mt-1 text-caption text-white/40">{extras.length} additional photo{extras.length === 1 ? '' : 's'} × {money(extraEditAddon.price)}</p></div><p className="font-bold text-amber-200">{money(extras.length * extraEditAddon.price)}</p></div> : null}<div className="mt-4 grid gap-3 sm:grid-cols-2">{optionalAddons.map((addon) => {const quantity = addonQuantities[addon.id] || 0;const active = quantity > 0;return <div key={addon.id} className={`rounded-xl border p-4 transition ${active ? 'border-[#C4CEFF]/45 bg-[#C4CEFF]/[0.06]' : 'border-white/[0.08] bg-black/10'}`}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{addon.name}</p><p className="mt-1 text-caption leading-relaxed text-white/35">{addon.description}</p></div><button type="button" disabled={locked} onClick={() => toggleAddon(addon)} aria-pressed={active} className={`flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border transition disabled:cursor-default ${active ? 'border-[#C4CEFF] bg-[#C4CEFF] text-black' : 'border-white/15 text-white/40 hover:border-white/40 hover:text-white'}`}>{active ? <Check className="size-4"/> : <Plus className="size-4"/>}</button></div><div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-caption uppercase tracking-wider text-white/30">{addon.pricingType.replace('_', ' ')}</p><p className="mt-1 font-bold text-[#C4CEFF]">{money(addon.price)}{addon.pricingType === 'per_piece' ? ' each' : ''}</p></div>{active && addon.maxQuantity > 1 ? <label className="text-right"><span className="block text-caption font-semibold uppercase text-white/30">Quantity</span><input type="number" disabled={locked || submitting} min={1} max={addon.maxQuantity} value={quantity} onChange={(event) => setAddonQuantities((current) => ({ ...current, [addon.id]: Math.min(addon.maxQuantity, Math.max(1, Number(event.target.value) || 1)) }))} className="mt-1 h-9 w-20 rounded-lg border border-white/10 bg-[#252525] px-2 text-center text-xs outline-none focus:border-[#C4CEFF]/50"/></label> : null}</div></div>})}</div><div className="mt-5 flex items-center justify-between border-t border-white/[0.08] pt-4"><span className="text-xs text-white/45">Add-on total</span><strong className="text-xl text-[#C4CEFF]">{money(addonTotal)}</strong></div><StepFooter back="prints" next="review" onStep={setStep} nextDisabled={addonTypeCount > 4} nextHint={addonTypeCount > 4 ? 'Remove an add-on to continue.' : 'You can continue without paid add-ons.'}/></div> : null}
+      {step === 'addons' ? <PortalAddonPicker addons={optionalAddons} files={selectedAll.map(selectedPhoto)} quantities={addonQuantities} assignments={addonPhotos} locked={locked || submitting || draftFinished} typeCount={addonTypeCount} extraCount={extras.length} extraPrice={extraEditAddon?.price || 0} total={addonTotal} complete={addonsComplete} onToggle={toggleAddon} onQuantity={(id, quantity) => setAddonQuantities(current => ({ ...current, [id]: quantity }))} onPhotos={(id, photos) => setAddonPhotos(current => ({ ...current, [id]: photos }))} onWarning={setMessage} onBack={() => setStep('prints')} onContinue={() => setStep('review')} /> : null}
 
-    {step === 'review' ? <div className="mt-5 space-y-4"><div className="grid gap-3 sm:grid-cols-3"><Summary label="Included edits" value={String(included.length)}/><Summary label="Extra edits" value={String(extras.length)}/><Summary label="Add-on total" value={money(addonTotal)}/></div><div className="rounded-xl border border-white/[0.08] bg-black/10 p-4"><p className="text-caption font-semibold uppercase tracking-wider text-white/35">Editing preference</p><p className="mt-2 text-xs text-[#C4CEFF]">{PREFERENCES.find((item) => item.id === editingPreference)?.label || (locked ? 'Previously saved mixed preferences' : 'Choose one editing preference above.')}</p><div className="mt-3 space-y-2">{selectedAll.map((id, index) => <div key={id} className="flex items-center justify-between gap-3 border-b border-white/[0.05] pb-2 text-caption last:border-0 last:pb-0"><span className="min-w-0 truncate">{index + 1}. {galleryMap.get(id)?.fileName || id}</span><span className={extras.includes(id) ? 'shrink-0 text-amber-300' : 'shrink-0 text-[#C4CEFF]'}>{extras.includes(id) ? 'Extra · ' : ''}{!editingPreference && locked ? PREFERENCES.find((item) => item.id === initialItems.find((photo) => photo.fileId === id)?.preference)?.label : ''}</span></div>)}</div></div><div className="rounded-xl border border-white/[0.08] bg-black/10 p-4"><p className="text-caption font-semibold uppercase tracking-wider text-white/35">Free print selections</p><div className="mt-3 space-y-2 text-caption text-white/60">{PRINTS.filter(item=>item.category!=='WALLET_SIZE').map(item=><p key={item.category}>{item.label}: <span className="text-white">{galleryMap.get(printSelections[item.category]||'')?.fileName||'Not selected'}</span></p>)}<p>Wallet Size: <span className="text-white">{walletSelections.length ? walletSelections.map(id=>galleryMap.get(id)?.fileName||id).join(', ') : 'Not selected'}</span></p></div></div><div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] p-4"><div className="flex gap-3"><AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-300"/><div><p className="text-xs font-bold uppercase tracking-wider text-amber-200">Important Note</p><p className="mt-2 text-xs leading-relaxed text-white/65">Once the enhanced copies have been released, we will no longer entertain any re-edit concerns or revision requests.</p></div></div><label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-black/15 p-3"><input type="checkbox" checked={acknowledged} disabled={locked} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5 size-4 accent-[#6678FF]"/><span className="text-caption leading-relaxed text-white/65">I have reviewed my photos, editing preferences, free print allocations, and paid add-ons. I understand and acknowledge the no-revision policy above.</span></label></div>{locked ? <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 text-xs text-emerald-200"><CheckCircle2 className="size-4"/>Your final selection has been submitted. Duplicate submission is blocked.</div> : <div className="flex flex-col gap-3 border-t border-white/[0.08] pt-5 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={() => setStep('addons')} className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/10 px-4 py-3 text-caption font-semibold uppercase text-white/55 transition hover:border-white/30 hover:text-white"><ChevronLeft className="size-3.5"/>Back</button><button type="button" onClick={requestSubmission} disabled={!canSubmit || submitting} className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-caption font-semibold uppercase tracking-wider text-white transition hover:-translate-y-0.5 hover:bg-[#0300a8] hover:shadow-[0_10px_28px_rgba(5,0,208,0.35)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0 disabled:hover:shadow-none"><ShoppingBag className="size-4"/>{submitting ? 'Submitting…' : 'Submit Final Selection'}</button></div>}</div> : null}
+      {step === 'review' ? <PortalReview included={included} extras={extras} preference={PREFERENCES.find(item => item.id === editingPreference)?.label || 'Previously saved mixed preferences'} printSelections={printSelections} walletSelections={walletSelections} orders={pricing.lines.map(order => ({ ...order, photoIds: addonPhotos[order.id] || [] }))} selectedPhoto={selectedPhoto} packageAmount={paymentSummary.packageAmount} amountPaid={paymentSummary.amountPaid} total={payment.total} remaining={payment.remaining} acknowledged={acknowledged} locked={locked || draftFinished} submitting={submitting} canSubmit={canSubmit} onAcknowledge={setAcknowledged} onBack={() => setStep('addons')} onSubmit={requestSubmission} /> : null}
+      {footerContent}
     </div>
-    <aside className="sticky top-4 hidden min-w-0 overflow-hidden rounded-card border border-white/10 bg-[#1b1b1b] md:block">
-      <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] px-4 py-3"><div><p className="text-caption font-semibold uppercase tracking-wider text-white/30">Project status</p><p className="mt-1 text-caption font-semibold text-[#C4CEFF]">{projectStatus || selection.clientStatus}</p></div><span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-caption text-white/45">{step.toUpperCase()}</span></div>
-      {activeFile ? <><button type="button" onClick={() => setPreviewFile(activeFile)} className="group block w-full cursor-zoom-in bg-black/20 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C4CEFF]/60"><span className="block overflow-hidden rounded-control"><PrivatePortalImage src={activeFile.previewUrl} alt={activeFile.fileName} draggable={false} decoding="async" className="max-h-[62dvh] w-full object-contain transition duration-200 group-hover:scale-[1.01]"/></span></button><div className="border-t border-white/[0.08] p-4"><p className="truncate text-xs font-semibold">{activeFile.fileName}</p><p className="mt-1 text-caption text-white/40">{included.includes(activeFile.id) ? 'Included Photo' : extras.includes(activeFile.id) ? `Extra Edit · ${money(extraEditAddon?.price || 0)}` : 'Not selected'}</p>{!locked?<button type="button" onClick={() => togglePhoto(activeFile.id)} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-white/10 bg-white/[0.04] text-caption font-semibold text-white/70 transition hover:border-[#C4CEFF]/35 hover:text-white">{selectedAll.includes(activeFile.id)?<Check className="size-3.5"/>:<Plus className="size-3.5"/>}{selectedAll.includes(activeFile.id)?'Deselect Photo':'Select Photo'}</button>:null}</div></> : <div className="grid min-h-72 place-items-center p-8 text-center"><div><ImageIcon className="mx-auto size-8 text-white/15"/><p className="mt-3 text-xs text-white/40">Select a photo to preview it here.</p></div></div>}
-      <div className="border-t border-white/[0.08] p-4"><div className="flex items-center justify-between gap-3 text-caption"><span className="text-white/45">{included.length} / {includedLimit} selected</span><span className="text-right text-white/35">{progressionHint}</span></div><button type="button" onClick={continueWorkflow} disabled={nextDisabled || locked || submitting} className="mt-3 inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-control bg-primary px-4 text-caption font-semibold uppercase tracking-wider text-white transition hover:bg-[#0300a8] disabled:cursor-not-allowed disabled:opacity-35">{step==='review'?<ShoppingBag className="size-4"/>:null}{locked?'Submitted':step==='review'?'Submit Selection':<>Continue<ChevronRight className="size-4"/></>}</button></div>
-    </aside>
-    </div>
+    <Sheet open={readyPromptOpen} onOpenChange={setReadyPromptOpen}>
+      {readyPromptOpen ? <SheetContent side="bottom" className="client-portal max-h-[85dvh] gap-0 rounded-t-2xl border-white/15 bg-[#222] text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
+        <SheetHeader className="p-6 pr-12"><SheetTitle className="text-3xl text-white">Your {includedLimit} included photos are complete.</SheetTitle><SheetDescription className="mt-3 text-sm leading-relaxed text-white/65">You may continue now or keep selecting additional enhanced photos.{extraEditAddon ? ` Additional enhanced photos are ${money(extraEditAddon.price)} each.` : ''}</SheetDescription></SheetHeader>
+        <div className="grid grid-cols-2 gap-3 p-6 pt-0"><button type="button" className={styles.secondary} onClick={() => setReadyPromptOpen(false)}>Keep Selecting</button><button type="button" className={styles.primary} disabled={!photosComplete} onClick={() => { setReadyPromptOpen(false); setStep('prints') }}>Continue →</button></div>
+      </SheetContent> : null}
+    </Sheet>
     <Sheet open={confirmationOpen} onOpenChange={(next) => { if (!submitting) { setConfirmationOpen(next); if (!next) setSubmissionPin('') } }}>
       {confirmationOpen ? <SheetContent side="bottom" initialFocus={confirmationTitle} showCloseButton={!submitting} className="client-portal max-h-[90dvh] gap-0 overflow-hidden rounded-t-card border-white/15 bg-[#171717] text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
         <SheetHeader className="shrink-0 border-b border-white/10 p-4 pr-14">
@@ -424,20 +422,7 @@ export function ClientPhotoSelection({
         </div>
       </SheetContent> : null}
     </Sheet>
-    {previewFile ? <PortalPhotoPreview key={previewFile.id} file={previewFile} files={gallery} selected={selectedAll.includes(previewFile.id)} locked={locked || submitting} onToggleSelection={() => togglePhoto(previewFile.id)} onFileChange={setPreviewFile} onClose={() => setPreviewFile(null)}/> : null}
+
+    {previewFile ? <PortalPhotoPreview key={previewFile.id} file={previewFile} files={gallery} onFileChange={setPreviewFile} onClose={() => setPreviewFile(null)} /> : null}
   </section>
-}
-
-function StepFooter({ back, next, onStep, nextDisabled, nextHint }: { back: Step | null; next: Step; onStep: (step: Step) => void; nextDisabled: boolean; nextHint: string }) {
-  return <div className="mt-5 flex flex-col gap-3 border-t border-white/[0.08] pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-caption text-white/35">{nextHint}</p><div className="flex gap-2">{back ? <button type="button" onClick={() => onStep(back)} className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-lg border border-white/10 px-4 py-2.5 text-caption font-semibold uppercase text-white/55 transition hover:border-white/30 hover:text-white"><ChevronLeft className="size-3.5"/>Back</button> : null}<button type="button" disabled={nextDisabled} onClick={() => onStep(next)} className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-lg bg-primary px-4 py-2.5 text-caption font-semibold uppercase text-white transition hover:bg-[#0300a8] disabled:cursor-not-allowed disabled:opacity-35">Continue<ChevronRight className="size-3.5"/></button></div></div>
-}
-
-function Summary({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl border border-white/[0.08] bg-black/10 p-4"><p className="text-caption font-semibold uppercase tracking-wider text-white/30">{label}</p><p className="mt-1 text-lg font-bold text-[#C4CEFF]">{value}</p></div>
-}
-
-function PrivatePortalImage({ alt, ...props }: ImgHTMLAttributes<HTMLImageElement> & { alt: string }) {
-  // Authenticated portal previews intentionally bypass the public image optimizer.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img alt={alt} {...props} />
 }

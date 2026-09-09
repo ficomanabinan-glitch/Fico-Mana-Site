@@ -237,9 +237,62 @@
   }
 
   @media (max-width: 767px) {
-    .portal-mobile-header {
+    .client-portal .portal-mobile-header {
+      top: env(safe-area-inset-top, 0px);
       background: #171717;
       box-shadow: none;
+      transition: min-height 240ms cubic-bezier(.22, 1, .36, 1), margin-bottom 240ms cubic-bezier(.22, 1, .36, 1), padding 240ms cubic-bezier(.22, 1, .36, 1), border-color 240ms ease, box-shadow 240ms ease;
+    }
+
+    .portal-mobile-header .portal-mobile-reference {
+      max-height: 1.25rem;
+      overflow: hidden;
+      opacity: 1;
+      transform: translateY(0);
+      transition: max-height 220ms cubic-bezier(.22, 1, .36, 1), margin-top 220ms cubic-bezier(.22, 1, .36, 1), opacity 180ms ease, transform 220ms cubic-bezier(.22, 1, .36, 1);
+    }
+
+    .portal-mobile-header .portal-mobile-brand,
+    .portal-mobile-header .portal-mobile-client-name,
+    .portal-mobile-header .portal-mobile-progress {
+      transition: font-size 240ms cubic-bezier(.22, 1, .36, 1), line-height 240ms cubic-bezier(.22, 1, .36, 1), margin 240ms cubic-bezier(.22, 1, .36, 1), transform 240ms cubic-bezier(.22, 1, .36, 1);
+    }
+
+    .client-portal .portal-mobile-header.is-compact {
+      min-height: 4.25rem;
+      margin-bottom: 0;
+      padding-top: .5rem;
+      padding-bottom: .5rem;
+      border-bottom-color: transparent;
+      box-shadow: none;
+    }
+
+    .portal-mobile-header.is-compact .portal-mobile-reference {
+      max-height: 0;
+      margin-top: 0;
+      opacity: 0;
+      transform: translateY(-.25rem);
+      pointer-events: none;
+    }
+
+    .portal-mobile-header.is-compact .portal-mobile-brand {
+      font-size: .625rem;
+      line-height: 1rem;
+    }
+
+    .portal-mobile-header.is-compact .portal-mobile-client-name {
+      margin-top: .125rem;
+      font-size: 1.125rem;
+      line-height: 1.25rem;
+    }
+
+    .portal-mobile-header.is-compact .portal-mobile-progress p:first-child {
+      font-size: .875rem;
+      line-height: 1.25rem;
+    }
+
+    .portal-mobile-header.is-compact .portal-mobile-progress p:last-child {
+      line-height: 1rem;
     }
 
     .portal-selection-steps {
@@ -249,6 +302,29 @@
       border-radius: 0;
       background: #171717;
       box-shadow: 0 -1px 0 #171717, 0 8px 16px rgb(0 0 0 / 15%);
+      transition: top 240ms cubic-bezier(.22, 1, .36, 1), margin-top 240ms cubic-bezier(.22, 1, .36, 1), border-color 240ms ease, border-radius 240ms ease, box-shadow 240ms ease;
+    }
+
+    .portal-selection-steps.is-compact {
+      top: 4.25rem;
+      margin-top: 0;
+      border-top-color: transparent;
+      border-radius: 0;
+      background: #171717;
+      box-shadow: 0 8px 16px rgb(0 0 0 / 15%);
+      backdrop-filter: none;
+    }
+
+    .portal-selection-steps.is-compact button {
+      min-height: 2.75rem;
+      border-radius: 0;
+      padding-top: .5rem;
+      padding-bottom: .5rem;
+      white-space: nowrap;
+    }
+
+    .portal-selection-steps button {
+      white-space: nowrap;
     }
 
     .client-portal-page > div {

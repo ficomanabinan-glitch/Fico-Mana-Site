@@ -4,10 +4,10 @@ export function hasPortalExpired(expiresAt: string | null | undefined, nowMs = D
   return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs
 }
 
-export type PortalExpiry = { days: number; portalReadyEmailSentAt: string | null; expiresAt: string | null }
+export type PortalExpiry = { days: number; portalReadyEmailSentAt: string | null; deliverablesUploadedAt?: string | null; expiresAt: string | null }
 
 export function portalExpiryNotice(expiry: PortalExpiry, nowMs = Date.now()) {
-  if (!expiry.expiresAt) return `Your ${expiry.days}-day portal expiry begins when FICO MANA sends your portal-ready email.`
+  if (!expiry.expiresAt) return `Your ${expiry.days}-day portal access period begins when FICO MANA releases your final enhanced photographs. Selecting photos and receiving the portal-ready email do not start the countdown.`
   const deadline = Date.parse(expiry.expiresAt)
   if (!Number.isFinite(deadline)) return 'The expiry date is unavailable. Try: refresh this page or contact FICO MANA.'
   const date = new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }).format(deadline)

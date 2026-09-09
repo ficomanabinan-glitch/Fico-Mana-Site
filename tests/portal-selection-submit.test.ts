@@ -168,6 +168,22 @@ function driveFolderFixture() {
   return f
 }
 
+test('physical add-on photo choices are validated before Drive copies and saved for portal and editor reads', async () => {
+  for (const photoIds of [[], ['foreign-gallery'], ['old-gallery', 'old-gallery'], ['old-gallery', 'new-gallery']]) {
+    const f = fixture()
+    f.db.tables.addon_catalog = [{ id: 'frame', workspace_id: 'studio', status: 'active', name: '8R Frame', price_amount: 1000, pricing_type: 'fixed', max_quantity: 1, photo_limit: 1 }]
+    await assert.rejects(f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', { ...f.input, addons: [{ addonId: 'frame', quantity: 1, photoCount: 0, photoIds }] }), { code: 'SELECTION_INVALID' })
+    assert.equal(f.copies.length, 0)
+    assert.equal(f.manifests.length, 0)
+  }
+  const f = fixture()
+  f.db.tables.addon_catalog = [{ id: 'frame', workspace_id: 'studio', status: 'active', name: '8R Frame', price_amount: 1175, pricing_type: 'fixed', max_quantity: 1, photo_limit: 1 }]
+  const result = await f.workflow.submitPhotoSelection('00000000-0000-4000-8000-000000000042', { ...f.input, addons: [{ addonId: 'frame', quantity: 1, photoCount: 0, photoIds: ['old-gallery'] }] })
+  assert.deepEqual(result.selection?.addonOrders[0].photoIds, ['old-gallery'])
+  assert.equal(result.selection?.addonOrders[0].total, 1175, 'Live catalog remains the pricing authority')
+  assert.deepEqual(f.db.tables.client_addon_orders[0].photo_ids, ['old-gallery'])
+})
+
 test('PIN-gated View All Photos returns only the current RAW folder and performs no writes/downloads', async () => {
   const f = driveFolderFixture()
   assert.deepEqual(await f.workflow.getPortalDrivePhotos('00000000-0000-4000-8000-000000000042', '0042'), { url: 'https://drive.google.com/drive/folders/client-raw' })

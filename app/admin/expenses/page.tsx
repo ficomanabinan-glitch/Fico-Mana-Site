@@ -407,7 +407,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-white/10 bg-white/[0.02] p-5">
+    <div className="rounded-card border border-white/10 bg-white/[0.02] p-5">
       <ReceiptText className="size-4 text-[#C4CEFF]" />
       <p className="mt-3 text-caption font-semibold uppercase tracking-wider text-white/35">{label}</p>
       <p className="mt-1 text-xl font-bold text-white">{value}</p>

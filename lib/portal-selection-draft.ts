@@ -9,6 +9,7 @@ export type PortalDraftChoices = {
   printSelections: Partial<Record<(typeof PRINT_CATEGORIES)[number], string>>
   walletSelections: string[]
   addonQuantities: Record<string, number>
+  addonPhotos?: Record<string, string[]>
   acknowledged: boolean
   step: 'photos' | 'prints' | 'addons' | 'review'
 }
@@ -35,6 +36,10 @@ function validChoices(value: unknown): value is PortalDraftChoices {
   if (!Object.entries(draft.printSelections).every(([category, value]) => PRINT_CATEGORIES.includes(category as typeof PRINT_CATEGORIES[number]) && (value === '' || id(value) && draft.included.includes(value)))) return false
   if (!Array.isArray(draft.walletSelections) || draft.walletSelections.length > 4 || new Set(draft.walletSelections).size !== draft.walletSelections.length || !draft.walletSelections.every(value => id(value) && draft.included.includes(value))) return false
   if (!draft.addonQuantities || typeof draft.addonQuantities !== 'object' || Array.isArray(draft.addonQuantities)) return false
+  if (draft.addonPhotos !== undefined) {
+    if (!draft.addonPhotos || typeof draft.addonPhotos !== 'object' || Array.isArray(draft.addonPhotos)) return false
+    if (Object.entries(draft.addonPhotos).length > 100 || !Object.entries(draft.addonPhotos).every(([key, ids]) => id(key) && Array.isArray(ids) && ids.length <= 4 && new Set(ids).size === ids.length && ids.every(value => id(value) && photos.includes(value)))) return false
+  }
   const addons = Object.entries(draft.addonQuantities)
   return addons.length <= 100 && addons.every(([key, quantity]) => id(key) && Number.isInteger(quantity) && quantity >= 0 && quantity <= 200)
 }
@@ -54,17 +59,17 @@ export function readPortalDraft(key: string, storage = sessionStorageSafe(), now
       return null
     }
     // Return only allowed choice fields. Never restore prices, links, tokens, or file bytes.
-    const { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, acknowledged, step } = record.choices
-    return { savedAt: record.savedAt, expiresAt: record.expiresAt, choices: { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, acknowledged, step } }
+    const { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, addonPhotos, acknowledged, step } = record.choices
+    return { savedAt: record.savedAt, expiresAt: record.expiresAt, choices: { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, ...(addonPhotos ? { addonPhotos } : {}), acknowledged, step } }
   } catch { clearPortalDraft(key, storage); return null }
 }
 
 export function writePortalDraft(key: string, choices: PortalDraftChoices, storage = sessionStorageSafe(), now = Date.now()): number | null {
   if (!storage || !validChoices(choices)) return null
   try {
-    const { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, acknowledged, step } = choices
+    const { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, addonPhotos, acknowledged, step } = choices
     const expiresAt = now + PORTAL_DRAFT_TTL_MS
-    storage.setItem(key, JSON.stringify({ savedAt: now, expiresAt, choices: { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, acknowledged, step } }))
+    storage.setItem(key, JSON.stringify({ savedAt: now, expiresAt, choices: { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, ...(addonPhotos ? { addonPhotos } : {}), acknowledged, step } }))
     return expiresAt
   } catch { return null }
 }

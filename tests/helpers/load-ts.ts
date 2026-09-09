@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import ts from 'typescript'
+import * as addonPhotoRules from '../../lib/addon-photo-rules.ts'
 
 const require = createRequire(import.meta.url)
 
@@ -13,6 +14,8 @@ export function loadTs<T>(path: string, stubs: Record<string, unknown>, source?:
   const loadedModule = { exports: {} }
   const boundaryRequire = (name: string) => {
     if (Object.hasOwn(stubs, name)) return stubs[name]
+    // Pure catalog rules run unchanged; only external service boundaries are mocked.
+    if (name === '@/lib/addon-photo-rules') return addonPhotoRules
     if (name.startsWith('node:') || ['react', 'react/jsx-runtime', 'lucide-react'].includes(name)) return require(name)
     throw new Error(`Unstubbed dependency: ${name}`)
   }

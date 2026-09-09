@@ -4,34 +4,29 @@ import { readFileSync } from 'node:fs'
 
 const source = (path: string) => readFileSync(path, 'utf8')
 
-test('desktop thumbnails preview without selecting and keep mobile selection separate', () => {
-  const gallery = source('components/client-photo-selection.tsx')
-  const button = source('components/portal-photo-preview.tsx')
-  assert.match(gallery, /onDesktopPreview=\{\(\) => setActiveFileId\(file.id\)\}/)
-  assert.match(button, /onDesktopPreview\(file\); return/)
-  assert.match(button, /min-width: 48rem/)
-  assert.match(gallery, /top-2 flex md:hidden size-11/)
-  assert.match(gallery, /xl:grid-cols-5/)
+test('desktop contact sheet keeps preview and mobile selection as separate actions', () => {
+  const gallery=source('components/portal-photo-contact-sheet.tsx')
+  assert.match(gallery,/onDesktopPreview=\{\(\) => onFocus\(file.id\)\}/)
+  assert.match(gallery,/onToggle\(activeFile.id\)/)
+  assert.match(source('components/portal-photo-preview.tsx'),/onDesktopPreview\(file\); return/)
+  assert.ok(gallery.includes('min-width: 901px'))
 })
 
 test('zoom preview reserves image space and exposes accessible loading and failure states', () => {
-  const preview = source('components/portal-photo-preview.tsx')
-  assert.match(preview, /relative h-\[65dvh\]/)
-  assert.match(preview, /aria-busy=\{!loaded && !failed\}/)
-  assert.match(preview, /Loading photo preview/)
-  assert.match(preview, /motion-safe:animate-pulse/)
-  assert.match(preview, /setLoaded\(true\)/)
-  assert.match(preview, /role="alert"/)
-  const gallery = source('components/client-photo-selection.tsx')
-  assert.match(gallery, /grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5/)
-  assert.doesNotMatch(gallery, /auto-fill|min-\[1920px\]:grid-cols-8/)
+  const preview=source('components/portal-photo-preview.tsx')
+  for(const marker of ['relative h-[65dvh]','aria-busy={!loaded && !failed}','Loading photo preview','motion-safe:animate-pulse','setLoaded(true)','role="alert"']) assert.ok(preview.includes(marker),marker)
+  const css=source('components/portal-workspace.module.css')
+  assert.ok(css.includes('grid-template-columns:repeat(4,minmax(0,1fr))'))
+  assert.ok(css.includes('grid-template-columns:repeat(2,minmax(0,1fr))'))
+  assert.doesNotMatch(css,/auto-fill/)
 })
 
-test('client identity remains compact while all contextual panels use rounded cards', () => {
-  const portal = source('app/portal/[id]/page.tsx')
-  assert.match(portal, /FICO MANA Client Portal<\/p><h1[^>]*>\{data\.booking\.customerName\}<\/h1>/)
-  assert.match(portal, /rounded-card border border-white\/10 bg-white\/\[0\.025\] p-4/)
-  assert.doesNotMatch(portal, /This unique link exposes/)
+test('client identity and contextual information use the approved Overview drawer', () => {
+  const portal=source('app/portal/[id]/page.tsx')
+  assert.ok(portal.includes('styles.clientName}>{data.booking.customerName}'))
+  assert.ok(portal.includes('<PortalOverview>'))
+  assert.doesNotMatch(portal,/sidebarCollapsed|PortalSidebar/)
+  assert.ok(source('components/portal-overview.tsx').includes('side="right"'))
 })
 
 test('client portal statuses are rounded badges without pretending to be action buttons', () => {
@@ -60,6 +55,11 @@ test('sales insight cards use the same rounded corners as other dashboard metric
   const insight = sales.slice(sales.indexOf('function Insight('), sales.indexOf('function ExpenseBar('))
   assert.match(insight, /className="rounded-control border border-white\/\[0\.07\] bg-black\/10 p-3"/)
   assert.equal((sales.match(/<Insight label=/g) || []).length, 8)
+})
+
+test('business expense summary cards use the shared rounded card style', () => {
+  const expenses = source('app/admin/expenses/page.tsx')
+  assert.match(expenses, /className="rounded-card border border-white\/10 bg-white\/\[0\.02\] p-5"/)
 })
 
 test('queue sections have real grid gaps and rounded metrics without changing filter behavior', () => {
@@ -95,28 +95,15 @@ test('shared typography is rounded and responsive without a forced phi multiplie
   assert.match(source('lib/admin-ui.ts'), /text-page-title font-semibold/)
 })
 
-test('photo layout uses the requested desktop, tablet, and mobile hierarchy', () => {
-  const portal = source('app/portal/[id]/page.tsx')
-  const selection = source('components/client-photo-selection.tsx')
-  const sidebar = source('components/portal-sidebar.tsx')
-  assert.doesNotMatch(portal, /max-w-\[1760px\]/)
-  assert.match(portal, /xl:grid-cols-\[minmax\(250px,300px\)_minmax\(0,1fr\)\]/)
-  assert.match(portal, /2xl:grid-cols-\[minmax\(280px,340px\)_minmax\(0,1fr\)\]/)
-  assert.match(portal, /sidebarCollapsed \? 'xl:grid-cols-\[3\.5rem_minmax\(0,1fr\)\]/)
-  assert.match(portal, />Shoot Day</)
-  assert.doesNotMatch(portal, />Session</)
-  assert.match(portal, /sticky top-0 z-30[^>]+md:static[^>]+xl:hidden/)
-  assert.match(selection, /sticky top-\[5.75rem\] z-20[^>]+md:top-3 xl:top-6/)
-  assert.match(selection, /md:grid-cols-\[minmax\(0,1fr\)_minmax\(240px,300px\)\]/)
-  assert.match(selection, /xl:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,420px\)\]/)
-  assert.match(selection, /2xl:grid-cols-\[minmax\(0,1fr\)_minmax\(440px,640px\)\]/)
-  assert.match(selection, /xl:grid-cols-5/)
-  assert.match(selection, /sticky top-4 hidden min-w-0 overflow-hidden rounded-card[^>]+md:block/)
-  assert.match(sidebar, /xl:hidden/)
-  assert.match(sidebar, /side="bottom"/)
-  assert.doesNotMatch(portal, /lg:col-span-2/)
-  assert.match(source('lib/admin-ui.ts'), /adminPage = 'w-full min-w-0/)
-  assert.match(source('lib/admin-ui.ts'), /fico-table overflow-x-auto/)
+test('approved photo layout keeps identity and navigation in one sticky header without restoring a sidebar', () => {
+  const portal=source('app/portal/[id]/page.tsx'), selection=source('components/client-photo-selection.tsx'), css=source('components/portal-workspace.module.css')
+  assert.doesNotMatch(portal,/PortalSidebar|sidebarCollapsed|mobileHeaderCompact/)
+  assert.ok(portal.includes('Shoot day'))
+  assert.ok(selection.includes('{headerContent}{selectionNavigation}'))
+  assert.ok(css.includes('.topbar { position: sticky; top: 0;'))
+  assert.ok(css.includes('grid-template-columns:minmax(0,1.618fr) minmax(0,1fr)'))
+  assert.ok(css.includes('--portal-header-height'))
+  assert.ok(css.includes('.preview { display:none; }'))
 })
 
 test('operational metadata uses shared readable tokens, and requested filler labels stay removed', () => {

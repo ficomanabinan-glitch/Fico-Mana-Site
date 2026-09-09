@@ -64,8 +64,8 @@ export async function sendPortalAccessIfNeeded(
   // Old provisioning emails must not suppress this photos-ready notification.
   if (historyResult.data?.length) {
     const firstSentAt = String(historyResult.data[0]?.sent_at || new Date().toISOString())
-    const expiryError = await recordFirstPortalReadyEmail(admin, portal, actor.workspaceId, firstSentAt)
-    if (expiryError) return { sent: false, error: 'The portal email was already sent, but its expiry could not be saved. Try: retry this action.' }
+    const recordError = await recordFirstPortalReadyEmail(admin, portal, actor.workspaceId, firstSentAt)
+    if (recordError) return { sent: false, error: 'The portal email was already sent, but its delivery status could not be saved. Try: retry this action.' }
     return { sent: false, alreadySent: true }
   }
   const url = portalUrl(String(portal.public_id))
@@ -82,10 +82,10 @@ export async function sendPortalAccessIfNeeded(
   const result = await sendEmail({ bookingId, to: recipient, subject, html, idempotencyKey })
   if (!result.success) return { sent: false, error: 'The portal email could not be sent. Try: check the client email and the email service settings, then retry.' }
   const sentAt = new Date().toISOString()
-  const expiryError = await recordFirstPortalReadyEmail(admin, portal, actor.workspaceId, sentAt)
-  if (expiryError) {
-    console.error('Portal email accepted, but the portal expiry could not be started.', expiryError)
-    return { sent: false, error: 'The portal email was sent, but its expiry could not be saved. Try: retry this action.' }
+  const recordError = await recordFirstPortalReadyEmail(admin, portal, actor.workspaceId, sentAt)
+  if (recordError) {
+    console.error('Portal email accepted, but its delivery status could not be recorded.', recordError)
+    return { sent: false, error: 'The portal email was sent, but its delivery status could not be saved. Try: retry this action.' }
   }
   return { sent: true }
 }

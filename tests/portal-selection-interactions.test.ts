@@ -1,278 +1,120 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { type TestContext } from 'node:test'
+import type { ComponentProps } from 'react'
 import { loadTs } from './helpers/load-ts.ts'
 import { componentHarness, elements, content } from './helpers/component-harness.ts'
 import * as summary from '../lib/client-selection-summary.ts'
 import * as drafts from '../lib/portal-selection-draft.ts'
 import * as navigation from '../lib/selection-step-navigation.ts'
-
-test('final confirmation shows the balance before PIN; going back clears only the PIN and does not submit', async t => {
-  const ready: ClientSelection = { ...selection, noRevisionAcknowledged: true,
-    selectedIds: gallery.slice(0, 6).map(file => file.id),
-    selectedItems: gallery.slice(0, 6).map((file, i) => ({ fileId: file.id, preference: 'standard', extraEdit: i >= 5 })),
-    printAllocations: (['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'] as const).map(category => ({ category, fileId: '0', quantity: category === 'WALLET_SIZE' ? 4 : 1, label: category })),
-  }
-  const f = setup(ready)
-  t.after(f.unmount)
-  let tree = f.render(), requests = 0
-  t.mock.method(globalThis, 'fetch', async () => { requests++; return Response.json({ error: 'Incorrect PIN. Try: enter the last 4 digits.', code: 'SELECTION_PIN_INVALID' }, { status: 403 }) })
-  const click = (label: string) => elements(tree, el => el.type === 'button' && content(el) === label)[0].props.onClick()
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Review'))[0].props.onClick()
-  tree = f.render()
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password').length, 0)
-  click('Submit Final Selection'); tree = f.render()
-  assert.equal(requests, 0)
-  assert.match(content(elements(tree, el => el.props['data-testid'] === 'submission-balance')[0]), /₱6,400/)
-  elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
-  tree = f.render(); click('Go back'); tree = f.render()
-  assert.equal(requests, 0)
-  assert.equal(f.pricing.total, 400)
-  click('Submit Final Selection'); tree = f.render()
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.value, '')
-  elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0000' } })
-  tree = f.render(); await click('Confirm & Submit'); await new Promise(resolve => setImmediate(resolve)); tree = f.render()
-  assert.equal(requests, 1)
-  assert.equal(f.submitted, 0)
-  assert.equal(f.pricing.total, 400)
-  assert.match(content(tree), /Incorrect PIN/)
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.value, '')
-})
-
 import type { ClientSelection, ClientAddon, ClientGalleryFile } from '../components/client-photo-selection.tsx'
 
+const Photos = () => null, Prints = () => null, Addons = () => null, Review = () => null
 const addons: ClientAddon[] = [
   { id: 'extra', name: 'Extra Edit', price: 400, pricingType: 'per_photo', maxQuantity: 200, description: '' },
-  { id: 'print', name: 'Extra print', price: 100, pricingType: 'per_piece', maxQuantity: 10, description: '' },
-  { id: 'bundle', name: 'Bundle', price: 250, pricingType: 'fixed', maxQuantity: 1, description: '' },
+  { id: 'frame', name: '8R Frame', price: 1000, pricingType: 'fixed', maxQuantity: 1, photoLimit: 1, description: '' },
 ]
 const gallery: ClientGalleryFile[] = Array.from({ length: 7 }, (_, index) => ({ id: String(index), fileName: `PHOTO-${index}.JPG`, mimeType: 'image/jpeg', previewUrl: `/api/editor-workflow/portal/private/file/${index}?kind=gallery` }))
 const selection: ClientSelection = { id: 'selection', status: 'OPEN', requiredCount: 5, includedLimit: 5, clientStatus: 'Waiting', noRevisionAcknowledged: false, selectedIds: [], selectedItems: [], printAllocations: [], addonOrders: [], totalAddonAmount: 0 }
-
-test('pricing uses configured fees, removes deselected charges, and adds draft charges only once', () => {
-  for (const [extraCount, expected] of [[0, 0], [1, 400], [2, 800], [1, 400], [0, 0]]) {
-    assert.equal(summary.calculateClientAddons(addons, {}, extraCount).total, expected)
-  }
-  assert.equal(summary.calculateClientAddons(addons, { print: 3, bundle: 1 }, 1).total, 950)
-  assert.equal(summary.calculateClientAddons([{ ...addons[0], price: 450 }], {}, 1).total, 450)
-  assert.deepEqual(summary.portalPaymentSummary(1200, 1200, 950), { total: 2150, paid: 1200, remaining: 950 })
-  assert.equal(summary.portalPaymentSummary(1200, 3000, 950).remaining, 0)
-  assert.equal(summary.initialEditingPreference([]), 'standard')
-  assert.equal(summary.initialEditingPreference([{ preference: 'less' }, { preference: 'less' }]), 'less')
-  assert.equal(summary.initialEditingPreference([{ preference: 'less' }, { preference: 'raw' }]), '')
-})
-
+const ready: ClientSelection = { ...selection, noRevisionAcknowledged: true,
+  selectedItems: gallery.slice(0,6).map((file,i) => ({ fileId:file.id, preference:'less', extraEdit:i>=5 })),
+  printAllocations: (['TOGA_PICTURE_4R','ALAMPAY_BARONG_4R','FRAME_8R','WALLET_SIZE'] as const).map(category => ({ category, fileId:'0', quantity:1, label:category })),
+}
 function setup(initial = selection, photos = gallery) {
   const hooks = componentHarness()
-  const preview = { PhotoSelectButton: () => null, PortalPhotoPreview: () => null }
   const component = loadTs<typeof import('../components/client-photo-selection.tsx')>('components/client-photo-selection.tsx', {
-    react: hooks.react, '@/components/portal-photo-preview': preview, '@/lib/client-selection-summary': summary,
-    '@/lib/portal-selection-draft': drafts,
-    '@/lib/selection-step-navigation': navigation,
-    '@/components/ui/sheet': { Sheet: () => null, SheetContent: () => null, SheetHeader: () => null, SheetTitle: () => null, SheetDescription: () => null },
+    react: hooks.react, '@/components/portal-photo-preview': { PortalPhotoPreview: () => null },
+    '@/components/portal-photo-contact-sheet': Photos, '@/components/portal-print-picker': Prints,
+    '@/components/portal-addon-picker': Addons, '@/components/portal-review': Review,
+    '@/components/portal-workspace.module.css': {},
+    '@/components/admin-toast-provider': { useAdminToast: () => ({ success() {} }) },
+    '@/lib/client-selection-summary':summary, '@/lib/portal-selection-draft':drafts, '@/lib/selection-step-navigation':navigation,
+    '@/components/ui/sheet': { Sheet:()=>null, SheetContent:()=>null, SheetHeader:()=>null, SheetTitle:()=>null, SheetDescription:()=>null },
   })
-  let pricing: summary.AddonPreview = { total: 0, lines: [] }
-  let submitted = 0
-  const onPricingChange = (value: summary.AddonPreview) => { pricing = value }
-  const render = () => hooks.render(() => component.ClientPhotoSelection({
-    publicId: 'private', selection: initial, gallery: photos, galleryTotal: 7, loadingMore: false, addons,
-    onLoadMore: () => {}, onSubmitted: async () => { submitted++ }, onPricingChange,
-    paymentSummary: { packageAmount: 6500, amountPaid: 500 },
-  }))
-  return { render, preview, unmount: hooks.unmount, get pricing() { return pricing }, get submitted() { return submitted } }
+  let pricing: summary.AddonPreview = { total:0, lines:[] }, submitted = 0
+  const onPricingChange = (value:summary.AddonPreview) => { pricing=value }
+  const render = () => hooks.render(() => component.ClientPhotoSelection({ publicId:'private',selection:initial,gallery:photos,galleryTotal:7,loadingMore:false,addons,
+    onLoadMore() {}, onSubmitted:async()=>{submitted++}, onPricingChange, paymentSummary:{packageAmount:6500,amountPaid:500} }))
+  let tree=render(); tree=render()
+  return { render:()=>tree=render(), unmount:hooks.unmount,
+    photos:()=>elements(tree,el=>el.type===Photos)[0].props as ComponentProps<typeof import('../components/portal-photo-contact-sheet.tsx').default>,
+    prints:()=>elements(tree,el=>el.type===Prints)[0].props as ComponentProps<typeof import('../components/portal-print-picker.tsx').default>,
+    addons:()=>elements(tree,el=>el.type===Addons)[0].props as ComponentProps<typeof import('../components/portal-addon-picker.tsx').default>,
+    review:()=>elements(tree,el=>el.type===Review)[0].props as ComponentProps<typeof import('../components/portal-review.tsx').default>,
+    step:(label:string)=>{elements(tree,el=>el.type==='button'&&content(el).toUpperCase().endsWith(label.toUpperCase()))[0].props.onClick();tree=render()},
+    click:(label:string)=>elements(tree,el=>el.type==='button'&&content(el)===label)[0].props.onClick(),
+    pin:(value?:string)=>{const input=elements(tree,el=>el.type==='input'&&el.props.type==='password')[0];if(value!==undefined)input.props.onChange({target:{value}});return input?.props.value},
+    get pricing(){return pricing},get submitted(){return submitted},get tree(){return tree},
+  }
+}
+function browser(t: TestContext) {
+  const values=new Map<string,string>(), previous=Object.getOwnPropertyDescriptor(globalThis,'window')
+  const storage={getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>{values.set(key,value)},removeItem:(key:string)=>{values.delete(key)}}
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{sessionStorage:storage,matchMedia:()=>({matches:false})}})
+  t.after(()=>{if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window')})
+  return {storage,values}
 }
 
-test('actual selection handlers update totals immediately, use one global preference, preview print choices, and submit the existing API shape', async t => {
-  const f = setup()
-  let tree = f.render()
-  const choosePhoto = (index: number) => {
-    elements(tree, el => el.type === f.preview.PhotoSelectButton)[index].props.onSelect()
-    tree = f.render()
-  }
-  const step = (label: string) => {
-    const button = elements(tree, el => el.type === 'button' && content(el).endsWith(label))[0]
-    assert.ok(button); button.props.onClick(); tree = f.render()
-  }
-  for (let index = 0; index < 6; index++) choosePhoto(index)
-  assert.equal(f.pricing.total, 400)
-  choosePhoto(6); assert.equal(f.pricing.total, 800)
-  choosePhoto(6); assert.equal(f.pricing.total, 400)
-  const preferences = elements(tree, el => el.type === 'select')
-  assert.equal(preferences.length, 1)
-  preferences[0].props.onChange({ target: { value: 'less' } }); tree = f.render()
-  step('Free Prints')
-  const printSelects = elements(tree, el => el.type === 'select' && el.props.id?.startsWith('print-'))
-  assert.equal(printSelects.length, 3)
-  printSelects.forEach((select, index) => select.props.onChange({ target: { value: String(index) } }))
-  tree = f.render()
-  const walletChoice = elements(tree, el => el.type === 'button' && el.props['aria-label'] === 'Use PHOTO-3.JPG for wallet prints')[0]
-  assert.ok(walletChoice); walletChoice.props.onClick(); tree = f.render()
-  const previewButtons = elements(tree, el => el.type === 'button' && el.props['aria-label']?.startsWith('Preview '))
-  assert.equal(previewButtons.length, 3)
-  assert.ok(previewButtons.every(el => elements(el, child => child.type === 'img')[0].props.className.includes('object-contain')))
-  const previewButton = elements(tree, el => el.type === 'button' && el.props['aria-label']?.startsWith('Preview TOGA'))[0]
-  previewButton.props.onClick(); tree = f.render()
-  assert.equal(elements(tree, el => el.type === f.preview.PortalPhotoPreview)[0].props.file.id, '0')
-  elements(tree, el => el.type === f.preview.PortalPhotoPreview)[0].props.onClose(); tree = f.render()
-  step('Add-ons')
-  const addonButtons = elements(tree, el => el.type === 'button' && el.props['aria-pressed'] !== undefined)
-  addonButtons[0].props.onClick(); tree = f.render(); assert.equal(f.pricing.total, 500)
-  elements(tree, el => el.type === 'input' && el.props.type === 'number')[0].props.onChange({ target: { value: '3' } })
-  tree = f.render(); assert.equal(f.pricing.total, 700)
-  step('Review')
-  elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } })
-  tree = f.render()
-  let payload: any
-  t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
-    assert.equal(url, '/api/editor-workflow/portal/private/selection')
-    payload = JSON.parse(String(init.body)); return Response.json({ ok: true })
-  })
-  const submit = elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0]
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password').length, 0, 'PIN is not shown during Review')
-  assert.equal(submit.props.disabled, false)
-  await submit.props.onClick()
-  assert.equal(Boolean(payload), false, 'Missing PIN must not reach the API')
-  tree = f.render()
-  assert.match(content(tree), /Last 4 digits/)
-  assert.match(content(elements(tree, el => el.props['data-testid'] === 'submission-balance')[0]), /₱6,700/)
-  await elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0].props.onClick()
-  assert.equal(Boolean(payload), false, 'Confirmation still requires a PIN')
-  tree = f.render()
-  elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
-  tree = f.render()
-  await elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0].props.onClick()
-  await new Promise(resolve => setImmediate(resolve))
-  assert.equal(f.submitted, 1)
-  assert.equal(payload.pin, '0042', 'Leading zeros are preserved')
-  tree = f.render()
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'password').length, 0)
-  assert.equal(payload.preferences.length, 6)
-  assert.ok(payload.preferences.every((item: any) => item.preference === 'less'))
-  assert.equal(payload.printAllocations.length, 4)
-  assert.equal(payload.addons.find((item: any) => item.addonId === 'extra').quantity, 1)
-  assert.equal(payload.total, undefined, 'The server, not an untrusted client total, remains authoritative')
+test('actual selection controller preserves deterministic ordering, live prices, print rules and add-on assignments', t=>{
+  browser(t); const f=setup();t.after(f.unmount)
+  for(let i=0;i<7;i++){f.photos().onToggle(String(i));f.render()}
+  assert.equal(f.pricing.total,800)
+  f.photos().onToggle('0');f.render()
+  assert.deepEqual(f.photos().included,['1','2','3','4','5'])
+  assert.deepEqual(f.photos().extras,['6'])
+  f.step('Free Prints')
+  assert.deepEqual(f.prints().files.map(file=>file.id),['1','2','3','4','5'])
+  for(const category of ['TOGA_PICTURE_4R','ALAMPAY_BARONG_4R','FRAME_8R'] as const)f.prints().onPrint(category,'1')
+  f.prints().onWallet(['1','2']);f.render();assert.equal(f.prints().complete,true)
+  f.step('Add-ons');f.addons().onToggle(addons[1]);f.render()
+  assert.equal(f.addons().complete,false)
+  f.addons().onPhotos('frame',['6']);f.render();assert.equal(f.addons().complete,true)
+  assert.equal(f.pricing.total,1400)
+  f.step('Photos');f.photos().onToggle('6');f.render();f.step('Add-ons')
+  assert.deepEqual(f.addons().assignments.frame,[],'Deselecting a photo clears its assignments')
+  assert.equal(f.addons().complete,false)
 })
 
-test('failed submission keeps draft photos, global preference, free prints, add-ons and acknowledgement for retry', async t => {
-  const draft: ClientSelection = { ...selection, status: 'COPY_FAILED', selectedIds: gallery.slice(0, 6).map(file => file.id),
-    selectedItems: gallery.slice(0, 6).map((file, index) => ({ fileId: file.id, preference: 'less', extraEdit: index >= 5 })),
-    printAllocations: (['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'] as const).map((category, index) => ({ category, fileId: String(index), quantity: category === 'WALLET_SIZE' ? 4 : 1, label: category })),
-  }
-  const f = setup(draft)
-  let tree = f.render()
-  assert.ok(!content(tree).includes('Your choices were saved'))
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Review'))[0].props.onClick()
-  tree = f.render()
-  elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } })
-  tree = f.render()
-  const payloads: unknown[] = []
-  t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
-    payloads.push(JSON.parse(String(init.body)))
-    return Response.json({ error: 'The original photo is unavailable. Try: ask the studio to restore it.' }, { status: 409 })
-  })
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (!elements(tree, el => el.type === 'input' && el.props.type === 'password').length) {
-      elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0].props.onClick()
-      tree = f.render()
-    }
-    elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
-    tree = f.render()
-    const button = elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0]
-    assert.equal(button.props.disabled, false)
-    await button.props.onClick(); await new Promise(resolve => setImmediate(resolve)); tree = f.render()
-    assert.match(content(tree), /Try: ask the studio to restore it/)
-    assert.equal(f.pricing.total, 400)
-    assert.equal(f.submitted, 0)
-  }
-  assert.deepEqual(payloads[0], payloads[1], 'Retry keeps the exact original choices and acknowledgement')
+test('PIN confirmation shows balance, clears PIN on cancel and failure, and preserves exact choices for retry', async t=>{
+  browser(t);const f=setup(ready);t.after(f.unmount);f.step('Review')
+  assert.equal(f.review().remaining,6400)
+  const payloads:Record<string,unknown>[]=[];let succeed=false
+  t.mock.method(globalThis,'fetch',async (_url:unknown,init?:RequestInit)=>{payloads.push(JSON.parse(String(init?.body)));return succeed?Response.json({ok:true}):Response.json({error:'Incorrect PIN. Try: enter the last four digits.'},{status:403})})
+  f.review().onSubmit();f.render()
+  assert.match(content(elements(f.tree,el=>el.props['data-testid']==='submission-balance')[0]),/₱6,400/)
+  f.pin('0042');f.render();f.click('Go back');f.render()
+  f.review().onSubmit();f.render();assert.equal(f.pin(),'')
+  await f.click('Confirm & Submit');f.render();assert.equal(payloads.length,0)
+  for(let attempt=0;attempt<2;attempt++){f.pin('0042');f.render();await f.click('Confirm & Submit');await new Promise(resolve=>setImmediate(resolve));f.render();assert.equal(f.pin(),'')}
+  assert.deepEqual(payloads[0],payloads[1])
+  assert.equal(f.submitted,0);assert.equal(f.pricing.total,400)
+  succeed=true;f.pin('0042');f.render();await f.click('Confirm & Submit');await new Promise(resolve=>setImmediate(resolve));f.render()
+  assert.equal(f.submitted,1);assert.equal(payloads[2].pin,'0042')
+  assert.equal(payloads[2].total,undefined)
+  assert.equal(f.review().locked,true)
 })
 
-test('actual portal remount restores a 15-minute draft, recomputes prices, preserves failure, and clears after success', async t => {
-  const values = new Map<string, string>()
-  const browserStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }
-  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: { sessionStorage: browserStorage } })
-  t.after(() => { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window') })
-  let now = 1_000_000
-  t.mock.method(Date, 'now', () => now)
-  const f = setup(); t.after(f.unmount)
-  let tree = f.render(); tree = f.render()
-  for (let index = 0; index < 6; index++) {
-    elements(tree, el => el.type === f.preview.PhotoSelectButton)[index].props.onSelect(); tree = f.render()
-  }
-  elements(tree, el => el.type === 'select')[0].props.onChange({ target: { value: 'raw' } }); tree = f.render()
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Free Prints'))[0].props.onClick(); tree = f.render()
-  elements(tree, el => el.type === 'select' && el.props.id?.startsWith('print-')).forEach((select, index) => select.props.onChange({ target: { value: String(index) } }))
-  tree = f.render()
-  elements(tree, el => el.type === 'button' && el.props['aria-label'] === 'Use PHOTO-3.JPG for wallet prints')[0].props.onClick(); tree = f.render()
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Add-ons'))[0].props.onClick(); tree = f.render()
-  elements(tree, el => el.type === 'button' && el.props['aria-pressed'] !== undefined)[0].props.onClick(); tree = f.render()
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Review'))[0].props.onClick(); tree = f.render()
-  elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.onChange({ target: { checked: true } }); f.render(); f.unmount()
-  const key = drafts.portalDraftKey('private', 'selection', null, 5)
-  const saved = drafts.readPortalDraft(key, browserStorage, now)!
-  assert.equal(saved.choices.included.length, 5)
-  assert.equal(saved.choices.extras.length, 1)
-  assert.equal(saved.choices.editingPreference, 'raw')
-  assert.equal(Object.keys(saved.choices.printSelections).length, 3)
-  assert.deepEqual(saved.choices.walletSelections, ['3'])
-  assert.equal(saved.choices.addonQuantities.print, 1)
-  now += 5 * 60 * 1000
-  const restored = setup(); t.after(restored.unmount)
-  restored.render(); tree = restored.render()
-  assert.equal(restored.pricing.total, 500)
-  assert.equal(elements(tree, el => el.type === 'select')[0].props.value, 'raw')
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'checkbox')[0].props.checked, true)
-  assert.equal(drafts.readPortalDraft(key, browserStorage, now)?.expiresAt, saved.expiresAt)
-  let success = false
-  t.mock.method(globalThis, 'fetch', async () => success ? Response.json({ ok: true }) : Response.json({ error: 'Try: submit again.' }, { status: 503 }))
-  const submit = async () => {
-    if (!elements(tree, el => el.type === 'input' && el.props.type === 'password').length) {
-      elements(tree, el => el.type === 'button' && content(el) === 'Submit Final Selection')[0].props.onClick()
-      tree = restored.render()
-    }
-    elements(tree, el => el.type === 'input' && el.props.type === 'password')[0].props.onChange({ target: { value: '0042' } })
-    tree = restored.render()
-    assert.ok(![...values.values()].some(value => value.includes('0042')), 'PIN must not enter the draft cache')
-    const button = elements(tree, el => el.type === 'button' && content(el) === 'Confirm & Submit')[0]
-    assert.equal(button.props.disabled, false)
-    await button.props.onClick(); await new Promise(resolve => setImmediate(resolve)); tree = restored.render()
-  }
-  await submit()
-  assert.deepEqual(drafts.readPortalDraft(key, browserStorage, now)?.choices, saved.choices)
-  success = true; await submit()
-  assert.equal(values.size, 0)
-  assert.equal(restored.submitted, 1)
-  restored.render(); assert.equal(values.size, 0, 'A rerender must not resurrect a submitted draft')
+test('session draft restores add-on photos without PIN or prices and clears after submission', async t=>{
+  const b=browser(t);const f=setup(ready);f.step('Add-ons');f.addons().onToggle(addons[1]);f.render();f.addons().onPhotos('frame',['5']);f.render();f.step('Review');f.render();f.unmount()
+  const key=drafts.portalDraftKey('private','selection',null,5)
+  const saved=drafts.readPortalDraft(key,b.storage)!
+  assert.deepEqual(saved.choices.addonPhotos?.frame,['5'])
+  const restored=setup(ready);t.after(restored.unmount);assert.equal(restored.review().remaining,7400)
+  assert.equal(drafts.readPortalDraft(key,b.storage)?.expiresAt,saved.expiresAt)
+  t.mock.method(globalThis,'fetch',async()=>Response.json({ok:true}))
+  restored.review().onSubmit();restored.render();restored.pin('0042');restored.render()
+  assert.ok(![...b.values.values()].some(value=>value.includes('0042')))
+  await restored.click('Confirm & Submit');await new Promise(resolve=>setImmediate(resolve));restored.render()
+  assert.equal(b.values.size,0)
 })
 
-test('server-submitted choices override and remove a stale browser draft', () => {
-  const key = drafts.portalDraftKey('private', 'selection', null, 5)
-  const values = new Map<string, string>()
-  const browserStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value) }, removeItem: (key: string) => { values.delete(key) } }
-  drafts.writePortalDraft(key, { included: ['0'], extras: [], editingPreference: 'raw', printSelections: {}, walletSelections: [], addonQuantities: {}, acknowledged: false, step: 'photos' }, browserStorage)
-  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: { sessionStorage: browserStorage } })
-  const f = setup({ ...selection, status: 'SUBMITTED', selectedItems: [{ fileId: '1', preference: 'less', extraEdit: false }] })
-  try {
-    f.render(); const tree = f.render()
-    assert.equal(elements(tree, el => el.type === 'select')[0].props.value, 'less')
-    assert.equal(values.size, 0)
-  } finally { f.unmount(); if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window') }
-})
-
-test('submitted prices remain snapshots; locked quantities cannot be edited and unloaded print photos can still preview', () => {
-  const saved = { ...selection, status: 'SUBMITTED' as const, selectedItems: gallery.slice(0, 5).map(file => ({ fileId: file.id, preference: 'raw' as const, extraEdit: false })),
-    totalAddonAmount: 75, addonOrders: [{ addonId: 'print', name: 'Extra print', quantity: 1, photoCount: 0, total: 75 }],
-    printAllocations: [{ category: 'TOGA_PICTURE_4R' as const, fileId: '0', quantity: 1, label: 'Toga' }] }
-  const f = setup(saved, [])
-  let tree = f.render()
-  assert.equal(f.pricing.total, 75, 'Changing catalog prices does not reprice a submitted selection')
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Add-ons'))[0].props.onClick()
-  tree = f.render()
-  assert.equal(elements(tree, el => el.type === 'input' && el.props.type === 'number')[0].props.disabled, true)
-  elements(tree, el => el.type === 'button' && content(el).endsWith('Free Prints'))[0].props.onClick()
-  tree = f.render()
-  assert.equal(elements(tree, el => el.type === 'img')[0].props.src, gallery[0].previewUrl)
+test('submitted server state replaces stale drafts, keeps price snapshots and protected unloaded photo URLs', t=>{
+  const b=browser(t), key=drafts.portalDraftKey('private','selection',null,5)
+  drafts.writePortalDraft(key,{included:['0'],extras:[],editingPreference:'raw',printSelections:{},walletSelections:[],addonQuantities:{},acknowledged:false,step:'photos'},b.storage)
+  const f=setup({...ready,status:'SUBMITTED',totalAddonAmount:75,addonOrders:[{addonId:'frame',name:'8R Frame',quantity:1,photoCount:0,photoIds:['0'],total:75}]},[])
+  t.after(f.unmount)
+  assert.equal(f.pricing.total,75);assert.equal(b.values.size,0);assert.equal(f.review().locked,true)
+  assert.equal(f.review().selectedPhoto('0').previewUrl,'/api/editor-workflow/portal/private/file/0?kind=gallery')
+  f.step('Add-ons');assert.equal(f.addons().locked,true)
 })
 
 test('long press opens preview once without toggling selection; tap and keyboard select; scroll and unmount cancel pending previews', t => {

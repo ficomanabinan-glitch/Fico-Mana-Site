@@ -26,6 +26,7 @@ import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
 import { PortalSelectionError, resolvePortalSelectionSources } from '@/lib/portal-selection-source'
 export { PortalSelectionError } from '@/lib/portal-selection-source'
 import { rawUploadGeneration } from '@/lib/raw-upload-generation'
+import { addonPhotoError } from '@/lib/addon-photo-rules'
 import { readOnsiteDrivePhotos } from '@/lib/onsite-drive-sync'
 
 export type EditingJobStatus =
@@ -57,7 +58,7 @@ export type PortalSelectionInput = {
   extraEditFileIds?: string[]
   preferences?: Array<{ fileId: string; preference: 'standard' | 'less' | 'raw' }>
   printAllocations?: Array<{ category: 'TOGA_PICTURE_4R' | 'ALAMPAY_BARONG_4R' | 'FRAME_8R' | 'WALLET_SIZE'; fileId: string; quantity: number }>
-  addons?: Array<{ addonId: string; quantity: number; photoCount: number }>
+  addons?: Array<{ addonId: string; quantity: number; photoCount: number; photoIds?: string[] }>
   acknowledgeNoRevision?: boolean
 }
 
@@ -517,7 +518,7 @@ export async function getBatchDetail(
     ? await Promise.all([
         admin.from('photo_selection_items').select('selection_id,gallery_file_id,enhancement_preference,is_extra_edit').in('selection_id', selectionIds),
         admin.from('print_allocations').select('selection_id,category,gallery_file_id,quantity,label_snapshot').in('selection_id', selectionIds),
-        admin.from('client_addon_orders').select('selection_id,name_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,total_amount').in('selection_id', selectionIds),
+        admin.from('client_addon_orders').select('selection_id,name_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,photo_ids,total_amount').in('selection_id', selectionIds),
       ])
     : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
   for (const [name, result] of [
@@ -578,6 +579,8 @@ export async function getBatchDetail(
           unitPrice: Number(row.unit_price_snapshot || 0),
           quantity: Number(row.quantity || 0),
           photoCount: Number(row.photo_count || 0),
+          photoIds: (row.photo_ids || []) as string[],
+          photoNames: ((row.photo_ids || []) as string[]).map(id => galleryNameMap.get(id) || id),
           total: Number(row.total_amount || 0),
         })),
         totalAddonAmount: Number(selection?.total_addon_amount || 0),
@@ -1066,7 +1069,7 @@ export async function getPortalPhotoRevision(publicId: string) {
   if (gallery.error) throw gallery.error
   return { generation: Number(photoState?.raw_upload_generation || 0), resetting: Boolean(photoState?.raw_reset_id), reopenedAt: photoState?.reopened_at || null,
     galleryCount: gallery.count || 0, lastUploadAt: gallery.data?.[0]?.created_at || null,
-    expiresAt: portal.expires_at || null, portalReadyEmailSentAt: portal.access_email_sent_at || null }
+    expiresAt: portal.expires_at || null, portalReadyEmailSentAt: portal.access_email_sent_at || null, deliverablesUploadedAt: portal.deliverables_uploaded_at || null }
 }
 
 export async function recordPortalFirstDownload(publicId: string) {
@@ -1104,7 +1107,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .order('created_at', { ascending: false }),
       admin
         .from('addon_catalog')
-        .select('id,name,description,price_amount,pricing_type,display_order,max_quantity')
+        .select('id,name,description,price_amount,pricing_type,display_order,max_quantity,photo_limit')
         .eq('workspace_id', workspaceId)
         .eq('status', 'active')
         .order('display_order', { ascending: true })
@@ -1140,7 +1143,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       .eq('selection_id', selectionId),
     admin
       .from('client_addon_orders')
-      .select('addon_catalog_id,name_snapshot,description_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,total_amount')
+      .select('addon_catalog_id,name_snapshot,description_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,photo_ids,total_amount')
       .eq('selection_id', selectionId)
       .order('created_at', { ascending: true }),
   ])
@@ -1179,6 +1182,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     expiry: expirySettings.error && !portal.download_expiry_days ? null : {
       days: Number(portal.download_expiry_days || expirySettings.data?.portal_expiry_days || 30),
       portalReadyEmailSentAt: portal.access_email_sent_at || null,
+      deliverablesUploadedAt: portal.deliverables_uploaded_at || null,
       expiresAt: portal.expires_at || null,
     },
     warnings: [...new Set(warnings)],
@@ -1209,6 +1213,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
             unitPrice: Number(row.unit_price_snapshot || 0),
             quantity: Number(row.quantity || 0),
             photoCount: Number(row.photo_count || 0),
+            photoIds: (row.photo_ids || []) as string[],
             total: Number(row.total_amount || 0),
           })),
           totalAddonAmount: Number(selectionResult.data.total_addon_amount || 0),
@@ -1230,6 +1235,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       price: Number(row.price_amount || 0),
       pricingType: String(row.pricing_type),
       maxQuantity: Number(row.max_quantity || 1),
+      photoLimit: typeof row.photo_limit === 'number' ? row.photo_limit : undefined,
     })),
     deliverables: (deliverablesResult.data || []).map((file) => ({
       id: String(file.id),
@@ -1418,6 +1424,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       throw new PortalSelectionError('One or more selected photos do not belong to this portal.', 'SELECTION_INVALID', 400)
     }
     const addonRequests = input.addons || []
+    if (addonRequests.length > 4) throw new PortalSelectionError('Choose up to four add-on types.', 'SELECTION_INVALID', 400)
     const addonIds = [...new Set(addonRequests.map((addon) => addon.addonId))]
     if (addonRequests.length !== addonIds.length) {
       throw new PortalSelectionError('Each add-on type may appear only once.', 'SELECTION_INVALID', 400)
@@ -1425,7 +1432,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     const { data: addonRows, error: addonError } = addonIds.length
       ? await admin
           .from('addon_catalog')
-          .select('id,name,description,price_amount,pricing_type,max_quantity')
+          .select('id,name,description,price_amount,pricing_type,max_quantity,photo_limit')
           .eq('workspace_id', workspaceId)
           .eq('status', 'active')
           .in('id', addonIds)
@@ -1452,6 +1459,9 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       const row = addonMap.get(request.addonId)
       if (!row) throw new PortalSelectionError('Selected add-on not found.', 'SELECTION_INVALID', 400)
       const quantity = Number(request.quantity)
+      const photoIds = request.photoIds || []
+      const assignmentError = addonPhotoError({ name: String(row.name), photoLimit: row.photo_limit }, photoIds, unique)
+      if (assignmentError) throw new PortalSelectionError(assignmentError, 'SELECTION_INVALID', 400)
       const photoCount = Number(request.photoCount || 0)
       const pricingType = String(row.pricing_type) as 'fixed' | 'per_photo' | 'per_piece'
       const billableUnits = pricingType === 'fixed' ? 1 : pricingType === 'per_photo' ? Math.max(photoCount, quantity) : quantity
@@ -1466,6 +1476,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         unit_price_snapshot: Number(row.price_amount || 0),
         quantity,
         photo_count: photoCount,
+        photo_ids: photoIds,
         total_amount: Number(row.price_amount || 0) * billableUnits,
       }
     })

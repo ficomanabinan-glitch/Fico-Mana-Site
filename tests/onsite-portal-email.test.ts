@@ -72,5 +72,5 @@ test('accepted emails are deduplicated; uncertain retries share the same provide
   assert.equal(failed.calls.filter(call => call.table === 'client_portals').length, 1, 'Failed send never updates the sent timestamp')
   assert.equal(failed.expiryCalls.length, 0)
   const expiryFailure = fixture({ expiryFailure: true })
-  assert.match(String((await expiryFailure.run()).error), /expiry could not be saved/)
+  assert.match(String((await expiryFailure.run()).error), /delivery status could not be saved/)
 })

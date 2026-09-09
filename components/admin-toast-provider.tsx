@@ -43,7 +43,7 @@ const iconColors: Record<ToastType, string> = {
   info: 'text-primary',
 }
 
-export function AdminToastProvider({ children }: { children: React.ReactNode }) {
+export function AdminToastProvider({ children, portal = false }: { children: React.ReactNode; portal?: boolean }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
   const dismiss = useCallback((id: string) => {
@@ -71,13 +71,13 @@ export function AdminToastProvider({ children }: { children: React.ReactNode }) 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-[min(100vw-2rem,380px)] pointer-events-none">
+      <div className={portal ? 'fixed bottom-20 right-4 z-[120] flex flex-col gap-2 w-[min(100vw-2rem,380px)] pointer-events-none' : 'fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-[min(100vw-2rem,380px)] pointer-events-none'}>
         {toasts.map((t) => {
           const Icon = icons[t.type]
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto border backdrop-blur-md shadow-2xl p-4 animate-in slide-in-from-right-5 fade-in duration-300 ${styles[t.type]}`}
+              className={`pointer-events-auto border backdrop-blur-md shadow-2xl p-4 animate-in slide-in-from-right-5 fade-in duration-200 motion-reduce:animate-none ${styles[t.type]} ${portal ? 'rounded-xl !bg-[#222]' : ''}`}
               role="status"
             >
               <div className="flex gap-3">
@@ -89,7 +89,7 @@ export function AdminToastProvider({ children }: { children: React.ReactNode }) 
                 <button
                   type="button"
                   onClick={() => dismiss(t.id)}
-                  className="text-white/40 hover:text-white shrink-0"
+                  className={portal ? 'min-h-11 min-w-11 grid place-items-center text-white/60 hover:text-white shrink-0' : 'text-white/40 hover:text-white shrink-0'}
                   aria-label="Dismiss"
                 >
                   <X className="w-4 h-4" />

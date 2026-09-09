@@ -5,15 +5,17 @@ import { Check, ChevronLeft, ChevronRight, Plus, X, ZoomIn, ZoomOut } from 'luci
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
 import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, zoomPhotoWithWheel, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
 
-export function PhotoSelectButton({ file, locked, onSelect, onPreview, onDesktopPreview, children, className = '' }: {
+export function PhotoSelectButton({ file, locked, onSelect, onPreview, onDesktopPreview, children, className = '', selected, focused, extra, desktopBreakpoint = '(min-width: 48rem)' }: {
   file: ClientGalleryFile; locked: boolean; onSelect: () => void; onPreview: (file: ClientGalleryFile) => void; onDesktopPreview?: (file: ClientGalleryFile) => void; children: ReactNode; className?: string
+  selected?: boolean; focused?: boolean; extra?: boolean; desktopBreakpoint?: string
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const press = useRef<{ id: number; x: number; y: number } | null>(null)
   const suppressClick = useRef(false)
   const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; press.current = null }
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
-  return <button type="button" aria-label={`${locked ? 'Preview' : 'Select'} ${file.fileName}. Hold to preview.`}
+  return <button type="button" aria-label={`${locked ? 'Preview' : 'View or select'} ${file.fileName}. Hold to preview.`}
+    aria-pressed={selected} data-selected={selected} data-focused={focused} data-extra={extra}
     className={`relative block w-full cursor-pointer select-none text-left ${className}`} style={{ WebkitTouchCallout: 'none' }}
     onPointerDown={event => {
       if (!event.isPrimary || event.button !== 0) return
@@ -21,14 +23,14 @@ export function PhotoSelectButton({ file, locked, onSelect, onPreview, onDesktop
       press.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
       timer.current = setTimeout(() => { suppressClick.current = true; clear(); onPreview(file) }, 450)
     }}
-    onPointerMove={event => { const start = press.current; if (start && (event.pointerId !== start.id || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10)) clear() }}
+    onPointerMove={event => { const start = press.current; if (start && (event.pointerId !== start.id || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10)) { suppressClick.current = true; clear() } }}
     onPointerUp={clear} onPointerCancel={clear} onPointerLeave={clear}
     onContextMenu={event => event.preventDefault()}
     onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { clear(); suppressClick.current = false } }}
     onClick={event => {
       if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; return }
       // Match the breakpoint where the persistent large preview is visible.
-      if (onDesktopPreview && window.matchMedia('(min-width: 48rem)').matches) { onDesktopPreview(file); return }
+      if (onDesktopPreview && window.matchMedia(desktopBreakpoint).matches) { onDesktopPreview(file); return }
       if (locked) onPreview(file); else onSelect()
     }}>
     {children}
@@ -140,8 +142,8 @@ export function PortalPhotoPreview({
   return <dialog ref={dialog} aria-labelledby="portal-preview-title" onCancel={event => { event.preventDefault(); onClose() }}
     onClick={event => { if (event.target === dialog.current) onClose() }}
     className="portal-photo-preview m-auto w-[94vw] max-w-5xl overflow-hidden rounded-xl border border-white/15 bg-[#171717] p-0 text-white shadow-2xl backdrop:bg-black/85">
-    <div className="flex items-center justify-between gap-3 border-b border-white/10 p-3 sm:p-4">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 p-3 sm:flex-nowrap sm:gap-3 sm:p-4">
+      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
         {files.length > 1 ? <><button type="button" aria-label="Previous photo" disabled={currentIndex <= 0} onClick={() => navigate(-1)} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ChevronLeft className="size-4"/></button><button type="button" aria-label="Next photo" disabled={currentIndex < 0 || currentIndex >= files.length - 1} onClick={() => navigate(1)} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ChevronRight className="size-4"/></button></> : null}
         <h3 id="portal-preview-title" className="min-w-0 truncate text-xs font-semibold">{file.fileName}</h3>
       </div>

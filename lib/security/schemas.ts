@@ -85,7 +85,7 @@ export const portalSelectionSchema = z
     addons: z
       .array(
         z
-          .object({ addonId: z.string().uuid(), quantity: z.number().int().min(1).max(500), photoCount: z.number().int().min(0).max(200).default(0) })
+          .object({ addonId: z.string().uuid(), quantity: z.number().int().min(1).max(500), photoCount: z.number().int().min(0).max(200).default(0), photoIds: z.array(z.string().uuid()).max(4).default([]) })
           .strict(),
       )
       .max(4)

@@ -317,7 +317,7 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const now = new Date()
   const { data: portal, error: portalError } = await admin
     .from('client_portals')
-    .select('id,status,expires_at,access_email_sent_at')
+    .select('id,status,expires_at,deliverables_uploaded_at')
     .eq('booking_id', bookingId)
     .maybeSingle()
   if (portalError) throw new Error(portalError.message)
@@ -333,8 +333,8 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
     const renewedUntil = new Date(now)
     renewedUntil.setUTCDate(renewedUntil.getUTCDate() + days)
     // An explicit renewal grants a new admin-controlled period. Before the
-    // first successful ready email, the portal continues to wait for its timer.
-    patch.expires_at = portal.access_email_sent_at ? renewedUntil.toISOString() : null
+    // first final delivery, the portal continues to wait for its timer.
+    patch.expires_at = portal.deliverables_uploaded_at ? renewedUntil.toISOString() : null
   }
   const { data, error } = await admin
     .from('client_portals')
