@@ -28,6 +28,7 @@ export { PortalSelectionError } from '@/lib/portal-selection-source'
 import { rawUploadGeneration } from '@/lib/raw-upload-generation'
 import { addonPhotoError } from '@/lib/addon-photo-rules'
 import { readOnsiteDrivePhotos } from '@/lib/onsite-drive-sync'
+import { enhancedUploadName } from '@/lib/enhanced-upload-naming'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -2043,6 +2044,57 @@ export async function createBatchUploadRun(
   return { uploadJobId: String(run.id) }
 }
 
+async function reserveEnhancedUpload(admin: SupabaseClient, workspaceId: string, item: { id: string; editing_job_id: string }, input: UploadFileInput) {
+  // Reuse the existing per-booking editor lock to serialize names across upload runs.
+  const lockUntil = new Date(Date.now() + 120_000).toISOString()
+  const { data: lock, error: lockError } = await admin.from('editing_jobs')
+    .update({ download_lock_expires_at: lockUntil })
+    .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('booking_id', input.bookingId)
+    .or(`download_lock_expires_at.is.null,download_lock_expires_at.lte.${nowIso()}`)
+    .select('id').maybeSingle()
+  if (lockError || !lock) throw new Error('This client is already being processed. Try: wait for the current upload or download, then retry.')
+  try {
+    // Supabase caps each result page. Older upload runs must still reserve their numbers.
+    async function readPages<T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>) {
+      const data: T[] = []
+      for (let offset = 0; ; offset += 500) {
+        if (Date.now() >= Date.parse(lockUntil)) throw new Error('Filename verification took too long. Try: retry this client upload.')
+        const page = await query(offset, offset + 499)
+        if (page.error) return { data, error: page.error }
+        data.push(...(page.data || []))
+        if (!page.data || page.data.length < 500) return { data, error: null }
+      }
+    }
+    const [booking, deliveries, reservations] = await Promise.all([
+      admin.from('bookings').select('customer_name').eq('workspace_id', workspaceId).eq('id', input.bookingId).single(),
+      readPages((from, to) => admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', input.bookingId).order('id').range(from, to)),
+      readPages((from, to) => admin.from('batch_upload_files').select('relative_path,file_name,batch_upload_items!inner(booking_id,editing_job_id)')
+        .eq('batch_upload_items.booking_id', input.bookingId).eq('batch_upload_items.editing_job_id', item.editing_job_id).order('id').range(from, to)),
+    ])
+    if (booking.error || !booking.data || deliveries.error || reservations.error) {
+      throw new Error('Could not verify the enhanced-photo filenames. Try: retry this client upload.')
+    }
+    const prior = (deliveries.data || []).find(file => file.relative_path === input.relativePath)
+    const duplicate = prior?.checksum === input.checksum
+    const fileName = duplicate ? String(prior.file_name) : enhancedUploadName(
+      String(booking.data.customer_name || ''), input.fileName, input.relativePath,
+      [...(deliveries.data || []), ...(reservations.data || [])],
+    )
+    if (Date.now() >= Date.parse(lockUntil)) throw new Error('Filename verification took too long. Try: retry this client upload.')
+    const { data: uploadFile, error } = await admin.from('batch_upload_files').upsert({
+      upload_item_id: item.id, relative_path: input.relativePath, file_name: fileName,
+      file_size: input.fileSize, checksum: input.checksum, drive_file_id: prior?.drive_file_id || null,
+      status: duplicate ? 'SKIPPED_DUPLICATE' : 'UPLOADING', attempt_count: 1,
+      last_error: null, updated_at: nowIso(),
+    }, { onConflict: 'upload_item_id,relative_path' }).select('*').single()
+    if (error || !uploadFile) throw new Error(error?.message || 'Could not reserve the enhanced-photo filename.')
+    return { prior, uploadFile, fileName, duplicate }
+  } finally {
+    await admin.from('editing_jobs').update({ download_lock_expires_at: null })
+      .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('download_lock_expires_at', lockUntil)
+  }
+}
+
 export async function createDeliverableUploadSession(
   workspaceId: string,
   displayId: string,
@@ -2076,7 +2128,10 @@ export async function createDeliverableUploadSession(
     .eq('batch_upload_items.upload_job_id', uploadJobId)
   if (quotaError) throw new Error('Could not verify the upload quota.')
   const currentFiles = runFiles || []
-  const priorPath = currentFiles.find((file) => String(file.relative_path) === relativePath)
+  const priorPath = currentFiles.find((file) => {
+    const relation = Array.isArray(file.batch_upload_items) ? file.batch_upload_items[0] : file.batch_upload_items
+    return String(relation?.booking_id || '') === input.bookingId && String(file.relative_path) === relativePath
+  })
   const projectedCount = currentFiles.length + (priorPath ? 0 : 1)
   const projectedBytes = currentFiles.reduce((sum, file) => sum + Number(file.file_size || 0), 0)
     - Number(priorPath?.file_size || 0)
@@ -2091,39 +2146,14 @@ export async function createDeliverableUploadSession(
   if (bookingFiles.length + (priorPath ? 0 : 1) > 1_000) {
     throw new Error('This client folder exceeds the safe per-booking file quota.')
   }
-  const { data: prior } = await admin
-    .from('deliverable_files')
-    .select('*')
-    .eq('booking_id', input.bookingId)
-    .eq('relative_path', relativePath)
-    .maybeSingle()
-  const { data: uploadFile, error: fileError } = await admin
-    .from('batch_upload_files')
-    .upsert(
-      {
-        upload_item_id: item.id,
-        relative_path: relativePath,
-        file_name: safeSegment(input.fileName),
-        file_size: input.fileSize,
-        checksum,
-        drive_file_id: prior?.drive_file_id || null,
-        status: prior?.checksum === checksum ? 'SKIPPED_DUPLICATE' : 'UPLOADING',
-        attempt_count: 1,
-        last_error: null,
-        updated_at: nowIso(),
-      },
-      { onConflict: 'upload_item_id,relative_path' },
-    )
-    .select('*')
-    .single()
-  if (fileError || !uploadFile) throw new Error(fileError?.message || 'Could not create upload file state.')
+  const { prior, uploadFile, fileName, duplicate } = await reserveEnhancedUpload(admin, workspaceId, item, { ...input, relativePath, checksum })
   await admin
     .from('batch_upload_items')
     .update({ status: 'UPLOADING', attempt_count: Number(item.attempt_count || 0) + 1, updated_at: nowIso() })
     .eq('id', item.id)
   await admin.from('editing_jobs').update({ status: 'UPLOADING', last_error: null, updated_at: nowIso() }).eq('id', item.editing_job_id)
-  if (prior?.checksum === checksum) {
-    return { uploadFileId: String(uploadFile.id), duplicate: true, driveFileId: String(prior.drive_file_id) }
+  if (duplicate) {
+    return { uploadFileId: String(uploadFile.id), fileName, duplicate: true, driveFileId: String(prior!.drive_file_id) }
   }
   try {
     const { hierarchy } = await ensureBookingFolders(admin, workspaceId, input.bookingId)
@@ -2132,13 +2162,13 @@ export async function createDeliverableUploadSession(
       existingDriveFileId: prior?.drive_file_id || null,
       bookingId: input.bookingId,
       relativePath,
-      fileName: input.fileName,
+      fileName,
       mimeType: input.mimeType || 'application/octet-stream',
       fileSize: input.fileSize,
       checksum,
       browserOrigin: input.browserOrigin,
     })
-    return { uploadFileId: String(uploadFile.id), uploadUrl, duplicate: false }
+    return { uploadFileId: String(uploadFile.id), fileName, uploadUrl, duplicate: false }
   } catch (uploadError) {
     const message = uploadError instanceof Error ? uploadError.message : 'Could not initialize the Drive upload.'
     await Promise.all([

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 test('portal loading uses a layout-matched skeleton and keeps cached data visible during background sync', async () => {
-  const portal = await readFile('app/portal/[id]/page.tsx', 'utf8')
+  const portal = await readFile('components/client-portal-page.tsx', 'utf8')
   assert.match(portal, /if \(loading\) return <PortalPageSkeleton \/>/)
   assert.match(portal, /queryClient\.getQueryData<PortalData>\(queryKey\)/)
   assert.match(portal, /void load\(0, Boolean\(cached\)\)/)
@@ -21,7 +21,7 @@ test('client portal keeps essential booking content available when optional read
 })
 
 test('portal unavailable state includes a solution and a retry button', async () => {
-  const portal = await readFile('app/portal/[id]/page.tsx', 'utf8')
+  const portal = await readFile('components/client-portal-page.tsx', 'utf8')
 
   assert.match(portal, /Try: refresh this page/)
   assert.match(portal, />Try Again</)

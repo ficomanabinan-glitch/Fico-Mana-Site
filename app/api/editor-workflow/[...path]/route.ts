@@ -61,6 +61,7 @@ import { startRawUpload, completeRawUpload } from '@/lib/raw-upload-server'
 import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from '@/lib/raw-upload-contract'
 import { beginOnsitePhotoReset, continueOnsitePhotoReset } from '@/lib/onsite-photo-reset'
 import { reviewSelection, SelectionReviewError } from '@/lib/selection-review'
+import { portalPagePayload } from '@/lib/portal-page-payload'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -161,18 +162,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
     const offset = Number(request.nextUrl.searchParams.get('offset') || 0)
     const limit = Number(request.nextUrl.searchParams.get('limit') || 48)
     const data = await getPortalData(publicId, offset, limit)
-    const response = json({
-      ...data,
-      gallery: data.gallery.map((file) => ({
-        ...file,
-        previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(file.id)}?kind=gallery`,
-      })),
-      deliverables: data.deliverables.map((file) => ({
-        ...file,
-        previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(file.id)}?kind=deliverable`,
-      })),
-      downloadAllUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/deliverables.zip`,
-    })
+    const response = json(portalPagePayload(publicId, data))
     response.headers.set('Referrer-Policy', 'no-referrer')
     return response
   }

@@ -209,6 +209,7 @@ export function createUploadWork(batch: DetectedBatchFolder, allowedBookingIds: 
         return { file, relativePath: `EDITED/${afterClient.join('/')}` }
       })
       .filter((item): item is { file: File; relativePath: string } => Boolean(item))
+      .sort((a, b) => a.relativePath.localeCompare(b.relativePath, 'en', { numeric: true }))
     work.push({ client, edited })
   }
   return work
@@ -359,9 +360,11 @@ export async function uploadDetectedBatch(
         const session = await responseJson(sessionResponse)
         if (!sessionResponse.ok) throw new Error(String(session.error || 'Could not start file upload.'))
         uploadFileId = String(session.uploadFileId)
+        const displayName = String(session.fileName || upload.file.name)
+        progress(customerName, displayName)
         if (!session.duplicate) {
           const driveFile = await putDriveFile(String(session.uploadUrl), upload.file, (loaded) =>
-            progress(customerName, upload.file.name, loaded),
+            progress(customerName, displayName, loaded),
           )
           const completeResponse = await fetch(
             `/api/editor-workflow/batches/${encodeURIComponent(batchId)}/complete-file`,

@@ -161,7 +161,7 @@ test('delivery expiry uses one database trigger instead of competing application
   for(const file of ['lib/editor-workflow.ts','lib/booking-provisioning.ts','app/api/bookings/[id]/deliver-edited-photos/route.ts']) {
     assert.doesNotMatch(readFileSync(file,'utf8'),/setPortalExpiryFromDelivery/)
   }
-  const page=readFileSync('app/portal/[id]/page.tsx','utf8')
+  const page=readFileSync('components/client-portal-page.tsx','utf8')
   assert.match(page,/<PortalExpiryNotice expiry=\{data.expiry\}/)
   assert.match(readFileSync('supabase/migrations/20260909010816_portal_final_delivery_expiry.sql','utf8'),/create trigger start_portal_expiry_on_delivery after insert or update of published_at/)
   assert.match(readFileSync('components/client-photo-selection.tsx','utf8'),/Selection submitted and locked/)

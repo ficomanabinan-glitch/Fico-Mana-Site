@@ -68,7 +68,7 @@ test('routes only files inside the client EDITED folder', async () => {
   const work = createUploadWork(batch, new Set(['BOOK-100']))
   assert.deepEqual(
     work[0].edited.map((item) => item.relativePath),
-    ['EDITED/ENHANCED - final-01.jpg', 'EDITED/subfolder/ENHANCED - final-02.jpg', 'EDITED/ENHANCED - final-03.jpg'],
+    ['EDITED/ENHANCED - final-01.jpg', 'EDITED/ENHANCED - final-03.jpg', 'EDITED/subfolder/ENHANCED - final-02.jpg'],
   )
   assert.equal(await work[0].edited[0].file.text(), 'photo', 'Renaming preserves image bytes')
   assert.equal(files[2].file.name, 'final-01.jpg', 'The original local file is unchanged')

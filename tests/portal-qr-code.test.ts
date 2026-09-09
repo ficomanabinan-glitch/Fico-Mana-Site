@@ -14,7 +14,7 @@ test('portal expiry is enforced at the exact configured time', () => {
 test('client portal QR uses the existing signed portal URL without an external QR service', async () => {
   const [qrCode, portalPage, provisioningPage, workflow] = await Promise.all([
     readFile('components/portal-qr-code.tsx', 'utf8'),
-    readFile('app/portal/[id]/page.tsx', 'utf8'),
+    readFile('components/client-portal-page.tsx', 'utf8'),
     readFile('app/admin/provisioning/page.tsx', 'utf8'),
     readFile('lib/editor-workflow.ts', 'utf8'),
   ])

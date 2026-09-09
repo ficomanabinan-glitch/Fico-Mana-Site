@@ -120,7 +120,7 @@ test('submitted server state replaces stale drafts, keeps price snapshots and pr
 test('long press opens preview once without toggling selection; tap and keyboard select; scroll and unmount cancel pending previews', t => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const hooks = componentHarness()
-  const component = loadTs<typeof import('../components/portal-photo-preview.tsx')>('components/portal-photo-preview.tsx', { react: hooks.react, '@/lib/photo-pan-zoom': {} })
+  const component = loadTs<typeof import('../components/portal-photo-preview.tsx')>('components/portal-photo-preview.tsx', { react: hooks.react, '@/lib/photo-pan-zoom': {}, '@/components/portal-preview-cache': {} })
   let selects = 0, previews = 0
   const button = hooks.render(() => component.PhotoSelectButton({ file: gallery[0], locked: false, onSelect: () => selects++, onPreview: () => previews++, children: null }))
   const pointer = { isPrimary: true, button: 0, pointerId: 1, clientX: 10, clientY: 10 }

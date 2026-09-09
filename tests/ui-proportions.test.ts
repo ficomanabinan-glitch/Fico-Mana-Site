@@ -22,7 +22,7 @@ test('zoom preview reserves image space and exposes accessible loading and failu
 })
 
 test('client identity and contextual information use the approved Overview drawer', () => {
-  const portal=source('app/portal/[id]/page.tsx')
+  const portal=source('components/client-portal-page.tsx')
   assert.ok(portal.includes('styles.clientName}>{data.booking.customerName}'))
   assert.ok(portal.includes('<PortalOverview>'))
   assert.doesNotMatch(portal,/sidebarCollapsed|PortalSidebar/)
@@ -96,7 +96,7 @@ test('shared typography is rounded and responsive without a forced phi multiplie
 })
 
 test('approved photo layout keeps identity and navigation in one sticky header without restoring a sidebar', () => {
-  const portal=source('app/portal/[id]/page.tsx'), selection=source('components/client-photo-selection.tsx'), css=source('components/portal-workspace.module.css')
+  const portal=source('components/client-portal-page.tsx'), selection=source('components/client-photo-selection.tsx'), css=source('components/portal-workspace.module.css')
   assert.doesNotMatch(portal,/PortalSidebar|sidebarCollapsed|mobileHeaderCompact/)
   assert.ok(portal.includes('Shoot day'))
   assert.ok(selection.includes('{headerContent}{selectionNavigation}'))
@@ -104,6 +104,26 @@ test('approved photo layout keeps identity and navigation in one sticky header w
   assert.ok(css.includes('grid-template-columns:minmax(0,1.618fr) minmax(0,1fr)'))
   assert.ok(css.includes('--portal-header-height'))
   assert.ok(css.includes('.preview { display:none; }'))
+})
+
+test('portal workflow navigation is compact, single-line and keeps accessible touch targets', () => {
+  const css=source('components/portal-workspace.module.css')
+  const navigation=css.match(/\.navigation \{([^}]+)\}/)?.[1] || ''
+  const step=css.match(/\.step \{([^}]+)\}/)?.[1] || ''
+  assert.match(navigation, /width:min\(100%,640px\)/)
+  assert.match(navigation, /margin-inline:auto/)
+  assert.match(navigation, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/)
+  assert.match(navigation, /border-radius:var\(--portal-radius-card\)/)
+  assert.match(step, /display:flex/)
+  assert.match(step, /align-items:center/)
+  assert.match(step, /min-height:44px/)
+  assert.doesNotMatch(css, /\.step\[aria-current=step\]::after/)
+  assert.doesNotMatch(css, /\.step small \{[^}]*margin-bottom/)
+  assert.match(css, /\.step small \{ display:none; \}/)
+  assert.match(css, /\.step\[aria-current=step\] \{ color:white; background:#0500d0; \}/)
+  const skeleton=source('components/portal-page-skeleton.tsx')
+  assert.match(skeleton, /className=\{styles.step\} key=\{index\}/)
+  assert.doesNotMatch(skeleton, /className="p-3"/)
 })
 
 test('operational metadata uses shared readable tokens, and requested filler labels stay removed', () => {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { Check, ChevronLeft, ChevronRight, Plus, X, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
+import { usePortalPreviewSource, useWarmPortalPreview } from '@/components/portal-preview-cache'
 import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, zoomPhotoWithWheel, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
 
 export function PhotoSelectButton({ file, locked, onSelect, onPreview, onDesktopPreview, children, className = '', selected, focused, extra, desktopBreakpoint = '(min-width: 48rem)' }: {
@@ -64,7 +65,12 @@ export function PortalPhotoPreview({
   const [dragging, setDragging] = useState(false)
   const [failed, setFailed] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const previewSource = usePortalPreviewSource(file?.previewUrl)
+  const warmPreview = useWarmPortalPreview()
   const currentIndex = file ? files.findIndex(item => item.id === file.id) : -1
+  useEffect(() => {
+    for (const adjacent of [files[currentIndex - 1], files[currentIndex + 1]]) if (adjacent) warmPreview(adjacent.previewUrl)
+  }, [files, currentIndex, warmPreview])
   useEffect(() => {
     setLoaded(false)
     setFailed(false)
@@ -183,7 +189,7 @@ export function PortalPhotoPreview({
       {failed ? <p role="alert" className="p-8 text-center text-xs text-white/60">Preview unavailable. Try: close and reopen the photo. If it continues, refresh your portal.</p> :
         // Protected preview URL, never a public RAW-original link. Reuse the grid's cached image.
         // eslint-disable-next-line @next/next/no-img-element
-        <img ref={photo} src={file.previewUrl} alt={file.fileName} draggable={false} decoding="async" onError={() => setFailed(true)} onLoad={() => { setLoaded(true); applyView(currentView.current) }}
+        <img ref={photo} src={previewSource} alt={file.fileName} draggable={false} decoding="async" onError={() => setFailed(true)} onLoad={() => { setLoaded(true); applyView(currentView.current) }}
           className={`pointer-events-none block h-full w-full select-none object-contain transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`, transformOrigin: 'center', willChange: dragging ? 'transform' : undefined }}/>
       }
     </div>

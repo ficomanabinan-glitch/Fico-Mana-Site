@@ -67,9 +67,9 @@ test('enhanced matching allows RAW-to-JPEG export but rejects missing, ambiguous
   assert.equal(manifestTools.matchEnhancedPrintSource(jpegOutput, [file, { ...file, drive_file_id: 'second', file_name: '0920.png' }]), file)
 })
 
-function fixture(options: { missing?: boolean; foreign?: boolean; hashMismatch?: boolean; copyFailAt?: number; dbError?: boolean; status?: string; mimeType?: string } = {}) {
+function fixture(options: { renamed?: boolean; missing?: boolean; foreign?: boolean; hashMismatch?: boolean; copyFailAt?: number; dbError?: boolean; status?: string; mimeType?: string } = {}) {
   const deliveries = categories.map((_, index) => ({
-    drive_file_id: `edited${index}`, file_name: `ENHANCED - 092${index}.JPG`, checksum: checksums[index], relative_path: `EDITED/ENHANCED - 092${index}.JPG`,
+    drive_file_id: `edited${index}`, file_name: options.renamed ? `ENHANCED ${index + 1} - ELRISH JOHN RULL.JPG` : `ENHANCED - 092${index}.JPG`, checksum: checksums[index], relative_path: `EDITED/ENHANCED - 092${index}.JPG`,
     workspace_id: 'workspace', booking_id: 'SYNTHETIC', editing_job_id: 'job',
   }))
   const tables: Record<string, Array<Record<string, unknown>>> = {
@@ -141,6 +141,17 @@ test('successful print preparation uses only enhanced sources and writes pending
   assert.ok(f.documents[1].outputs.every(row => row.status === 'ready' && row.print_file_id))
   assert.deepEqual(manifest, f.documents[1])
   assert.equal(f.tables.print_allocations[3].drive_file_id, 'print4')
+})
+
+test('numbered enhanced uploads still match the right original and preserve every print filename', async () => {
+  const previous = fixture(), renamed = fixture({ renamed: true })
+  await previous.run(); await renamed.run()
+  assert.deepEqual(renamed.copies.map(copy => copy.fileName), previous.copies.map(copy => copy.fileName))
+  assert.deepEqual(renamed.copies.map(copy => copy.fileName), [
+    'TOGA PICTURE - 0920.JPG', 'ALAMBAY BARONG - 0921.JPG', 'FRAME - 0922.JPG',
+    'WALLET SIZE 1 - 0923.JPG', 'WALLET SIZE 2 - 0923.JPG', 'WALLET SIZE 3 - 0923.JPG', 'WALLET SIZE 4 - 0923.JPG',
+  ])
+  assert.ok(renamed.copies.every(copy => (copy.source as { name: string }).name.startsWith('ENHANCED ')))
 })
 
 test('missing, foreign, changed, unsubmitted, or unreadable sources cannot create a print copy', async () => {

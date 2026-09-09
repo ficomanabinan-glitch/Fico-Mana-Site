@@ -16,6 +16,12 @@ export type EnhancedPrintSource = {
   drive_file_id: string
   file_name: string
   checksum: string
+  relative_path?: string
+}
+
+export function enhancedPrintSourceName(file: EnhancedPrintSource) {
+  // New client-facing names omit camera IDs. The verified source path retains them.
+  return file.relative_path?.split('/').at(-1) || file.file_name
 }
 export type PrintOutput = {
   key: string
@@ -108,8 +114,8 @@ export type PrintManifest = ReturnType<typeof buildPrintManifest>
 export function matchEnhancedPrintSource(output: PrintOutput, files: EnhancedPrintSource[]) {
   const candidates = [...new Map(files.map(file => [file.drive_file_id, file])).values()]
     .filter(file => /^[a-f0-9]{64}$/i.test(file.checksum))
-  const exact = candidates.filter(file => filenameKey(file.file_name) === filenameKey(output.source_file_name))
-  const matches = exact.length ? exact : candidates.filter(file => stem(file.file_name) === stem(output.source_file_name))
+  const exact = candidates.filter(file => filenameKey(enhancedPrintSourceName(file)) === filenameKey(output.source_file_name))
+  const matches = exact.length ? exact : candidates.filter(file => stem(enhancedPrintSourceName(file)) === stem(output.source_file_name))
   if (matches.length !== 1) {
     throw new Error(matches.length
       ? `More than one enhanced photo matches ${output.source_file_name}. Try: keep one enhanced file with that original filename in this client's EDITED folder, then retry.`

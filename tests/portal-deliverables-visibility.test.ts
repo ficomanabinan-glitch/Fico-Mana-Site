@@ -3,7 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
 test('final deliverables are hidden until published photos exist and have no checkmark heading', () => {
-  const page = readFileSync('app/portal/[id]/page.tsx', 'utf8')
+  const page = readFileSync('components/client-portal-page.tsx', 'utf8')
   const section = page.split('\n').find(line => line.includes('Final Deliverables'))!
   assert.match(section, /data\.deliverables\.length > 0 \? <section/)
   assert.match(section, /<PortalDeliverableGallery/)

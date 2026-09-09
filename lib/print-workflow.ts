@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { copyEnhancedPrint, findOrCreateFolder, getDriveFile, hashDriveFileSha256, upsertDriveFile } from '@/lib/google-drive'
-import { buildPrintManifest, matchEnhancedPrintSource, printOutputName } from '@/lib/print-manifest'
+import { buildPrintManifest, enhancedPrintSourceName, matchEnhancedPrintSource, printOutputName } from '@/lib/print-manifest'
 import type { EnhancedPrintSource, PrintManifest } from '@/lib/print-manifest'
 import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
 
@@ -89,7 +89,7 @@ export async function fulfillBookingPrints(input: {
     const copy = await copyEnhancedPrint({
       source: verifiedSources.get(source.drive_file_id)!, destinationFolderId: prints.id,
       bookingId, selectionId: manifest.selection_id, printKey: output.key,
-      checksum: source.checksum, fileName: printOutputName(output, source.file_name),
+      checksum: source.checksum, fileName: printOutputName(output, enhancedPrintSourceName(source)),
     })
     Object.assign(output, {
       status: 'ready', enhanced_file_id: source.drive_file_id, enhanced_checksum: source.checksum,

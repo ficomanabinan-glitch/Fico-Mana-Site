@@ -45,7 +45,7 @@ test('delivered-photo tap, long press and keyboard preview never select or doubl
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const hooks = componentHarness(); t.after(hooks.unmount)
   const { PhotoSelectButton } = loadTs<typeof import('../components/portal-photo-preview.tsx')>(
-    'components/portal-photo-preview.tsx', { react: hooks.react, '@/lib/photo-pan-zoom': {} })
+    'components/portal-photo-preview.tsx', { react: hooks.react, '@/lib/photo-pan-zoom': {}, '@/components/portal-preview-cache': {} })
   let previews = 0, selections = 0
   const button = hooks.render(() => PhotoSelectButton({ file: files[0], locked: true, onSelect: () => selections++,
     onPreview: file => { assert.equal(file, files[0]); previews++ }, className: 'preserve-gallery-style', children: null }))
@@ -69,7 +69,7 @@ test('delivered-photo tap, long press and keyboard preview never select or doubl
 })
 
 test('the portal keeps Download All separate from delivered-photo previews', () => {
-  const source = readFileSync('app/portal/[id]/page.tsx', 'utf8')
+  const source = readFileSync('components/client-portal-page.tsx', 'utf8')
   assert.match(source, /<PortalDeliverableGallery key=\{publicId\} files=\{data.deliverables\}/)
   assert.match(source, /<a href=\{data.downloadAllUrl\}/)
   assert.doesNotMatch(source, /href=\{file.previewUrl\} target="_blank"/)
