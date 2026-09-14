@@ -2,7 +2,6 @@
 import { useCachedPageRead } from '@/components/use-cached-page-read'
 
 import Link from 'next/link'
-import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -154,7 +153,7 @@ export default function EditorDashboard() {
         <div>
           <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editor Dashboard</p>
           <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Today’s upload and editing work</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/40">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">
             Check today’s clients, downloads, and uploads.
           </p>
         </div>
@@ -243,7 +242,6 @@ export default function EditorDashboard() {
             <h2 className="mt-1 text-lg font-semibold">Download and upload per day batch</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <WorkspaceRefreshButton onRefresh={() => void load(true, true)} refreshing={refreshing} />
             <Link href="/editor/upload" className={`${adminBtnPrimary} inline-flex items-center gap-2 px-4 py-2.5`}>
               <FolderUp className="size-4" />Upload Photos
             </Link>
@@ -261,12 +259,12 @@ export default function EditorDashboard() {
               const percent = Math.round((completed / Math.max(1, batch.totalClients)) * 100)
               return (
                 <article key={batch.id} className={`${adminPanel} overflow-hidden`}>
-                  <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)_auto] lg:items-center">
+                  <div className="grid gap-5 p-5 2xl:grid-cols-[minmax(18rem,1fr)_minmax(260px,360px)_auto] 2xl:items-center">
                     <div>
                       <p className="text-base font-semibold">{dayLabel(batch.shootDate)}</p>
                       <p className="mt-1 font-mono text-caption text-white/30">{batch.id}</p>
-                      <p className="mt-2 text-caption text-white/40">
-                        {batch.totalClients} clients · {batch.counts.readyForEditing} pending download · {batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.uploading} downloaded
+                      <p className="mt-2 text-caption text-white/65">
+                        {batch.totalClients} client{batch.totalClients === 1 ? '' : 's'} · {batch.counts.readyForEditing} pending download · {batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.uploading} downloaded
                       </p>
                     </div>
                     <div>

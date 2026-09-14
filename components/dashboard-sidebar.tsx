@@ -49,7 +49,7 @@ export function DashboardSidebarNavigation({
             mobile ? 'px-1' : ''
           }`}
         >
-          <p className="px-3.5 pb-2 text-caption font-semibold uppercase tracking-label text-white/25">
+          <p className="px-3.5 pb-2 text-caption font-semibold uppercase tracking-label text-white/60">
             {section.label}
           </p>
           <div className="space-y-1">
@@ -70,12 +70,12 @@ export function DashboardSidebarNavigation({
                   onTouchStart={() => prefetchOnIntent(item.href)}
                   aria-current={active ? 'page' : undefined}
                   onClick={() => onNavigate(item.href, mobile)}
-                  className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-caption font-semibold tracking-wide transition-all ${
+                  className={`flex min-h-11 items-center justify-between rounded-lg px-3.5 py-2.5 text-caption font-semibold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 ${
                     active ? adminNavActive : adminNavIdle
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    <Icon className={`size-4 ${active ? 'text-[#C4CEFF]' : 'text-white/40'}`} />
+                    <Icon className={`size-4 ${active ? 'text-[#C4CEFF]' : 'text-white/65'}`} />
                     {item.label}
                   </span>
                   {item.badge && item.badge > 0 ? (
@@ -115,13 +115,13 @@ export function DashboardSidebarProfile({
           </div>
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold">{label}</p>
-            <p className="truncate text-caption text-white/35">{detail}</p>
+            <p className="truncate text-caption text-white/60">{detail}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => void onLogout()}
-          className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white"
+          className="inline-flex size-11 items-center justify-center rounded-lg text-white/65 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70"
           title="Logout"
           aria-label="Sign out"
         >

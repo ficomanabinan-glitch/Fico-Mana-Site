@@ -249,12 +249,16 @@ export default function PaymentVerificationQueue() {
       />
 
       {bookings.length === 0 ? (
-        <div className={`${adminPanel} p-10 text-center sm:p-16`}>
+        <div className={`${adminPanel} mx-auto max-w-2xl p-8 text-center sm:p-10`}>
           <div className="w-16 h-16 bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-400 rounded-full mx-auto mb-4">
             <Check className="w-8 h-8" />
           </div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-white">Verification Queue Empty</h3>
-          <p className="text-xs text-white/40 mt-1">All booking deposits have been verified. Excellent job!</p>
+          <p className="mt-2 text-xs text-white/70">There are no deposits waiting for review.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <a href="/admin/bookings" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">View bookings</a>
+            <a href="/admin/provisioning" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">Client portals</a>
+          </div>
         </div>
       ) : (
         <>
@@ -262,6 +266,7 @@ export default function PaymentVerificationQueue() {
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <input
+                aria-label="Search payment verification queue"
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}

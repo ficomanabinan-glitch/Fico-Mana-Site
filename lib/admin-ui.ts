@@ -3,7 +3,7 @@ import type { RawPhotoWorkflowStatus } from '@/lib/booking-display'
 
 export const adminPage = 'w-full min-w-0 space-y-6 font-sans'
 export const adminTitle = 'text-page-title font-semibold tracking-heading text-white text-balance'
-export const adminSubtitle = 'text-small text-white/50 mt-2 max-w-2xl leading-relaxed'
+export const adminSubtitle = 'text-small text-white/65 mt-2 max-w-2xl leading-relaxed'
 export const adminCard =
   'rounded-card border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]'
 export const adminPanel =
@@ -20,7 +20,7 @@ export const adminBtnGhost =
   'min-h-11 cursor-pointer rounded-control border border-white/10 text-white/70 hover:border-white/25 hover:bg-white/[0.04] hover:text-white text-caption font-semibold uppercase tracking-label transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none'
 export const adminTableWrap = `${adminPanel} fico-table overflow-x-auto`
 export const adminTableHead =
-  'bg-white/[0.03] border-b border-white/10 text-caption font-semibold tracking-label text-white/40 uppercase'
+  'bg-white/[0.03] border-b border-white/10 text-caption font-semibold tracking-label text-white/65 uppercase'
 export const adminTableRow = 'hover:bg-white/[0.03] transition-colors'
 export const adminSpinnerWrap = 'min-h-[400px] w-full py-1'
 export const adminSpinner =
@@ -41,7 +41,7 @@ export const adminEmptyState =
 export const adminNavActive =
   'bg-primary/15 text-white border border-primary/30 shadow-[0_0_20px_rgba(5,0,208,0.12)]'
 export const adminNavIdle =
-  'text-white/55 hover:bg-white/[0.04] hover:text-white border border-transparent'
+  'text-white/70 hover:bg-white/[0.04] hover:text-white border border-transparent'
 
 const statusPill = 'inline-flex items-center whitespace-nowrap'
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { memo } from 'react'
-import { Check, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, X, ZoomIn } from 'lucide-react'
 import { PhotoSelectButton } from '@/components/portal-photo-preview'
 import PortalPrivateImage from '@/components/portal-private-image'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
@@ -27,10 +27,11 @@ const ContactPhoto = memo(function ContactPhoto({ file, included, extra, focused
   </article>
 })
 
-export default function PortalPhotoContactSheet({ gallery, galleryTotal, selectedFiles, filter, onFilter, included, extras, includedLimit, extraPrice, activeFile, locked, photosComplete, loadingMore, onFocus, onToggle, onPreview, onLoadMore, onContinue }: {
+export default function PortalPhotoContactSheet({ gallery, galleryTotal, selectedFiles, filter, onFilter, included, extras, includedLimit, extraPrice, activeFile, locked, photosComplete, loadingMore, showPhotoTip, onDismissPhotoTip, onFocus, onToggle, onPreview, onLoadMore, onContinue }: {
   gallery: ClientGalleryFile[]; galleryTotal: number; included: string[]; extras: string[]; includedLimit: number; extraPrice: number
   selectedFiles: ClientGalleryFile[]; filter: 'all' | 'selected'; onFilter: (filter: 'all' | 'selected') => void
   activeFile: ClientGalleryFile | null; locked: boolean; photosComplete: boolean; loadingMore: boolean
+  showPhotoTip: boolean; onDismissPhotoTip: () => void
   onFocus: (id: string) => void; onToggle: (id: string) => void; onPreview: (file: ClientGalleryFile) => void
   onLoadMore: () => void; onContinue: () => void
 }) {
@@ -40,6 +41,11 @@ export default function PortalPhotoContactSheet({ gallery, galleryTotal, selecte
   const activeIndex = files.findIndex(file => file.id === activeFile?.id)
   const missing = Math.max(0, includedLimit - included.length)
   const ctaLabel = missing ? `Choose ${missing} more` : photosComplete ? 'Continue to Free Prints' : 'Choose an editing preference'
+  const photoTip = (placementClass: string) => showPhotoTip ? <aside className={`${styles.photoTip} ${placementClass}`} aria-label="Photo viewing tip">
+    <ZoomIn className={styles.photoTipIcon} size={17} strokeWidth={1.6} aria-hidden="true" />
+    <p aria-live="polite"><strong>Tip:</strong> Hold a photo to zoom.</p>
+    <button type="button" className={styles.photoTipDismiss} onClick={onDismissPhotoTip} aria-label="Dismiss photo viewing tip"><X size={17} strokeWidth={1.6} aria-hidden="true" /></button>
+  </aside> : null
   return <div className={styles.workspace}>
     <div className={styles.galleryPane}>
       <div className={styles.toolbar}>
@@ -61,10 +67,10 @@ export default function PortalPhotoContactSheet({ gallery, galleryTotal, selecte
             <button type="button" className={styles.previewChoice} disabled={locked} aria-pressed={selected.has(activeFile.id)} onClick={() => onToggle(activeFile.id)}>{selected.has(activeFile.id) ? <><Check size={15} strokeWidth={1.5} />Deselect photo</> : included.length >= includedLimit ? `Add for ${money(extraPrice)}` : 'Select photo'}</button>
             <button type="button" className={styles.iconButton} disabled={activeIndex < 0 || activeIndex >= files.length - 1} aria-label="Next photo" onClick={() => onFocus(files[activeIndex + 1].id)}><ChevronRight size={17} strokeWidth={1.5} /></button>
           </div>
-          {!locked ? <button type="button" className={`${styles.primary} ${styles.previewContinue}`} onClick={onContinue} disabled={!photosComplete}><span>{ctaLabel}</span>{photosComplete ? <span className={styles.buttonIcon} aria-hidden="true">→</span> : null}</button> : null}
+          {!locked ? <div className={styles.desktopContinueCluster}>{photoTip(styles.desktopPhotoTip)}<button type="button" className={`${styles.primary} ${styles.previewContinue}`} onClick={onContinue} disabled={!photosComplete}><span>{ctaLabel}</span>{photosComplete ? <span className={styles.buttonIcon} aria-hidden="true">→</span> : null}</button></div> : null}
         </div>
       </> : <p className={styles.empty}>Your photo preview will appear here.</p>}
     </aside>
-    {!locked ? <div className={styles.dock}><button type="button" className={styles.primary} onClick={onContinue} disabled={!photosComplete}><span>{ctaLabel}</span>{photosComplete ? <span className={styles.buttonIcon} aria-hidden="true">→</span> : null}</button></div> : null}
+    {!locked ? <div className={styles.dock}>{photoTip(styles.mobilePhotoTip)}<button type="button" className={styles.primary} onClick={onContinue} disabled={!photosComplete}><span>{ctaLabel}</span>{photosComplete ? <span className={styles.buttonIcon} aria-hidden="true">→</span> : null}</button></div> : null}
   </div>
 }

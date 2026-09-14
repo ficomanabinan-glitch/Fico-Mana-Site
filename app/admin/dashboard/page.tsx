@@ -256,7 +256,7 @@ export default function DashboardOverview() {
               </div>
             ) : (
               todaysList.map((b) => (
-                <div key={b.id} className="py-3 flex justify-between items-center gap-3 text-xs hover:bg-white/[0.02] transition-colors px-1 -mx-1">
+                <div key={b.id} className="flex flex-col gap-3 px-1 py-3 text-xs transition-colors hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3 min-w-0">
                     <BookingPrioritySelect
                       priority={todayPriorityMap.get(b.id) ?? null}
@@ -265,13 +265,13 @@ export default function DashboardOverview() {
                     />
                     <div className="space-y-1 min-w-0">
                       <p className="font-semibold text-white truncate">{b.customerName}</p>
-                      <p className="text-white/40 font-mono text-caption">Time: {b.bookingTime}</p>
+                      <p className="font-mono text-caption text-white/65">Time: {b.bookingTime}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-semibold text-primary">{b.packageName}</span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+                    <span className="max-w-full truncate font-semibold text-[#C4CEFF]">{b.packageName}</span>
                     <span
-                      className={`px-2 py-0.5 text-caption font-semibold uppercase ${
+                      className={`rounded-md px-2 py-1 text-caption font-semibold uppercase ${
                         b.bookingStatus === 'Confirmed'
                           ? 'bg-green-500/15 text-green-400'
                           : b.bookingStatus === 'Pending Verification'

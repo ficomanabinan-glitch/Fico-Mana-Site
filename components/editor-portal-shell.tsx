@@ -15,9 +15,10 @@ import {
 } from 'react'
 import {
   CloudUpload,
+  FolderDown,
   FolderUp,
   LayoutDashboard,
-  ListFilter,
+  ListChecks,
   Menu,
   ShieldCheck,
   X,
@@ -54,6 +55,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
   const [loading, setLoading] = useState(pathname !== '/editor/login')
   const [menu, setMenu] = useState(false)
   const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLElement>(null)
   const previousPathRef = useRef(pathname)
   const scrollPositionsRef = useRef(new Map<string, number>())
@@ -121,6 +123,16 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
     setPendingHref(null)
   }, [pathname])
 
+  useEffect(() => {
+    if (!menu) return
+    mobileMenuRef.current?.querySelector<HTMLAnchorElement>('a')?.focus()
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenu(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [menu])
+
   useLayoutEffect(() => {
     const main = mainRef.current
     if (!main) return
@@ -139,8 +151,8 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
     if (!session) return []
     const items = [
       { label: 'Dashboard', href: '/editor', icon: LayoutDashboard, show: true, exact: true },
-      { label: 'Editing Queue', href: '/editor/queue', icon: ListFilter, show: session.capabilities.edit },
-      { label: 'Filtering Queue', href: '/editor/filtering', icon: ListFilter, show: session.capabilities.edit },
+      { label: 'Editing Batches', href: '/editor/queue', icon: FolderDown, show: session.capabilities.edit },
+      { label: 'Client Selections', href: '/editor/filtering', icon: ListChecks, show: session.capabilities.edit },
       { label: 'Upload Photos', href: '/editor/upload', icon: FolderUp, show: session.capabilities.edit },
       { label: 'Onsite Upload', href: '/editor/onsite', icon: CloudUpload, show: session.capabilities.onsite },
     ]
@@ -240,8 +252,10 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
                 <button
                   type="button"
                   onClick={() => setMenu((value) => !value)}
-                  className="rounded-lg p-1.5 text-white/60 hover:bg-white/5 md:hidden"
+                  className="inline-flex size-11 items-center justify-center rounded-lg text-white/70 hover:bg-white/5 md:hidden"
                   aria-label="Toggle navigation"
+                  aria-expanded={menu}
+                  aria-controls="editor-mobile-navigation"
                 >
                   {menu ? <X className="size-5" /> : <Menu className="size-5" />}
                 </button>
@@ -253,7 +267,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
             </header>
 
             {menu ? (
-              <div className="relative z-10 max-h-[65dvh] shrink-0 overflow-y-auto border-b border-white/[0.08] bg-[#222222] p-3 md:hidden">
+              <div ref={mobileMenuRef} id="editor-mobile-navigation" className="relative z-10 max-h-[65dvh] shrink-0 overflow-y-auto border-b border-white/[0.08] bg-[#222222] p-3 md:hidden">
                 <DashboardSidebarNavigation
                   sections={navigation}
                   activePath={pendingHref ?? pathname}

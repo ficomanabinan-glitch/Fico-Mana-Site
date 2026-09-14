@@ -12,6 +12,7 @@ import {
   Clock,
   ExternalLink,
   FolderOpen,
+  FolderDown,
   Image as ImageIcon,
   LayoutDashboard,
   ListChecks,
@@ -152,7 +153,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'queue', label: 'Review Queue', icon: ListChecks, count: pipeline.pendingReview },
     { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-    { id: 'editor', label: 'Editor', icon: PenTool, count: pipeline.awaitingEdit },
+    { id: 'editor', label: 'Editing Batches', icon: FolderDown, count: pipeline.awaitingEdit },
   ]
 
   if (loading) {
@@ -188,10 +189,10 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2.5 text-caption font-semibold uppercase tracking-wider rounded-lg transition-all whitespace-nowrap flex items-center gap-2 ${
+              className={`min-h-11 px-3.5 py-2.5 text-caption font-semibold uppercase tracking-wider rounded-lg transition-all whitespace-nowrap flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF] ${
                 isActive
                   ? 'bg-primary text-white shadow-[0_0_20px_rgba(5,0,208,0.25)]'
-                  : 'text-white/50 hover:text-white hover:bg-white/[0.04]'
+                  : 'text-white/70 hover:text-white hover:bg-white/[0.04]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />

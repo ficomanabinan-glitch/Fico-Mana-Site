@@ -181,6 +181,27 @@ test('sample portal finishes locally without a PIN, network submission, or dupli
   assert.equal(sample.submitted, 0)
 })
 
+test('photo viewing tip dismisses after eight seconds or immediately from its close button', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  browser(t)
+
+  const automatic = setup()
+  assert.equal(automatic.photos().showPhotoTip, true)
+  t.mock.timers.tick(7_999)
+  automatic.render()
+  assert.equal(automatic.photos().showPhotoTip, true)
+  t.mock.timers.tick(1)
+  automatic.render()
+  assert.equal(automatic.photos().showPhotoTip, false)
+  automatic.unmount()
+
+  const manual = setup()
+  manual.photos().onDismissPhotoTip()
+  manual.render()
+  assert.equal(manual.photos().showPhotoTip, false)
+  manual.unmount()
+})
+
 test('expired draft keeps current choices visible and can explicitly save again', t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
   const b = browser(t); const f = setup(); t.after(f.unmount)

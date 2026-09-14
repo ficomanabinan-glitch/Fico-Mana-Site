@@ -65,6 +65,7 @@ const PRINTS: Array<{ category: PrintCategory; label: string; quantity: number }
   { category: 'FRAME_8R', label: 'FRAME — 8R Size Printed / FREE', quantity: 1 },
   { category: 'WALLET_SIZE', label: 'WALLET SIZE — 4 Copies / FREE', quantity: 4 },
 ]
+const PHOTO_TIP_DURATION_MS = 8_000
 
 function money(value: number) {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value)
@@ -114,10 +115,17 @@ export function ClientPhotoSelection({
   const [extras, setExtras] = useState<string[]>(() => initialItems.filter((item) => item.extraEdit).map((item) => item.fileId))
   const [editingPreference, setEditingPreference] = useState<Preference | ''>(() => initialEditingPreference(initialItems))
   const [previewFile, setPreviewFile] = useState<ClientGalleryFile | null>(null)
+  const [showPhotoTip, setShowPhotoTip] = useState(true)
   const [galleryFilter, setGalleryFilter] = useState<'all' | 'selected'>('all')
   const [activeFileId, setActiveFileId] = useState<string>(() => initialItems[0]?.fileId || gallery[0]?.id || '')
   const [printSelections, setPrintSelections] = useState<Partial<Record<PrintCategory, string>>>(() => Object.fromEntries((selection?.printAllocations || []).filter(item => item.category !== 'WALLET_SIZE').map((item) => [item.category, item.fileId])))
   const [walletSelections, setWalletSelections] = useState<string[]>(() => [...new Set((selection?.printAllocations || []).filter(item => item.category === 'WALLET_SIZE').map(item => item.fileId))])
+
+  useEffect(() => {
+    if (!showPhotoTip) return
+    const timeout = setTimeout(() => setShowPhotoTip(false), PHOTO_TIP_DURATION_MS)
+    return () => clearTimeout(timeout)
+  }, [showPhotoTip])
   const [addonQuantities, setAddonQuantities] = useState<Record<string, number>>(() => Object.fromEntries((selection?.addonOrders || []).filter((item) => item.addonId && item.name.toLowerCase() !== 'extra edit').map((item) => [String(item.addonId), item.quantity])))
   const [addonPhotos, setAddonPhotos] = useState<Record<string, string[]>>(() => Object.fromEntries((selection?.addonOrders || []).filter(item => item.addonId).map(item => [String(item.addonId), item.photoIds || []])))
   const [acknowledged, setAcknowledged] = useState(Boolean(selection?.noRevisionAcknowledged))
@@ -410,7 +418,7 @@ export function ClientPhotoSelection({
         <div className={styles.photoHeading}><div><h1>Your photos</h1><p className={styles.description}>Pick {includedLimit} favorites.{extraEditAddon ? ` Extra enhancements cost ${money(extraEditAddon.price)} per photo.` : ''}</p></div>
           <div className={styles.editingMenu}><label htmlFor="portal-editing-preference" className={styles.label}>Editing preference</label><select id="portal-editing-preference" aria-describedby="portal-preference-help" className={styles.select} value={editingPreference} disabled={locked || submitting || draftFinished} onChange={event => setEditingPreference(event.target.value as Preference)}>{!editingPreference ? <option value="">{locked ? 'Previously saved mixed preferences' : 'Choose one editing preference…'}</option> : null}{PREFERENCES.map(preference => <option key={preference.id} value={preference.id}>{preference.label}</option>)}</select><p id="portal-preference-help" className={styles.preferenceHelp}>{PREFERENCES.find(preference => preference.id === editingPreference)?.note || 'Choose your preferred editing style.'}{editingPreference === 'standard' ? <> <a href="https://www.facebook.com/stories/998067669519381/?source=profile_highlight" target="_blank" rel="noopener noreferrer" aria-label="See the approved samples on Facebook (opens in a new tab)">See the approved samples</a>.</> : null}</p></div>
         </div>
-        <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
+        <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} showPhotoTip={showPhotoTip} onDismissPhotoTip={() => setShowPhotoTip(false)} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
       </> : null}
       {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
 

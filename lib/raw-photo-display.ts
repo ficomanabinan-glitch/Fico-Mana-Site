@@ -1,4 +1,5 @@
 import type { Booking } from '@/lib/data-store'
+import { getRawPhotoWorkflowStatus } from '@/lib/booking-display'
 
 export type RawPhotoStatus = NonNullable<Booking['rawPhotoStatus']>
 
@@ -12,7 +13,7 @@ export function hasRawPhotoSubmission(booking: Pick<Booking, 'rawPhotoLink'>): b
 }
 
 export function isPendingRawPhotoReview(booking: Pick<Booking, 'rawPhotoLink' | 'rawPhotoStatus'>): boolean {
-  return hasRawPhotoSubmission(booking) && (booking.rawPhotoStatus || 'Pending Review') === 'Pending Review'
+  return getRawPhotoWorkflowStatus(booking as Booking) === 'pending_review'
 }
 
 export function countPendingRawPhotoReviews(bookings: Booking[]): number {

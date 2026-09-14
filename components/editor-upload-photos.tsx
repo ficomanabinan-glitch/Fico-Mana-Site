@@ -1,7 +1,6 @@
 'use client'
 import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cached-page-read'
 
-import { WorkspaceRefreshButton } from '@/components/workspace-refresh'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -93,7 +92,7 @@ export default function EditorUploadPhotos({
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const [results, setResults] = useState<UploadResult[]>([])
   const [runErrors, setRunErrors] = useState<string[]>([])
-  const [reports, setReports, reportsLoading, setReportsLoading, reportsRefreshing] = useCachedPageRead<UploadReport[]>('editor:upload-reports', [])
+  const [reports, setReports, reportsLoading, setReportsLoading] = useCachedPageRead<UploadReport[]>('editor:upload-reports', [])
 
   const loadReports = useCallback(async (silent = false) => {
     if (!silent) setReportsLoading(true)
@@ -378,7 +377,6 @@ export default function EditorUploadPhotos({
               {failedReports ? ` · ${failedReports} failed client${failedReports === 1 ? '' : 's'} in recent runs` : ''}
             </p>
           </div>
-          <WorkspaceRefreshButton onRefresh={() => void loadReports()} refreshing={reportsRefreshing} />
         </div>
         {reportsLoading ? (
           <EditorPageSkeleton variant="queue" />
@@ -386,11 +384,16 @@ export default function EditorUploadPhotos({
           <div className="p-12 text-center text-xs text-white/35">Completed and failed uploads will appear here.</div>
         ) : (
           <div className="divide-y divide-white/[0.08]">
-            {reports.map((report) => (
+            {reports.map((report, index) => (
               <details key={report.id} className="group">
                 <summary className="grid cursor-pointer list-none gap-3 p-4 hover:bg-white/[0.025] sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
                   <div>
-                    <p className="text-sm font-semibold">{report.shootDate || 'Batch upload'}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold">{report.shootDate || 'Batch upload'}</p>
+                      <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-caption font-semibold uppercase text-white/65">
+                        {reports.slice(index + 1).some((previous) => previous.batchId === report.batchId) ? 'Re-upload' : 'Initial upload'}
+                      </span>
+                    </div>
                     <p className="mt-1 font-mono text-caption text-white/30">{report.batchId}</p>
                   </div>
                   <span className="text-caption text-white/40">{formatDateTime(report.completedAt || report.createdAt)}</span>

@@ -37,7 +37,7 @@ export function DashboardSidebarNavigation({
             mobile ? 'px-1' : ''
           }`}
         >
-          <p className="px-3.5 pb-2 text-[8px] font-bold uppercase tracking-[0.22em] text-white/25">
+          <p className="px-3.5 pb-2 text-[8px] font-bold uppercase tracking-[0.22em] text-white/60">
             {section.label}
           </p>
           <div className="space-y-1">
@@ -55,12 +55,12 @@ export function DashboardSidebarNavigation({
                   prefetch={internal ? true : undefined}
                   aria-current={active ? 'page' : undefined}
                   onClick={() => onNavigate(item.href, mobile)}
-                  className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 text-[11px] font-semibold tracking-wide transition-all ${
+                  className={`flex min-h-11 items-center justify-between rounded-lg px-3.5 py-2.5 text-[11px] font-semibold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 ${
                     active ? adminNavActive : adminNavIdle
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    <Icon className={`size-4 ${active ? 'text-[#C4CEFF]' : 'text-white/40'}`} />
+                    <Icon className={`size-4 ${active ? 'text-[#C4CEFF]' : 'text-white/65'}`} />
                     {item.label}
                   </span>
                   {item.badge && item.badge > 0 ? (
