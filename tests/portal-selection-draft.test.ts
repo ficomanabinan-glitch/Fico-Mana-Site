@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { clearPortalDraft, portalDraftKey, readPortalDraft, writePortalDraft, PORTAL_DRAFT_TTL_MS, type PortalDraftChoices } from '../lib/portal-selection-draft.ts'
+import { clearPortalDraft, portalDraftKey, readPortalDraft, readPortalDraftState, writePortalDraft, PORTAL_DRAFT_TTL_MS, type PortalDraftChoices } from '../lib/portal-selection-draft.ts'
 
 function storage() {
   const values = new Map<string, string>()
@@ -8,6 +8,15 @@ function storage() {
 }
 const key = portalDraftKey('portal-a', 'selection-a', null, 5)
 const choices: PortalDraftChoices = { included: ['photo-1', 'photo-2'], extras: ['photo-extra'], editingPreference: 'less', printSelections: { TOGA_PICTURE_4R: 'photo-1' }, walletSelections: ['photo-1', 'photo-2'], addonQuantities: { print: 2 }, acknowledged: true, step: 'prints' }
+
+test('draft status distinguishes saved, expired, absent and blocked storage for honest UI feedback', () => {
+  const browser = storage(), now = 1_000_000
+  assert.equal(readPortalDraftState(key, browser, now).status, 'empty')
+  writePortalDraft(key, choices, browser, now)
+  assert.equal(readPortalDraftState(key, browser, now).status, 'saved')
+  assert.equal(readPortalDraftState(key, browser, now + PORTAL_DRAFT_TTL_MS).status, 'expired')
+  assert.equal(readPortalDraftState(key, null, now).status, 'unavailable')
+})
 
 test('draft keeps all chosen options for exactly 15 minutes; reading/reloading never extends expiry', () => {
   const browser = storage(), now = 1_000_000

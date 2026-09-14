@@ -14,7 +14,7 @@ import PortalReview from '@/components/portal-review'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { addonPhotoError } from '@/lib/addon-photo-rules'
 import styles from '@/components/portal-workspace.module.css'
-import { clearPortalDraft, portalDraftKey, readPortalDraft, writePortalDraft, type PortalDraftChoices } from '@/lib/portal-selection-draft'
+import { clearPortalDraft, portalDraftKey, readPortalDraftState, writePortalDraft, type PortalDraftChoices } from '@/lib/portal-selection-draft'
 
 export type ClientGalleryFile = { id: string; fileName: string; mimeType: string; previewUrl: string }
 export type ClientAddon = { id: string; name: string; description: string; price: number; pricingType: 'fixed' | 'per_photo' | 'per_piece'; maxQuantity: number; photoLimit?: number }
@@ -55,9 +55,9 @@ const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'review', label: 'Review' },
 ]
 const PREFERENCES: Array<{ id: Preference; label: string; note?: string }> = [
-  { id: 'standard', label: 'Standard Softness / Enhancement', note: 'See our posted samples on our Social Media' },
-  { id: 'less', label: 'Less Softness / Enhancement' },
-  { id: 'raw', label: 'RAW' },
+  { id: 'standard', label: 'Standard Softness / Enhancement', note: 'FICO MANA’s standard enhancement style.' },
+  { id: 'less', label: 'Less Softness / Enhancement', note: 'A lighter enhancement with less softness than the standard style.' },
+  { id: 'raw', label: 'RAW', note: 'Unedited photographs as they come from the camera.' },
 ]
 const PRINTS: Array<{ category: PrintCategory; label: string; quantity: number }> = [
   { category: 'TOGA_PICTURE_4R', label: 'TOGA PICTURE — 4R Size Printed / FREE', quantity: 1 },
@@ -79,6 +79,7 @@ export function ClientPhotoSelection({
   addons,
   projectStatus,
   paymentSummary,
+  sampleMode = false,
   onLoadMore,
   onSubmitted,
   onPricingChange,
@@ -95,6 +96,7 @@ export function ClientPhotoSelection({
   addons: ClientAddon[]
   projectStatus?: string
   paymentSummary: { packageAmount: number; amountPaid: number }
+  sampleMode?: boolean
   onLoadMore: () => void
   onSubmitted: (photos?: { url?: string; warning?: string }) => Promise<void>
   onPricingChange?: (summary: AddonPreview) => void
@@ -112,6 +114,7 @@ export function ClientPhotoSelection({
   const [extras, setExtras] = useState<string[]>(() => initialItems.filter((item) => item.extraEdit).map((item) => item.fileId))
   const [editingPreference, setEditingPreference] = useState<Preference | ''>(() => initialEditingPreference(initialItems))
   const [previewFile, setPreviewFile] = useState<ClientGalleryFile | null>(null)
+  const [galleryFilter, setGalleryFilter] = useState<'all' | 'selected'>('all')
   const [activeFileId, setActiveFileId] = useState<string>(() => initialItems[0]?.fileId || gallery[0]?.id || '')
   const [printSelections, setPrintSelections] = useState<Partial<Record<PrintCategory, string>>>(() => Object.fromEntries((selection?.printAllocations || []).filter(item => item.category !== 'WALLET_SIZE').map((item) => [item.category, item.fileId])))
   const [walletSelections, setWalletSelections] = useState<string[]>(() => [...new Set((selection?.printAllocations || []).filter(item => item.category === 'WALLET_SIZE').map(item => item.fileId))])
@@ -122,8 +125,6 @@ export function ClientPhotoSelection({
   // PINs are transient: never put them in the 15-minute draft or a URL.
   const [submissionPin, setSubmissionPin] = useState('')
   const [confirmationOpen, setConfirmationOpen] = useState(false)
-  const [readyPromptOpen, setReadyPromptOpen] = useState(false)
-  const readyPromptSeen = useRef(false)
   const workspaceRoot = useRef<HTMLElement>(null)
   const workspaceHeader = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -141,6 +142,7 @@ export function ClientPhotoSelection({
   const [message, setMessage] = useState('')
   const [hydratedDraftKey, setHydratedDraftKey] = useState('')
   const [draftExpiresAt, setDraftExpiresAt] = useState<number | null>(null)
+  const [draftStatus, setDraftStatus] = useState<'saved' | 'empty' | 'expired' | 'unavailable'>('empty')
   const [draftFinished, setDraftFinished] = useState(false)
   const lastSavedDraft = useRef('')
   const draftKey = portalDraftKey(publicId, selection?.id || '', selection?.reopenedAt, includedLimit)
@@ -152,7 +154,9 @@ export function ClientPhotoSelection({
     if (locked) clearPortalDraft(draftKey)
     const hydrationKey = locked ? `${draftKey}:locked` : draftKey
     if (hydratedDraftKey === hydrationKey) return
-    const saved = locked ? null : readPortalDraft(draftKey)
+    const restored = locked ? null : readPortalDraftState(draftKey)
+    const saved = restored?.record
+    setDraftStatus(restored?.status || 'empty')
     const choices: PortalDraftChoices = saved?.choices || {
       included: selection.selectedItems.filter(item => !item.extraEdit).map(item => item.fileId),
       extras: selection.selectedItems.filter(item => item.extraEdit).map(item => item.fileId),
@@ -187,13 +191,15 @@ export function ClientPhotoSelection({
     const fingerprint = JSON.stringify(draft)
     if (lastSavedDraft.current === fingerprint) return
     // Refreshing, loading more photos and price refetches do not extend the 15-minute timer.
-    setDraftExpiresAt(writePortalDraft(draftKey, draft))
+    const expiresAt = writePortalDraft(draftKey, draft)
+    setDraftExpiresAt(expiresAt)
+    setDraftStatus(expiresAt ? 'saved' : 'unavailable')
     lastSavedDraft.current = fingerprint
   }, [selection?.id, locked, draftFinished, hydratedDraftKey, draftKey, draft])
 
   useEffect(() => {
     if (!draftExpiresAt) return
-    const timer = setTimeout(() => clearPortalDraft(draftKey), Math.max(0, draftExpiresAt - Date.now()))
+    const timer = setTimeout(() => { clearPortalDraft(draftKey); setDraftStatus('expired') }, Math.max(0, draftExpiresAt - Date.now()))
     return () => clearTimeout(timer)
   }, [draftKey, draftExpiresAt])
 
@@ -241,7 +247,16 @@ export function ClientPhotoSelection({
     id, fileName: 'Selected photo', mimeType: 'image/jpeg',
     previewUrl: `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/file/${encodeURIComponent(id)}?kind=gallery`,
   }
-  const activeFile = galleryMap.get(activeFileId) || galleryMap.get(included[0] || '') || gallery[0] || null
+  // Selected files outside the loaded page still use the ownership-checked image endpoint.
+  const selectedFiles = selectedAll.map(selectedPhoto)
+  const visibleFiles = galleryFilter === 'selected' ? selectedFiles : gallery
+  const activeFile = visibleFiles.find(file => file.id === activeFileId) || visibleFiles[0] || null
+  const previewFiles = step === 'review' ? selectedFiles : visibleFiles
+  const saveDraftNow = () => {
+    const expiresAt = writePortalDraft(draftKey, draft)
+    setDraftExpiresAt(expiresAt)
+    setDraftStatus(expiresAt ? 'saved' : 'unavailable')
+  }
   useEffect(() => {
     if (!gallery.length) return
     if (!activeFileId || !galleryMap.has(activeFileId)) setActiveFileId(included[0] || gallery[0].id)
@@ -267,10 +282,6 @@ export function ClientPhotoSelection({
     }
     if (included.length < includedLimit) {
       setIncluded((current) => [...current, fileId])
-      if (included.length + 1 === includedLimit && !readyPromptSeen.current && window.matchMedia('(max-width: 900px)').matches) {
-        readyPromptSeen.current = true
-        setReadyPromptOpen(true)
-      }
       return
     }
     if (!extraEditAddon) {
@@ -287,6 +298,7 @@ export function ClientPhotoSelection({
       return
     }
     setExtras((current) => [...current, fileId])
+    toast.success('Added as an extra photo', `${money(extraEditAddon.price)} added to your booking total.`)
   }
 
   const toggleAddon = (addon: ClientAddon) => {
@@ -355,6 +367,13 @@ export function ClientPhotoSelection({
   const requestSubmission = () => {
     if (!canSubmit || submitting) return
     setMessage('')
+    if (sampleMode) {
+      clearPortalDraft(draftKey)
+      setDraftFinished(true)
+      updateStep('review')
+      toast.success('Sample complete', 'You finished the same selection flow clients use. No booking was changed.')
+      return
+    }
     setSubmissionPin('')
     setConfirmationOpen(true)
   }
@@ -369,60 +388,70 @@ export function ClientPhotoSelection({
 
   if (!selection) return <section className={styles.portal}><header className={styles.topbar}><div className={styles.shell}>{headerContent}</div></header><div className={styles.shell}>{notices}<p className={styles.empty}>Photo selection is still being prepared for this booking.</p>{footerContent}</div></section>
 
-  const selectionNavigation = <nav className={styles.navigation} aria-label="Selection workflow">{STEPS.map((item, index) => <button key={item.id} type="button" className={styles.step} disabled={!canVisitStep(item.id)} onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined}><small>{String(index + 1).padStart(2, '0')}</small><span>{item.label.toUpperCase()}</span></button>)}</nav>
+  const selectionNavigation = <nav className={styles.navigation} aria-label="Selection workflow">{STEPS.map((item) => <button key={item.id} type="button" className={styles.step} disabled={!canVisitStep(item.id)} onClick={() => setStep(item.id)} aria-current={step === item.id ? 'step' : undefined}><span>{item.label}</span></button>)}</nav>
 
   return <section ref={workspaceRoot} className={styles.portal}>
     <header ref={workspaceHeader} className={styles.topbar}><div className={styles.shell}>{headerContent}{selectionNavigation}</div></header>
     <div className={`${styles.shell} ${styles.main}`}>
       {notices}
-          {locked ? <div className="mt-4 flex items-start gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="mt-0.5 size-3.5 shrink-0"/><span>Selection submitted and locked{selection.submittedAt ? ` · ${new Date(selection.submittedAt).toLocaleString('en-PH')}` : ''}. Status: {projectStatus || selection.clientStatus}.</span></div> : null}
+      {draftStatus === 'saved' && draftExpiresAt ? <span className="sr-only" role="status">Draft saved in this tab until {new Date(draftExpiresAt).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}.</span> : null}
+      {!locked && !draftFinished && (draftStatus === 'expired' || draftStatus === 'unavailable') ? <details className={styles.draftNotice} open>
+        <summary>{draftStatus === 'expired' ? 'Draft expired' : 'Draft not saved'}</summary>
+        <p role="status">{draftStatus === 'expired' ? 'Your saved draft expired. Any choices still shown on this page can be saved again before you refresh.' : 'This browser could not save your draft. Keep this page open until you submit.'}</p>
+        {draftStatus === 'expired' || draftStatus === 'unavailable' ? <button type="button" className={styles.secondary} disabled={submitting} onClick={saveDraftNow}>Save draft again</button> : null}
+      </details> : null}
+          {locked ? <div className="mt-4 flex items-start gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="mt-0.5 size-3.5 shrink-0"/><span>Your selection is submitted and locked{selection.submittedAt ? `. Submitted ${new Date(selection.submittedAt).toLocaleString('en-PH')}` : ''}. Project status: {projectStatus || selection.clientStatus}.</span></div> : null}
     {selection.status === 'COPY_FAILED' ? <div className="mt-4 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-200">Your previous submission could not be completed. Try: review your choices and submit again. If a photo is unavailable, ask the studio to restore the original first.</div> : null}
     {message ? <div role="alert" className="mt-4 flex items-start gap-2 rounded-control border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200"><AlertTriangle className="mt-0.5 size-3.5 shrink-0"/>{message}</div> : null}
 
 
       {!locked && selection.reopenedAt ? <div className={styles.notice} role="status">Your portal has been reopened. Review your choices and submit your selection again.</div> : null}
       {step === 'photos' ? <>
-        <div className={styles.heading}><div className={styles.headingCopy}><p className={styles.kicker}>01 · Your photographs</p><h1>Choose the photographs that feel most like you.</h1><p className={styles.description}>Select {includedLimit} included photographs for professional enhancement.{extraEditAddon ? ` You may keep choosing more for ${money(extraEditAddon.price)} per additional enhanced photo.` : ''}</p></div>
-          <label className={styles.preference}><span className={styles.label}>Editing preference</span><select className={styles.select} value={editingPreference} disabled={locked || submitting || draftFinished} onChange={event => setEditingPreference(event.target.value as Preference)}>{!editingPreference ? <option value="">{locked ? 'Previously saved mixed preferences' : 'Choose one editing preference…'}</option> : null}{PREFERENCES.map(preference => <option key={preference.id} value={preference.id}>{preference.label}</option>)}</select><span className={styles.note}>Standard enhancement follows FICO MANA’s published editing samples.</span></label>
+        <div className={styles.photoHeading}><div><h1>Your photos</h1><p className={styles.description}>Pick {includedLimit} favorites.{extraEditAddon ? ` Extra enhancements cost ${money(extraEditAddon.price)} per photo.` : ''}</p></div>
+          <div className={styles.editingMenu}><label htmlFor="portal-editing-preference" className={styles.label}>Editing preference</label><select id="portal-editing-preference" aria-describedby="portal-preference-help" className={styles.select} value={editingPreference} disabled={locked || submitting || draftFinished} onChange={event => setEditingPreference(event.target.value as Preference)}>{!editingPreference ? <option value="">{locked ? 'Previously saved mixed preferences' : 'Choose one editing preference…'}</option> : null}{PREFERENCES.map(preference => <option key={preference.id} value={preference.id}>{preference.label}</option>)}</select><p id="portal-preference-help" className={styles.preferenceHelp}>{PREFERENCES.find(preference => preference.id === editingPreference)?.note || 'Choose your preferred editing style.'}{editingPreference === 'standard' ? <> <a href="https://www.facebook.com/stories/998067669519381/?source=profile_highlight" target="_blank" rel="noopener noreferrer" aria-label="See the approved samples on Facebook (opens in a new tab)">See the approved samples</a>.</> : null}</p></div>
         </div>
-        <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
+        <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
       </> : null}
       {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
 
       {step === 'addons' ? <PortalAddonPicker addons={optionalAddons} files={selectedAll.map(selectedPhoto)} quantities={addonQuantities} assignments={addonPhotos} locked={locked || submitting || draftFinished} typeCount={addonTypeCount} extraCount={extras.length} extraPrice={extraEditAddon?.price || 0} total={addonTotal} complete={addonsComplete} onToggle={toggleAddon} onQuantity={(id, quantity) => setAddonQuantities(current => ({ ...current, [id]: quantity }))} onPhotos={(id, photos) => setAddonPhotos(current => ({ ...current, [id]: photos }))} onWarning={setMessage} onBack={() => setStep('prints')} onContinue={() => setStep('review')} /> : null}
 
-      {step === 'review' ? <PortalReview included={included} extras={extras} preference={PREFERENCES.find(item => item.id === editingPreference)?.label || 'Previously saved mixed preferences'} printSelections={printSelections} walletSelections={walletSelections} orders={pricing.lines.map(order => ({ ...order, photoIds: addonPhotos[order.id] || [] }))} selectedPhoto={selectedPhoto} packageAmount={paymentSummary.packageAmount} amountPaid={paymentSummary.amountPaid} total={payment.total} remaining={payment.remaining} acknowledged={acknowledged} locked={locked || draftFinished} submitting={submitting} canSubmit={canSubmit} onAcknowledge={setAcknowledged} onBack={() => setStep('addons')} onSubmit={requestSubmission} /> : null}
+      {step === 'review' ? <PortalReview included={included} extras={extras} preference={PREFERENCES.find(item => item.id === editingPreference)?.label || 'Previously saved mixed preferences'} printSelections={printSelections} walletSelections={walletSelections} orders={pricing.lines.map(order => ({ ...order, photoIds: addonPhotos[order.id] || [] }))} selectedPhoto={selectedPhoto} packageAmount={paymentSummary.packageAmount} amountPaid={paymentSummary.amountPaid} total={payment.total} remaining={payment.remaining} acknowledged={acknowledged} locked={locked || draftFinished} submitting={submitting} canSubmit={canSubmit} sampleMode={sampleMode} onAcknowledge={setAcknowledged} onBack={() => setStep('addons')} onSubmit={requestSubmission} onPreview={setPreviewFile} onEdit={setStep} /> : null}
       {footerContent}
     </div>
-    <Sheet open={readyPromptOpen} onOpenChange={setReadyPromptOpen}>
-      {readyPromptOpen ? <SheetContent side="bottom" className="client-portal max-h-[85dvh] gap-0 rounded-t-2xl border-white/15 bg-[#222] text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
-        <SheetHeader className="p-6 pr-12"><SheetTitle className="text-3xl text-white">Your {includedLimit} included photos are complete.</SheetTitle><SheetDescription className="mt-3 text-sm leading-relaxed text-white/65">You may continue now or keep selecting additional enhanced photos.{extraEditAddon ? ` Additional enhanced photos are ${money(extraEditAddon.price)} each.` : ''}</SheetDescription></SheetHeader>
-        <div className="grid grid-cols-2 gap-3 p-6 pt-0"><button type="button" className={styles.secondary} onClick={() => setReadyPromptOpen(false)}>Keep Selecting</button><button type="button" className={styles.primary} disabled={!photosComplete} onClick={() => { setReadyPromptOpen(false); setStep('prints') }}>Continue →</button></div>
-      </SheetContent> : null}
-    </Sheet>
     <Sheet open={confirmationOpen} onOpenChange={(next) => { if (!submitting) { setConfirmationOpen(next); if (!next) setSubmissionPin('') } }}>
-      {confirmationOpen ? <SheetContent side="bottom" initialFocus={confirmationTitle} showCloseButton={!submitting} className="client-portal max-h-[90dvh] gap-0 overflow-hidden rounded-t-card border-white/15 bg-[#171717] text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
-        <SheetHeader className="shrink-0 border-b border-white/10 p-4 pr-14">
+      {confirmationOpen ? <SheetContent side="bottom" initialFocus={confirmationTitle} showCloseButton={!submitting} className="client-portal max-h-[90dvh] gap-0 overflow-hidden rounded-t-[20px] border-white/[0.12] bg-[#181819] text-white shadow-[inset_0_1px_rgba(255,255,255,0.06),0_-24px_80px_rgba(0,0,0,0.24)] sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
+        <SheetHeader className="shrink-0 border-b border-white/[0.08] p-5 pr-14">
           <SheetTitle ref={confirmationTitle} tabIndex={-1} className="font-sans text-sm font-semibold text-white outline-none">Confirm final selection</SheetTitle>
           <SheetDescription className="mt-1 text-xs text-white/50">Review your balance before submitting.</SheetDescription>
         </SheetHeader>
         <div className="fico-portal-sheet-content min-h-0 space-y-4 overflow-y-auto overscroll-contain p-4">
           <dl className="space-y-3 text-small">{[
             ['Package', money(paymentSummary.packageAmount)],
-            ['Extra Edits & Add-ons', money(addonTotal)],
+            ['Extra photos and add-ons', money(addonTotal)],
             ['Booking Total', money(payment.total)],
             ['Paid', money(paymentSummary.amountPaid)],
           ].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b border-white/[0.06] pb-3"><dt className="text-white/45">{label}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl>
-          <div data-testid="submission-balance" className="flex items-center justify-between gap-4 rounded-xl border border-[#C4CEFF]/20 bg-[#C4CEFF]/5 p-4"><span className="text-sm text-white/65">Remaining balance</span><strong className="text-2xl text-[#C4CEFF]">{money(payment.remaining)}</strong></div>
-          <label className="block"><span className="text-caption font-semibold text-[#C4CEFF]">Final submission PIN</span><span id="mobile-submission-pin-help" className="mt-1 block text-caption text-white/45">Last 4 digits of the phone number used for this booking.</span>
-            <input id="mobile-submission-pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" value={submissionPin} disabled={submitting} aria-describedby="mobile-submission-pin-help" onChange={(event) => setSubmissionPin(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-2 h-11 w-full rounded-lg border border-white/10 bg-[#252525] px-3 text-center text-lg tracking-[0.5em] text-white outline-none focus:border-[#C4CEFF]/50"/>
+          <div data-testid="submission-balance" className="flex items-center justify-between gap-4 rounded-card border border-[#C4CEFF]/20 bg-[#C4CEFF]/5 p-4 shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><span className="text-sm text-white/65">Remaining balance</span><strong className="text-2xl tracking-[-0.03em] text-[#C4CEFF]">{money(payment.remaining)}</strong></div>
+          <label className="block"><span className="text-caption font-semibold text-white/80">Final submission PIN</span><span id="mobile-submission-pin-help" className="mt-1 block text-caption text-white/45">Last 4 digits of the phone number used for this booking.</span>
+            <input id="mobile-submission-pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" value={submissionPin} disabled={submitting} aria-describedby="mobile-submission-pin-help" onChange={(event) => setSubmissionPin(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-2 h-11 w-full rounded-control border border-white/10 bg-[#242427] px-3 text-center text-lg tracking-[0.5em] text-white outline-none shadow-[inset_0_1px_rgba(255,255,255,0.04)] transition-[border-color,background-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-white/20 focus:border-[#C4CEFF]/50"/>
           </label>
           {message ? <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/[0.06] p-3 text-xs text-red-200">{message}</p> : null}
-          <div className="grid grid-cols-2 gap-3"><button type="button" disabled={submitting} onClick={() => { setConfirmationOpen(false); setSubmissionPin('') }} className="min-h-11 cursor-pointer rounded-lg border border-white/15 px-3 py-3 text-caption font-semibold text-white/65 disabled:opacity-40">Go back</button><button type="button" onClick={() => void submit()} disabled={!canSubmit || submitting} className="min-h-11 cursor-pointer rounded-lg bg-primary px-3 py-3 text-caption font-semibold text-white disabled:opacity-40">{submitting ? 'Submitting…' : 'Confirm & Submit'}</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" disabled={submitting} onClick={() => { setConfirmationOpen(false); setSubmissionPin('') }} className="min-h-11 cursor-pointer rounded-control border border-white/10 bg-white/[0.02] px-3 py-3 text-caption font-semibold text-white/70 transition-[transform,background-color,border-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.06] active:translate-y-0 active:scale-[0.98] disabled:opacity-40">Go back</button><button type="button" onClick={() => void submit()} disabled={!canSubmit || submitting} className="min-h-11 cursor-pointer rounded-control bg-primary px-3 py-3 text-caption font-semibold text-white shadow-[inset_0_1px_rgba(255,255,255,0.16)] transition-[transform,background-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-[#0903e8] active:translate-y-0 active:scale-[0.98] disabled:opacity-40">{submitting ? 'Submitting…' : 'Confirm & Submit'}</button></div>
         </div>
       </SheetContent> : null}
     </Sheet>
 
-    {previewFile ? <PortalPhotoPreview key={previewFile.id} file={previewFile} files={gallery} onFileChange={setPreviewFile} onClose={() => setPreviewFile(null)} /> : null}
+    {previewFile ? <PortalPhotoPreview key={previewFile.id} file={previewFile} files={previewFiles} onFileChange={setPreviewFile} onClose={() => setPreviewFile(null)}
+      selected={selectedAll.includes(previewFile.id)} locked={locked || submitting || draftFinished}
+      onToggleSelection={step === 'photos' ? () => {
+        if (galleryFilter === 'selected' && selectedAll.includes(previewFile.id)) {
+          const index = previewFiles.findIndex(file => file.id === previewFile.id)
+          setPreviewFile(previewFiles[index + 1] || previewFiles[index - 1] || null)
+        }
+        togglePhoto(previewFile.id)
+      } : undefined}
+      selectionLabel={selectedAll.includes(previewFile.id) ? 'Deselect Photo' : included.length >= includedLimit && extraEditAddon ? `Add for ${money(extraEditAddon.price)}` : 'Select Photo'}
+      selectionDescription={extras.includes(previewFile.id) ? `Extra enhanced photo, ${money(extraEditAddon?.price || 0)}` : included.includes(previewFile.id) ? 'Included photo' : 'Not selected'} /> : null}
   </section>
 }

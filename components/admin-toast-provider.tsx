@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { CheckCircle, AlertTriangle, XCircle, X } from 'lucide-react'
+import toastStyles from './admin-toast-provider.module.css'
 
 export type ToastType = 'success' | 'warning' | 'error' | 'info'
 
@@ -22,25 +23,11 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null)
 
-const styles: Record<ToastType, string> = {
-  success: 'border-green-500/40 bg-green-500/10',
-  warning: 'border-amber-500/40 bg-amber-500/10',
-  error: 'border-red-500/40 bg-red-500/10',
-  info: 'border-primary/40 bg-primary/10',
-}
-
 const icons: Record<ToastType, typeof CheckCircle> = {
   success: CheckCircle,
   warning: AlertTriangle,
   error: XCircle,
   info: AlertTriangle,
-}
-
-const iconColors: Record<ToastType, string> = {
-  success: 'text-green-400',
-  warning: 'text-amber-400',
-  error: 'text-red-400',
-  info: 'text-primary',
 }
 
 export function AdminToastProvider({ children, portal = false }: { children: React.ReactNode; portal?: boolean }) {
@@ -71,28 +58,35 @@ export function AdminToastProvider({ children, portal = false }: { children: Rea
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className={portal ? 'fixed bottom-20 right-4 z-[120] flex flex-col gap-2 w-[min(100vw-2rem,380px)] pointer-events-none' : 'fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-[min(100vw-2rem,380px)] pointer-events-none'}>
+      <div
+        className={`${toastStyles.viewport} ${portal ? toastStyles.portalViewport : toastStyles.workspaceViewport}`}
+        aria-live="polite"
+        aria-atomic="false"
+      >
         {toasts.map((t) => {
           const Icon = icons[t.type]
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto border backdrop-blur-md shadow-2xl p-4 animate-in slide-in-from-right-5 fade-in duration-200 motion-reduce:animate-none ${styles[t.type]} ${portal ? 'rounded-xl !bg-[#222]' : ''}`}
-              role="status"
+              className={toastStyles.toast}
+              data-tone={t.type}
+              role={t.type === 'error' ? 'alert' : 'status'}
             >
-              <div className="flex gap-3">
-                <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${iconColors[t.type]}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white">{t.title}</p>
-                  {t.message && <p className="text-xs text-white/60 mt-1 leading-relaxed">{t.message}</p>}
+              <div className={toastStyles.layout}>
+                <span className={toastStyles.iconWrap} aria-hidden="true">
+                  <Icon size={18} strokeWidth={1.75} />
+                </span>
+                <div className={toastStyles.copy}>
+                  <p className={toastStyles.title}>{t.title}</p>
+                  {t.message && <p className={toastStyles.message}>{t.message}</p>}
                 </div>
                 <button
                   type="button"
                   onClick={() => dismiss(t.id)}
-                  className={portal ? 'min-h-11 min-w-11 grid place-items-center text-white/60 hover:text-white shrink-0' : 'text-white/40 hover:text-white shrink-0'}
-                  aria-label="Dismiss"
+                  className={toastStyles.dismiss}
+                  aria-label="Dismiss notification"
                 >
-                  <X className="w-4 h-4" />
+                  <X size={16} strokeWidth={1.75} />
                 </button>
               </div>
             </div>

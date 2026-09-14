@@ -8,7 +8,7 @@ import * as drafts from '../lib/portal-selection-draft.ts'
 import * as navigation from '../lib/selection-step-navigation.ts'
 import type { ClientSelection, ClientAddon, ClientGalleryFile } from '../components/client-photo-selection.tsx'
 
-const Photos = () => null, Prints = () => null, Addons = () => null, Review = () => null
+const Photos = () => null, Prints = () => null, Addons = () => null, Review = () => null, Preview = () => null
 const addons: ClientAddon[] = [
   { id: 'extra', name: 'Extra Edit', price: 400, pricingType: 'per_photo', maxQuantity: 200, description: '' },
   { id: 'frame', name: '8R Frame', price: 1000, pricingType: 'fixed', maxQuantity: 1, photoLimit: 1, description: '' },
@@ -19,10 +19,10 @@ const ready: ClientSelection = { ...selection, noRevisionAcknowledged: true,
   selectedItems: gallery.slice(0,6).map((file,i) => ({ fileId:file.id, preference:'less', extraEdit:i>=5 })),
   printAllocations: (['TOGA_PICTURE_4R','ALAMPAY_BARONG_4R','FRAME_8R','WALLET_SIZE'] as const).map(category => ({ category, fileId:'0', quantity:1, label:category })),
 }
-function setup(initial = selection, photos = gallery) {
+function setup(initial = selection, photos = gallery, sampleMode = false) {
   const hooks = componentHarness()
   const component = loadTs<typeof import('../components/client-photo-selection.tsx')>('components/client-photo-selection.tsx', {
-    react: hooks.react, '@/components/portal-photo-preview': { PortalPhotoPreview: () => null },
+    react: hooks.react, '@/components/portal-photo-preview': { PortalPhotoPreview: Preview },
     '@/components/portal-photo-contact-sheet': Photos, '@/components/portal-print-picker': Prints,
     '@/components/portal-addon-picker': Addons, '@/components/portal-review': Review,
     '@/components/portal-workspace.module.css': {},
@@ -33,13 +33,14 @@ function setup(initial = selection, photos = gallery) {
   let pricing: summary.AddonPreview = { total:0, lines:[] }, submitted = 0
   const onPricingChange = (value:summary.AddonPreview) => { pricing=value }
   const render = () => hooks.render(() => component.ClientPhotoSelection({ publicId:'private',selection:initial,gallery:photos,galleryTotal:7,loadingMore:false,addons,
-    onLoadMore() {}, onSubmitted:async()=>{submitted++}, onPricingChange, paymentSummary:{packageAmount:6500,amountPaid:500} }))
+    sampleMode, onLoadMore() {}, onSubmitted:async()=>{submitted++}, onPricingChange, paymentSummary:{packageAmount:6500,amountPaid:500} }))
   let tree=render(); tree=render()
   return { render:()=>tree=render(), unmount:hooks.unmount,
     photos:()=>elements(tree,el=>el.type===Photos)[0].props as ComponentProps<typeof import('../components/portal-photo-contact-sheet.tsx').default>,
     prints:()=>elements(tree,el=>el.type===Prints)[0].props as ComponentProps<typeof import('../components/portal-print-picker.tsx').default>,
     addons:()=>elements(tree,el=>el.type===Addons)[0].props as ComponentProps<typeof import('../components/portal-addon-picker.tsx').default>,
     review:()=>elements(tree,el=>el.type===Review)[0].props as ComponentProps<typeof import('../components/portal-review.tsx').default>,
+    preview:()=>elements(tree,el=>el.type===Preview)[0]?.props as ComponentProps<typeof import('../components/portal-photo-preview.tsx').PortalPhotoPreview>,
     step:(label:string)=>{elements(tree,el=>el.type==='button'&&content(el).toUpperCase().endsWith(label.toUpperCase()))[0].props.onClick();tree=render()},
     click:(label:string)=>elements(tree,el=>el.type==='button'&&content(el)===label)[0].props.onClick(),
     pin:(value?:string)=>{const input=elements(tree,el=>el.type==='input'&&el.props.type==='password')[0];if(value!==undefined)input.props.onChange({target:{value}});return input?.props.value},
@@ -115,6 +116,82 @@ test('submitted server state replaces stale drafts, keeps price snapshots and pr
   assert.equal(f.pricing.total,75);assert.equal(b.values.size,0);assert.equal(f.review().locked,true)
   assert.equal(f.review().selectedPhoto('0').previewUrl,'/api/editor-workflow/portal/private/file/0?kind=gallery')
   f.step('Add-ons');assert.equal(f.addons().locked,true)
+})
+
+test('selected filter restores unloaded selections and viewer navigation stays in that set', t => {
+  browser(t); const f = setup(ready, gallery.slice(0, 2)); t.after(f.unmount)
+  f.photos().onFilter('selected'); f.render()
+  assert.equal(f.photos().selectedFiles.length, 6)
+  const missing = f.photos().selectedFiles.find(file => file.id === '5')!
+  assert.equal(missing.previewUrl, '/api/editor-workflow/portal/private/file/5?kind=gallery')
+  f.photos().onPreview(missing); f.render()
+  assert.deepEqual(f.preview().files?.map(file => file.id), ['0','1','2','3','4','5'])
+  assert.equal(f.preview().selected, true)
+  f.preview().onToggleSelection?.(); f.render()
+  assert.deepEqual(f.photos().extras, [])
+  assert.equal(f.preview().file?.id, '4', 'Deselecting the current filtered photo moves to its neighbor')
+})
+
+test('viewer selection shows extra pricing, preserves locks, and review previews are read-only', t => {
+  browser(t); const f = setup(ready); t.after(f.unmount)
+  f.photos().onPreview(gallery[6]); f.render()
+  assert.equal(f.preview().selectionLabel, 'Add for ₱400')
+  f.preview().onToggleSelection?.(); f.render()
+  assert.equal(f.preview().selected, true)
+  assert.equal(f.pricing.total, 800)
+  f.step('Review'); f.review().onPreview(gallery[0]); f.render()
+  assert.equal(f.preview().onToggleSelection, undefined)
+  f.review().onEdit('photos'); f.render(); assert.equal(f.photos().extras.length, 2)
+  const locked = setup({ ...ready, status: 'SUBMITTED' }); t.after(locked.unmount)
+  locked.step('Photos'); locked.photos().onPreview(gallery[6]); locked.render()
+  assert.equal(locked.preview().locked, true)
+  locked.preview().onToggleSelection?.(); locked.render()
+  assert.deepEqual(locked.photos().extras, ['5'])
+})
+
+test('approved editing samples appear only for the standard softness preference', t => {
+  browser(t)
+  const standard = setup({
+    ...ready,
+    selectedItems: ready.selectedItems.map(item => ({ ...item, preference: 'standard' })),
+  })
+  t.after(standard.unmount)
+  assert.match(content(standard.tree), /See the approved samples/)
+
+  const less = setup(ready)
+  t.after(less.unmount)
+  assert.doesNotMatch(content(less.tree), /See the approved samples/)
+})
+
+test('sample portal finishes locally without a PIN, network submission, or duplicate header count', t => {
+  browser(t)
+  let requests = 0
+  t.mock.method(globalThis, 'fetch', async () => { requests++; return Response.json({ ok: true }) })
+  const sample = setup(ready, gallery, true)
+  t.after(sample.unmount)
+
+  assert.doesNotMatch(content(sample.tree), /Included photos/i)
+  sample.step('Review')
+  sample.review().onSubmit()
+  sample.render()
+
+  assert.equal(sample.review().locked, true)
+  assert.equal(elements(sample.tree, element => element.type === 'input' && element.props.type === 'password').length, 0)
+  assert.equal(requests, 0)
+  assert.equal(sample.submitted, 0)
+})
+
+test('expired draft keeps current choices visible and can explicitly save again', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const b = browser(t); const f = setup(); t.after(f.unmount)
+  f.photos().onToggle('0'); f.render(); f.render()
+  t.mock.timers.tick(drafts.PORTAL_DRAFT_TTL_MS); f.render()
+  assert.match(content(f.tree), /Your saved draft expired/)
+  assert.deepEqual(f.photos().included, ['0'])
+  assert.equal(b.values.size, 0)
+  f.click('Save draft again'); f.render()
+  assert.match(content(f.tree), /Draft saved in this tab/)
+  assert.equal(b.values.size, 1)
 })
 
 test('long press opens preview once without toggling selection; tap and keyboard select; scroll and unmount cancel pending previews', t => {

@@ -4,7 +4,7 @@ Date: 9 September 2026
 
 ## Delivery status
 
-Implemented locally on the existing branch. No automatic merge, GitHub push, Vercel deployment, production email, or live database migration was performed.
+At the initial implementation handoff, changes were local and no automatic merge or deployment had been performed. The owner subsequently authorized deployment. Both migrations are now installed and the production release is Ready. See [the production release record](client-portal-production-release-20260909.md) for the exact commit, deployment ID, live verification and limitations. The database/deployment instructions below describe the original implementation checkpoint.
 
 The approved HTML controls the visual direction. The subsequent request for rounded corners applies to navigation, controls, image tiles, preview surfaces, drawers, notices and inline add-on panels. Existing package quantities, price calculations, authentication, rate limits and selection locks remain production-authoritative.
 

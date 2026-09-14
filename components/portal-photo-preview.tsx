@@ -6,6 +6,8 @@ import type { ClientGalleryFile } from '@/components/client-photo-selection'
 import { usePortalPreviewSource, useWarmPortalPreview } from '@/components/portal-preview-cache'
 import { constrainPhotoView, FIT_PHOTO, MAX_PHOTO_ZOOM, transformPhotoGesture, zoomPhotoWithWheel, type PhotoPoint, type PhotoView } from '@/lib/photo-pan-zoom'
 
+const previewControl = 'flex size-11 items-center justify-center rounded-control border border-white/10 bg-white/[0.02] transition-[transform,background-color,border-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.07] active:translate-y-0 active:scale-[0.96] disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-30'
+
 export function PhotoSelectButton({ file, locked, onSelect, onPreview, onDesktopPreview, children, className = '', selected, focused, extra, desktopBreakpoint = '(min-width: 48rem)' }: {
   file: ClientGalleryFile; locked: boolean; onSelect: () => void; onPreview: (file: ClientGalleryFile) => void; onDesktopPreview?: (file: ClientGalleryFile) => void; children: ReactNode; className?: string
   selected?: boolean; focused?: boolean; extra?: boolean; desktopBreakpoint?: string
@@ -44,6 +46,8 @@ export function PortalPhotoPreview({
   selected = false,
   locked = true,
   onToggleSelection,
+  selectionLabel,
+  selectionDescription,
   onFileChange,
   onClose,
 }: {
@@ -52,6 +56,8 @@ export function PortalPhotoPreview({
   selected?: boolean
   locked?: boolean
   onToggleSelection?: () => void
+  selectionLabel?: string
+  selectionDescription?: string
   onFileChange?: (file: ClientGalleryFile) => void
   onClose: () => void
 }) {
@@ -147,17 +153,17 @@ export function PortalPhotoPreview({
   if (!file) return null
   return <dialog ref={dialog} aria-labelledby="portal-preview-title" onCancel={event => { event.preventDefault(); onClose() }}
     onClick={event => { if (event.target === dialog.current) onClose() }}
-    className="portal-photo-preview m-auto w-[94vw] max-w-5xl overflow-hidden rounded-xl border border-white/15 bg-[#171717] p-0 text-white shadow-2xl backdrop:bg-black/85">
+    className="portal-photo-preview m-auto max-h-[94dvh] w-[94vw] max-w-5xl overflow-y-auto rounded-[20px] border border-white/[0.12] bg-[#171718] p-0 text-white shadow-[inset_0_1px_rgba(255,255,255,0.07),0_24px_80px_rgba(0,0,0,0.28)] backdrop:bg-black/85">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 p-3 sm:flex-nowrap sm:gap-3 sm:p-4">
       <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-        {files.length > 1 ? <><button type="button" aria-label="Previous photo" disabled={currentIndex <= 0} onClick={() => navigate(-1)} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ChevronLeft className="size-4"/></button><button type="button" aria-label="Next photo" disabled={currentIndex < 0 || currentIndex >= files.length - 1} onClick={() => navigate(1)} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ChevronRight className="size-4"/></button></> : null}
+        {files.length > 1 ? <><button type="button" aria-label="Previous photo" disabled={currentIndex <= 0} onClick={() => navigate(-1)} className={previewControl}><ChevronLeft className="size-4" strokeWidth={1.5}/></button><button type="button" aria-label="Next photo" disabled={currentIndex < 0 || currentIndex >= files.length - 1} onClick={() => navigate(1)} className={previewControl}><ChevronRight className="size-4" strokeWidth={1.5}/></button></> : null}
         <h3 id="portal-preview-title" className="min-w-0 truncate text-xs font-semibold">{file.fileName}</h3>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <button type="button" aria-label="Zoom out" disabled={view.scale <= 1} onClick={() => zoomTo(Math.max(1, view.scale - 1))} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ZoomOut className="size-4"/></button>
+        <button type="button" aria-label="Zoom out" disabled={view.scale <= 1} onClick={() => zoomTo(Math.max(1, view.scale - 1))} className={previewControl}><ZoomOut className="size-4" strokeWidth={1.5}/></button>
         <span className="w-10 text-center text-caption">{Math.round(view.scale * 100)}%</span>
-        <button type="button" aria-label="Zoom in" disabled={view.scale >= MAX_PHOTO_ZOOM} onClick={() => zoomTo(Math.min(MAX_PHOTO_ZOOM, view.scale + 1))} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10 disabled:opacity-30"><ZoomIn className="size-4"/></button>
-        <button type="button" autoFocus aria-label="Close photo preview" onClick={onClose} className="flex size-11 items-center justify-center rounded-control border border-white/15 hover:bg-white/10"><X className="size-4"/></button>
+        <button type="button" aria-label="Zoom in" disabled={view.scale >= MAX_PHOTO_ZOOM} onClick={() => zoomTo(Math.min(MAX_PHOTO_ZOOM, view.scale + 1))} className={previewControl}><ZoomIn className="size-4" strokeWidth={1.5}/></button>
+        <button type="button" autoFocus aria-label="Close photo preview" onClick={onClose} className={previewControl}><X className="size-4" strokeWidth={1.5}/></button>
       </div>
     </div>
     <div ref={viewport} role="region" aria-label="Photo preview. Pinch or scroll to zoom and drag to move. Arrow keys move a zoomed photo."
@@ -190,9 +196,12 @@ export function PortalPhotoPreview({
         // Protected preview URL, never a public RAW-original link. Reuse the grid's cached image.
         // eslint-disable-next-line @next/next/no-img-element
         <img ref={photo} src={previewSource} alt={file.fileName} draggable={false} decoding="async" onError={() => setFailed(true)} onLoad={() => { setLoaded(true); applyView(currentView.current) }}
-          className={`pointer-events-none block h-full w-full select-none object-contain transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`, transformOrigin: 'center', willChange: dragging ? 'transform' : undefined }}/>
+          className={`pointer-events-none block h-full w-full select-none object-contain transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${loaded ? 'opacity-100' : 'opacity-0'}`} style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`, transformOrigin: 'center', willChange: dragging ? 'transform' : undefined }}/>
       }
     </div>
-    {onToggleSelection ? <div className="flex items-center justify-between gap-3 border-t border-white/10 p-3 sm:p-4"><p className="min-w-0 truncate text-caption text-white/45">{currentIndex >= 0 ? `${currentIndex + 1} of ${files.length}` : file.fileName}</p><button type="button" disabled={locked} onClick={onToggleSelection} aria-pressed={selected} className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-control px-4 text-caption font-semibold uppercase transition disabled:cursor-default disabled:opacity-50 ${selected ? 'border border-[#C4CEFF]/30 bg-[#C4CEFF]/10 text-[#C4CEFF]' : 'bg-primary text-white hover:bg-[#0300a8]'}`}>{selected ? <Check className="size-4"/> : <Plus className="size-4"/>}{selected ? 'Selected' : 'Select Photo'}</button></div> : null}
+    {onToggleSelection || selectionDescription ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 p-3 sm:p-4">
+      <div className="min-w-0 text-xs text-white/75"><p>{currentIndex >= 0 ? `${currentIndex + 1} of ${files.length}` : file.fileName}</p>{selectionDescription ? <p role="status" className="mt-1">{selectionDescription}</p> : null}</div>
+      {onToggleSelection ? <button type="button" disabled={locked} onClick={onToggleSelection} aria-pressed={selected} className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-control px-4 text-xs font-semibold transition-[transform,background-color,border-color,color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.98] disabled:cursor-default disabled:opacity-50 ${selected ? 'border border-[#C4CEFF]/30 bg-[#C4CEFF]/10 text-[#C4CEFF]' : 'bg-primary text-white hover:bg-[#0903e8]'}`}>{selected ? <Check className="size-4" strokeWidth={1.5}/> : <Plus className="size-4" strokeWidth={1.5}/>}{selectionLabel || (selected ? 'Deselect Photo' : 'Select Photo')}</button> : null}
+    </div> : null}
   </dialog>
 }

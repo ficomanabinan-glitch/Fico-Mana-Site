@@ -49,19 +49,24 @@ export function clearPortalDraft(key: string, storage = sessionStorageSafe()) {
 }
 
 export function readPortalDraft(key: string, storage = sessionStorageSafe(), now = Date.now()): DraftRecord | null {
+  return readPortalDraftState(key, storage, now).record
+}
+
+export function readPortalDraftState(key: string, storage = sessionStorageSafe(), now = Date.now()): { record: DraftRecord | null; status: 'saved' | 'empty' | 'expired' | 'unavailable' } {
   try {
+    if (!storage) return { record: null, status: 'unavailable' }
     const text = storage?.getItem(key)
-    if (!text) return null
-    if (text.length > 32_000) { clearPortalDraft(key, storage); return null }
+    if (!text) return { record: null, status: 'empty' }
+    if (text.length > 32_000) { clearPortalDraft(key, storage); return { record: null, status: 'empty' } }
     const record = JSON.parse(text) as DraftRecord
     if (!record || !Number.isFinite(record.savedAt) || record.savedAt > now || record.expiresAt !== record.savedAt + PORTAL_DRAFT_TTL_MS || record.expiresAt <= now || !validChoices(record.choices)) {
       clearPortalDraft(key, storage)
-      return null
+      return { record: null, status: record && Number.isFinite(record.expiresAt) && record.expiresAt <= now ? 'expired' : 'empty' }
     }
     // Return only allowed choice fields. Never restore prices, links, tokens, or file bytes.
     const { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, addonPhotos, acknowledged, step } = record.choices
-    return { savedAt: record.savedAt, expiresAt: record.expiresAt, choices: { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, ...(addonPhotos ? { addonPhotos } : {}), acknowledged, step } }
-  } catch { clearPortalDraft(key, storage); return null }
+    return { status: 'saved', record: { savedAt: record.savedAt, expiresAt: record.expiresAt, choices: { included, extras, editingPreference, printSelections, walletSelections, addonQuantities, ...(addonPhotos ? { addonPhotos } : {}), acknowledged, step } } }
+  } catch { clearPortalDraft(key, storage); return { record: null, status: 'unavailable' } }
 }
 
 export function writePortalDraft(key: string, choices: PortalDraftChoices, storage = sessionStorageSafe(), now = Date.now()): number | null {

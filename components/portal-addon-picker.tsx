@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Check, ChevronDown, Plus, X } from 'lucide-react'
-import type { ClientAddon, ClientGalleryFile } from './client-photo-selection'
+import type { ClientAddon, ClientGalleryFile } from '@/components/client-photo-selection'
 import { PortalChoiceGrid } from './portal-print-picker'
 import { addonPhotoError, addonPhotoLimit } from '@/lib/addon-photo-rules'
 import styles from './portal-workspace.module.css'
@@ -17,7 +17,7 @@ export default function PortalAddonPicker({ addons, files, quantities, assignmen
 }) {
   const [expanded, setExpanded] = useState<string | null>(null)
   return <>
-    <div className={styles.heading}><div className={styles.headingCopy}><p className={styles.kicker}>03 · A little more to keep</p><h1>For the moments you want to hold onto.</h1><p className={styles.description}>Optional prints and frames, made from your selected enhanced photographs. Choose up to four add-on types, including Extra Edit.</p></div><span className={styles.printCounter}>{typeCount} / 4 types</span></div>
+    <div className={styles.heading}><div className={styles.headingCopy}><h1>Choose add-ons</h1><p className={styles.description}>Add prints or frames if you want them. You can choose up to four types.</p></div><span className={styles.printCounter}>{typeCount} of 4 chosen</span></div>
     <div className={styles.printLayout}><div className={styles.addonList}>
       {extraCount > 0 ? <div className={styles.extraSummary}><span>Extra enhanced photos <small>{extraCount} × {money(extraPrice)}</small></span><strong>{money(extraCount * extraPrice)}</strong></div> : null}
       {addons.length === 0 ? <p className={styles.empty}>No optional add-ons are currently available.</p> : null}
@@ -33,12 +33,12 @@ export default function PortalAddonPicker({ addons, files, quantities, assignmen
               if (!active && !onToggle(addon)) return
               setExpanded(open ? null : addon.id)
             }} disabled={locked && !active}>
-              <span className={styles.addonIcon}>{active ? <Check size={17} /> : <Plus size={17} />}</span>
+              <span className={styles.addonIcon}>{active ? <Check size={17} strokeWidth={1.5} /> : <Plus size={17} strokeWidth={1.5} />}</span>
               <span className={styles.addonCopy}><strong>{addon.name}</strong><small>{addon.description}</small>{active && limit > 0 ? <small>{photos.length ? `${photos.length} photo${photos.length === 1 ? '' : 's'} assigned` : 'Choose your photo below'}</small> : null}</span>
               <span className={styles.addonPrice}>{money(addon.price)}<small>{addon.pricingType === 'fixed' ? 'per set' : addon.pricingType.replace('_', ' ')}</small></span>
-              {active ? <ChevronDown size={15} className={open ? styles.chevronOpen : undefined} /> : null}
+              {active ? <ChevronDown size={15} strokeWidth={1.5} className={open ? styles.chevronOpen : undefined} /> : null}
             </button>
-            {active && !locked ? <button type="button" className={styles.iconButton} aria-label={`Remove ${addon.name}`} onClick={() => { onToggle(addon); if (open) setExpanded(null) }}><X size={16} /></button> : null}
+            {active && !locked ? <button type="button" className={styles.iconButton} aria-label={`Remove ${addon.name}`} onClick={() => { onToggle(addon); if (open) setExpanded(null) }}><X size={16} strokeWidth={1.5} /></button> : null}
           </div>
           {open ? <div id={`addon-picker-${addon.id}`} className={styles.addonPicker}>
             {addon.maxQuantity > 1 ? <label className={styles.quantity}><span>Quantity</span><input type="number" min={1} max={addon.maxQuantity} value={quantities[addon.id]} disabled={locked} onChange={event => {
@@ -56,7 +56,7 @@ export default function PortalAddonPicker({ addons, files, quantities, assignmen
           </div> : null}
         </section>
       })}
-    </div><aside className={styles.rail} aria-label="Add-on summary"><p className={styles.kicker}>Your additions</p><h2>A personal finishing touch.</h2><dl>{extraCount > 0 ? <div className={styles.summaryRow}><dt>Extra Edit × {extraCount}</dt><dd>{money(extraPrice * extraCount)}</dd></div> : null}{addons.filter(addon => quantities[addon.id] > 0).map(addon => <div className={styles.summaryRow} key={addon.id}><dt>{addon.name}</dt><dd>{assignments[addon.id]?.length || 0} assigned</dd></div>)}<div className={styles.summaryRow}><dt>Total additions</dt><dd><strong>{money(total)}</strong></dd></div></dl>{!complete && !locked ? <p className={styles.validation}>Choose the required photos for each selected add-on before continuing.</p> : null}<button type="button" className={styles.primary} disabled={!complete && !locked} onClick={onContinue}>Continue to Review →</button><p className={styles.note}>Add-ons are optional. You can continue without adding a print or frame.</p></aside></div>
+    </div><aside className={styles.rail} aria-label="Add-on summary"><h2>Order summary</h2><dl>{extraCount > 0 ? <div className={styles.summaryRow}><dt>Extra Edit × {extraCount}</dt><dd>{money(extraPrice * extraCount)}</dd></div> : null}{addons.filter(addon => quantities[addon.id] > 0).map(addon => <div className={styles.summaryRow} key={addon.id}><dt>{addon.name}</dt><dd>{assignments[addon.id]?.length || 0} assigned</dd></div>)}<div className={styles.summaryRow}><dt>Total additions</dt><dd><strong>{money(total)}</strong></dd></div></dl>{!complete && !locked ? <p className={styles.validation}>Choose the required photos for each selected add-on before continuing.</p> : null}<button type="button" className={styles.primary} disabled={!complete && !locked} onClick={onContinue}><span>Continue to Review</span><span className={styles.buttonIcon} aria-hidden="true">→</span></button></aside></div>
     <div className={styles.footer}><button type="button" className={styles.secondary} onClick={onBack}>← Back to Free Prints</button></div>
   </>
 }

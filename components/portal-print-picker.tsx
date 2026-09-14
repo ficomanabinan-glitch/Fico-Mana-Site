@@ -20,7 +20,7 @@ export function PortalChoiceGrid({ files, selected, locked, label, onToggle }: {
     aria-label={`${selected.includes(file.id) ? 'Remove' : 'Use'} ${file.fileName} for ${label}`} aria-pressed={selected.includes(file.id)} disabled={locked} onClick={() => onToggle(file.id)}>
     <span className={styles.pickerImage}><PortalPrivateImage src={file.previewUrl} alt={file.fileName} /></span>
     <span className={styles.filename}>{file.fileName}</span>
-    {selected.includes(file.id) ? <span className={styles.selectedMark}><Check size={14} /></span> : null}
+    {selected.includes(file.id) ? <span className={styles.selectedMark}><Check size={14} strokeWidth={1.5} /></span> : null}
   </button>)}</div>
 }
 
@@ -30,7 +30,7 @@ export default function PortalPrintPicker({ files, printSelections, walletSelect
   onBack: () => void; onContinue: () => void; onWarning: (message: string) => void
 }) {
   return <>
-    <div className={styles.heading}><div className={styles.headingCopy}><p className={styles.kicker}>02 · Included with your package</p><h1>Your complimentary prints, thoughtfully assigned.</h1><p className={styles.description}>Choose from your included enhanced photographs. The same photograph may be used in more than one print category.</p></div><p className={styles.note}>Wallet prints may use one to four different included photographs.</p></div>
+    <div className={styles.heading}><div className={styles.headingCopy}><h1>Choose your free prints</h1><p className={styles.description}>Pick a photo for each print. You can reuse the same photo.</p></div></div>
     <div className={styles.printLayout}>
       <div className={styles.printStack}>{PORTAL_PRINT_OPTIONS.map(option => {
         const selected = option.max === 4 ? walletSelections : printSelections[option.category] ? [printSelections[option.category]!] : []
@@ -45,11 +45,11 @@ export default function PortalPrintPicker({ files, printSelections, walletSelect
           }} />
         </fieldset>
       })}</div>
-      <aside className={styles.rail} aria-label="Print summary"><p className={styles.kicker}>Print summary</p><h2>Your selections</h2><dl>{PORTAL_PRINT_OPTIONS.map(option => {
+      <aside className={styles.rail} aria-label="Print summary"><h2>Print selections</h2><dl>{PORTAL_PRINT_OPTIONS.map(option => {
         const ids = option.max === 4 ? walletSelections : [printSelections[option.category]].filter((id): id is string => Boolean(id))
         return <div className={styles.summaryRow} key={option.category}><dt>{option.title}</dt><dd>{ids.length ? ids.map(id => files.find(file => file.id === id)?.fileName || 'Selected photo').join(', ') : 'Choose a photo'}</dd></div>
-      })}</dl>{!complete && !locked ? <p className={styles.validation}>Choose a photo for every free print category.</p> : null}<button type="button" className={styles.primary} disabled={!complete && !locked} onClick={onContinue}>Continue to Add-ons →</button></aside>
+      })}</dl>{!complete && !locked ? <p className={styles.validation}>Choose a photo for every free print category.</p> : null}<button type="button" className={styles.primary} disabled={!complete && !locked} onClick={onContinue}><span>Continue to Add-ons</span><span className={styles.buttonIcon} aria-hidden="true">→</span></button></aside>
     </div>
-    <div className={styles.footer}><p className={styles.description}>All free print allocations stay editable until final submission.</p><button type="button" className={styles.secondary} onClick={onBack}>← Back</button></div>
+    <div className={styles.footer}><button type="button" className={styles.secondary} onClick={onBack}>← Back</button></div>
   </>
 }
