@@ -18,6 +18,7 @@ import {
   PenTool,
   ReceiptText,
   Settings,
+  UserCog,
   Users,
   X,
 } from 'lucide-react'
@@ -73,6 +74,7 @@ const navigationSections = [
       { label: 'Package Manager', href: '/admin/packages', icon: PackageOpen },
       { label: 'Website Media', href: '/admin/media', icon: Clapperboard },
       { label: 'Email Logs', href: '/admin/emails', icon: FileText },
+      { label: 'User Access', href: '/admin/users', icon: UserCog },
       { label: 'System Settings', href: '/admin/system', icon: Settings },
     ],
   },
