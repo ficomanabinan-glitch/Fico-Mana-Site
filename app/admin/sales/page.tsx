@@ -182,12 +182,12 @@ export default function SalesManagementPage() {
       refreshing={refreshing}
     >
       <div className="flex flex-wrap gap-2">
-        <select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className={`${adminSelect} !w-auto min-w-28`}>
+        <select aria-label="Sales reporting period" value={period} onChange={(event) => setPeriod(event.target.value as Period)} className={`${adminSelect} !w-auto min-w-28`}>
           <option value="month">Month</option>
           <option value="quarter">Quarter</option>
           <option value="year">Year</option>
         </select>
-        <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className={`${adminInput} !w-auto`} />
+        <input aria-label="Sales reporting date" type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className={`${adminInput} !w-auto`} />
       </div>
     </AdminPageHeader>
   )

@@ -920,12 +920,12 @@ function BookingForm() {
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Full Name *</label>
-                    <input required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+                    <label htmlFor="booking-full-name" className={labelClass}>Full Name *</label>
+                    <input id="booking-full-name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>Phone Number *</label>
-                    <input required value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
+                    <label htmlFor="booking-phone" className={labelClass}>Phone Number *</label>
+                    <input id="booking-phone" type="tel" autoComplete="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
                   </div>
                 </div>
                 <div>
@@ -938,19 +938,20 @@ function BookingForm() {
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Facebook Profile Name *</label>
-                    <input required value={fbName} onChange={(e) => setFbName(e.target.value)} className={inputClass} />
+                    <label htmlFor="booking-facebook-name" className={labelClass}>Facebook Profile Name *</label>
+                    <input id="booking-facebook-name" required value={fbName} onChange={(e) => setFbName(e.target.value)} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>Facebook Profile Link *</label>
-                    <input required inputMode="url" value={fbLink} onChange={(e) => setFbLink(e.target.value)} className={inputClass} placeholder="facebook.com/your-profile" />
+                    <label htmlFor="booking-facebook-link" className={labelClass}>Facebook Profile Link *</label>
+                    <input id="booking-facebook-link" required inputMode="url" value={fbLink} onChange={(e) => setFbLink(e.target.value)} className={inputClass} placeholder="facebook.com/your-profile" />
                   </div>
                 </div>
                 <div>
                   <div className="mb-1.5">
-                    <label className={labelClass}>Pre-Shoot Note / Special Requests</label>
+                    <label htmlFor="booking-note" className={labelClass}>Pre-Shoot Note / Special Requests</label>
                   </div>
                   <textarea
+                    id="booking-note"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     rows={4}

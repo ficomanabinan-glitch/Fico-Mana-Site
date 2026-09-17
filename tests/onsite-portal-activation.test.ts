@@ -17,6 +17,7 @@ test('booking and storage setup do not create the client portal before an onsite
 test('editor file management is lazy, previews opened files, and protects mutations', async () => {
   const route = await readFile('app/api/editor-files/route.ts', 'utf8')
   const page = await readFile('app/editor/files/page.tsx', 'utf8')
+  const dialog = await readFile('components/file-delete-dialog.tsx', 'utf8')
   const middleware = await readFile('lib/supabase/middleware.ts', 'utf8')
 
   assert.match(route, /if \(openId && \(openSource === 'gallery' \|\| openSource === 'deliverable'\)\)/)
@@ -25,7 +26,10 @@ test('editor file management is lazy, previews opened files, and protects mutati
   assert.match(page, /Open a folder to load its contents\. Photos stay private until you open one\./)
   assert.match(page, /useEffect\(\(\) =>/)
   assert.match(page, /Add photos/)
-  assert.match(page, /Delete this file\?/)
+  assert.match(page, /<FileDeleteDialog/)
+  assert.match(dialog, /Delete this file\?/)
+  assert.match(route, /const details = Boolean\(bookingId && category\)/)
+  assert.match(page, /generation !== staffPageCacheGeneration\(\)/)
   assert.match(route, /export async function DELETE/)
   assert.match(route, /photo_selection_items/)
   assert.match(route, /print_allocations/)

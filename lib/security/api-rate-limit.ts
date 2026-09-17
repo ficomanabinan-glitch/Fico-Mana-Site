@@ -12,7 +12,7 @@ export type ApiRateLimitPolicy = {
 }
 
 export const API_RATE_LIMITS = {
-  bookingCreate: { name: 'booking-create', limit: 20, windowSeconds: 24 * 60 * 60, failClosed: true },
+  bookingCreate: { name: 'booking-create', limit: 10, windowSeconds: 60 * 60, failClosed: true },
   bookingLookup: { name: 'booking-lookup', limit: 12, aggregateLimit: 60, windowSeconds: 15 * 60, failClosed: true },
   receiptUpload: { name: 'receipt-upload', limit: 10, windowSeconds: 60 * 60, failClosed: true },
   receiptAccess: { name: 'receipt-access', limit: 120, windowSeconds: 15 * 60, failClosed: true },

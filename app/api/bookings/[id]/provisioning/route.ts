@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireStaffAuth } from '@/lib/auth-api'
+import { requireWorkflowAuth } from '@/lib/auth-api'
 import {
   disableClientPortal,
   enableClientPortal,
@@ -18,9 +18,18 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await requireStaffAuth()
-  if (authError) return authError
+  const { access, error: authError } = await requireWorkflowAuth('edit')
+  if (authError || !access) return authError
   const { id } = await params
+  const admin = getSupabaseAdmin()
+  if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
+  const { data: booking } = await admin
+    .from('bookings')
+    .select('id')
+    .eq('id', id)
+    .eq('workspace_id', access.workspaceId)
+    .maybeSingle()
+  if (!booking) return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 })
   const snapshot = await getProvisioningSnapshot(id)
   if (!snapshot) return NextResponse.json({ error: 'Provisioning state unavailable.' }, { status: 404 })
   return NextResponse.json(snapshot)
@@ -30,18 +39,25 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth(request)
-  if (authError) return authError
+  const { user, access, error: authError } = await requireWorkflowAuth('edit', request)
+  if (authError || !access) return authError
 
   try {
     const { id } = await params
     const body = (await request.json().catch(() => ({}))) as Body
     const action = body.action || 'retry'
     const actor = { type: 'staff' as const, id: user?.id || null }
+    const admin = getSupabaseAdmin()
+    if (!admin) throw new Error('Service unavailable.')
+    const { data: booking } = await admin
+      .from('bookings')
+      .select('id')
+      .eq('id', id)
+      .eq('workspace_id', access.workspaceId)
+      .maybeSingle()
+    if (!booking) return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 })
 
     if (action !== 'disable_portal') {
-      const admin = getSupabaseAdmin()
-      if (!admin) throw new Error('Service unavailable.')
       await assertGraduationBooking(admin, id)
     }
 

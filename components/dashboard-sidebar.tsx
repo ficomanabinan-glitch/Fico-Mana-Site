@@ -41,7 +41,7 @@ export function DashboardSidebarNavigation({
   }
 
   return (
-    <nav className={mobile ? 'space-y-0' : 'min-h-0 flex-1 overflow-y-auto px-3 pb-4'}>
+    <nav aria-label="Workspace navigation" className={mobile ? 'space-y-0' : 'min-h-0 flex-1 overflow-y-auto px-3 pb-4'}>
       {sections.map((section, sectionIndex) => (
         <div
           key={section.label}

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto'
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { emailsMatch, loadBookingById } from '@/lib/booking-load'
 import { isValidBookingId, resolveBookingReference } from '@/lib/booking-id'
@@ -43,12 +43,14 @@ async function duplicateImageResponse(
   admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   receiptHash: string,
   bookingId: string,
+  knownFingerprint?: { id: string; booking_id: string; storage_path?: string | null } | null,
 ) {
-  const { data, error } = await admin
+  const lookup = knownFingerprint === undefined ? await admin
     .from('receipt_fingerprints')
     .select('id,booking_id,file_url,storage_path')
     .eq('sha256', receiptHash)
-    .maybeSingle()
+    .maybeSingle() : { data: knownFingerprint, error: null }
+  const { data, error } = lookup
 
   if (error) throw error
   if (!data || String(data.booking_id) === bookingId) return null
@@ -187,14 +189,14 @@ export async function POST(request: Request) {
     }
     const receiptHash = createHash('sha256').update(buffer).digest('hex')
 
-    const duplicate = await duplicateImageResponse(admin, receiptHash, bookingId)
-    if (duplicate) return duplicate
-
-    const { data: existingFingerprint } = await admin
+    const { data: existingFingerprint, error: fingerprintReadError } = await admin
       .from('receipt_fingerprints')
       .select('id,booking_id,file_url,storage_path')
       .eq('sha256', receiptHash)
       .maybeSingle()
+    if (fingerprintReadError) throw fingerprintReadError
+    const duplicate = await duplicateImageResponse(admin, receiptHash, bookingId, existingFingerprint)
+    if (duplicate) return duplicate
 
     if (existingFingerprint && String(existingFingerprint.booking_id) === bookingId) {
       return NextResponse.json(
@@ -295,14 +297,14 @@ export async function POST(request: Request) {
       )
     }
 
-    await recordSecurityAuditEvent({
+    after(() => recordSecurityAuditEvent({
       eventType: 'receipt_uploaded',
       outcome: 'success',
       bookingId,
       actorId: isStaffUpload ? staffAuth?.user?.id : null,
       route: '/api/receipts/upload',
       metadata: { scanner: scan.status },
-    })
+    }))
     return NextResponse.json(
       { receiptUrl: receiptReference, receiptHash },
       { headers: privateNoStoreHeaders() },

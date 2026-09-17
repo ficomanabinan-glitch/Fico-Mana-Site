@@ -851,6 +851,7 @@ function BookingsManagement() {
             <input
               type="text"
               value={searchTerm}
+              aria-label="Search bookings"
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search FM-123456, GCash ref, name, email, phone..."
               className={`${adminInput} pl-11`}
@@ -861,6 +862,7 @@ function BookingsManagement() {
             <input
               type="date"
               value={dateFilter}
+              aria-label="Filter by shoot date"
               onChange={(e) => setDateFilter(e.target.value)}
               className={`${adminInput} pl-11`}
             />
@@ -874,6 +876,7 @@ function BookingsManagement() {
             <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Booking Status</span>
             <select
               value={statusFilter}
+              aria-label="Booking status"
               onChange={(e) => setStatusFilter(e.target.value)}
               className={adminSelect}
             >
@@ -893,6 +896,7 @@ function BookingsManagement() {
             <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Payment Status</span>
             <select
               value={paymentFilter}
+              aria-label="Payment status"
               onChange={(e) => setPaymentFilter(e.target.value)}
               className={adminSelect}
             >
@@ -910,6 +914,7 @@ function BookingsManagement() {
             <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Package Type</span>
             <select
               value={packageFilter}
+              aria-label="Package type"
               onChange={(e) => setPackageFilter(e.target.value)}
               className={adminSelect}
             >

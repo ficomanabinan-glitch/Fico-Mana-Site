@@ -10,7 +10,6 @@ import {
   CheckSquare,
   Clapperboard,
   FileText,
-  FolderHeart,
   LayoutDashboard,
   List,
   Menu,
@@ -53,7 +52,6 @@ const navigationSections = [
     items: [
       { label: 'Bookings', href: '/admin/bookings', icon: List },
       { label: 'Clients', href: '/admin/clients', icon: Users },
-      { label: 'Client Portals', href: '/admin/provisioning', icon: FolderHeart },
       { label: 'Verification Queue', href: '/admin/verification', icon: CheckSquare, badgeKey: 'verification' },
       { label: 'Editor Portal', href: 'https://editor.ficomana.com', icon: PenTool },
       { label: 'Session Calendar', href: '/admin/calendar', icon: CalendarDays },
@@ -340,6 +338,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     }}
                     className="relative inline-flex size-11 items-center justify-center rounded-lg text-white/65 hover:bg-white/5 hover:text-white"
                     title="Notifications"
+                    aria-label="Notifications"
+                    aria-expanded={showNotifDrawer}
+                    aria-controls="admin-notifications"
                   >
                     <Bell className="size-[18px]" />
                     {unreadCount > 0 ? (
@@ -356,7 +357,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         aria-label="Close notifications"
                         onClick={() => setShowNotifDrawer(false)}
                       />
-                      <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-white/10 bg-[#222222] shadow-2xl">
+                      <div id="admin-notifications" className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-white/10 bg-[#222222] shadow-2xl">
                         <div className="flex items-center justify-between border-b border-white/10 p-4">
                           <span className="text-xs font-semibold">Notifications</span>
                           <span className="text-caption text-white/35">{unreadCount} unread</span>

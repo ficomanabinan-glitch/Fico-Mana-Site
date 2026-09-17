@@ -31,6 +31,17 @@ type Booking = {
   price: number
 }
 
+type PortalOverviewItem = {
+  bookingId: string
+  customerName: string
+  customerEmail: string
+  shootDate: string
+  packageName: string
+  bookingStatus: string
+  paymentStatus: string
+  price: number
+}
+
 type Resource = {
   id: string
   resource_type: 'photos' | 'video' | 'invoice' | 'agreement' | 'meeting_document' | 'project_update' | 'other'
@@ -68,7 +79,7 @@ export default function ProvisioningBookingPage() {
   const toast = useAdminToast()
   const [details, setDetails, loading, setLoading] = useCachedPageRead<{
     booking: Booking; snapshot: Snapshot | null; resources: Resource[]; audit: Audit[]
-  } | null>(`admin:provisioning:${bookingId}`, null)
+  } | null>(`editor:client-portals:${bookingId}`, null)
   const booking = details?.booking
   const snapshot = details?.snapshot
   const resources = details?.resources ?? []
@@ -81,19 +92,30 @@ export default function ProvisioningBookingPage() {
 
   const load = async () => {
     try {
-      const [bookingRes, snapshotRes, resourcesRes, auditRes] = await Promise.all([
-        fetch(`/api/bookings/${encodeURIComponent(bookingId)}`, { cache: 'no-store', credentials: 'include' }),
+      const [overviewRes, snapshotRes, resourcesRes, auditRes] = await Promise.all([
+        fetch('/api/provisioning', { cache: 'no-store', credentials: 'include' }),
         fetch(`/api/bookings/${encodeURIComponent(bookingId)}/provisioning`, { cache: 'no-store', credentials: 'include' }),
         fetch(`/api/bookings/${encodeURIComponent(bookingId)}/portal-resources`, { cache: 'no-store', credentials: 'include' }),
         fetch(`/api/bookings/${encodeURIComponent(bookingId)}/provisioning/audit`, { cache: 'no-store', credentials: 'include' }),
       ])
-      const bookingData = await bookingRes.json().catch(() => ({}))
+      const overviewData = await overviewRes.json().catch(() => ({})) as { items?: PortalOverviewItem[]; error?: string }
       const snapshotData = await snapshotRes.json().catch(() => ({}))
       const resourcesData = await resourcesRes.json().catch(() => [])
       const auditData = await auditRes.json().catch(() => [])
-      if (!bookingRes.ok) throw new Error(bookingData.error || 'Booking could not be loaded.')
+      if (!overviewRes.ok) throw new Error(overviewData.error || 'Client Portal could not be loaded.')
+      const portalBooking = overviewData.items?.find(item => item.bookingId === bookingId)
+      if (!portalBooking) throw new Error('Client Portal not found.')
       setDetails(previous => ({
-        booking: bookingData as Booking,
+        booking: {
+          id: portalBooking.bookingId,
+          customerName: portalBooking.customerName,
+          customerEmail: portalBooking.customerEmail,
+          bookingDate: portalBooking.shootDate,
+          packageName: portalBooking.packageName,
+          bookingStatus: portalBooking.bookingStatus,
+          paymentStatus: portalBooking.paymentStatus,
+          price: Number(portalBooking.price || 0),
+        },
         snapshot: snapshotRes.ok ? snapshotData as Snapshot : previous?.snapshot ?? null,
         resources: resourcesRes.ok ? resourcesData as Resource[] : previous?.resources ?? [],
         audit: auditRes.ok ? auditData as Audit[] : previous?.audit ?? [],
@@ -185,7 +207,7 @@ export default function ProvisioningBookingPage() {
     <div className={adminPage}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <Link href="/admin/provisioning" className="inline-flex items-center gap-1 text-caption font-semibold uppercase tracking-wider text-white/45 hover:text-white"><ArrowLeft className="w-3.5 h-3.5" />Provisioning</Link>
+          <Link href="/editor/client-portals" className="inline-flex items-center gap-1 text-caption font-semibold uppercase tracking-wider text-white/45 hover:text-white"><ArrowLeft className="w-3.5 h-3.5" />Client Portals</Link>
           <h1 className="text-2xl font-semibold mt-3">{booking.customerName}</h1>
           <p className="text-xs font-mono text-[#C4CEFF] mt-1">{booking.id}</p>
           <p className="text-xs text-white/45 mt-1">{booking.packageName} · {booking.bookingDate}</p>

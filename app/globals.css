@@ -519,10 +519,25 @@
 .admin-console {
   --radius: var(--fico-radius-control);
   --primary: #8fa0ff;
+  --primary-foreground: #11131b;
   --accent: #8fa0ff;
   --brand-blue: #8fa0ff;
   --ring: #a5b4fc;
   --sidebar-primary: #8fa0ff;
+  --staff-muted-foreground: rgb(255 255 255 / 0.65);
+}
+
+/* Legacy metadata utilities share one readable floor in staff workspaces.
+   Status colors, decorative icons, and disabled-control opacity stay intact. */
+.admin-console :where(.text-white\/30, .text-white\/35, .text-white\/40, .text-white\/45, .text-white\/50, .text-white\/55) {
+  color: var(--staff-muted-foreground);
+}
+.admin-console :where(input, textarea)::placeholder {
+  color: var(--staff-muted-foreground);
+  opacity: 1;
+}
+.admin-console :where(.card-approve-exit, .card-reject-exit) {
+  animation-duration: 180ms;
 }
 
 .client-portal {

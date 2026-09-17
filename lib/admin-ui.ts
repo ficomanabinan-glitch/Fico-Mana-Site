@@ -9,13 +9,13 @@ export const adminCard =
 export const adminPanel =
   'rounded-card border border-white/10 bg-[#222222] shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
 export const adminInput =
-  'w-full min-w-0 min-h-11 rounded-control bg-white/[0.06] border border-white/20 text-white placeholder:text-white/35 px-3 py-2 text-body sm:text-small focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors'
+  'w-full min-w-0 min-h-11 rounded-control bg-white/[0.06] border border-white/20 text-white placeholder:text-white/60 px-3 py-2 text-body sm:text-small focus:border-[#C4CEFF]/60 focus:outline-none focus:ring-2 focus:ring-[#C4CEFF]/40 transition-colors'
 export const adminSelect =
-  'admin-select w-full min-w-0 min-h-11 rounded-control bg-[#222222] border border-white/10 text-white px-3 py-2 text-body sm:text-small font-medium focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20 [color-scheme:dark] transition-colors'
+  'admin-select w-full min-w-0 min-h-11 rounded-control bg-[#222222] border border-white/10 text-white px-3 py-2 text-body sm:text-small font-medium focus:border-[#C4CEFF]/60 focus:outline-none focus:ring-2 focus:ring-[#C4CEFF]/40 [color-scheme:dark] transition-colors'
 export const adminLabel = 'text-caption font-semibold tracking-label text-[#C4CEFF] uppercase'
 export const adminSectionLabel = 'text-caption font-semibold tracking-label text-white/55 uppercase'
 export const adminBtnPrimary =
-  'min-h-11 cursor-pointer rounded-control bg-primary text-primary-foreground text-small font-semibold hover:bg-[#1a14e8] active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none'
+  'min-h-11 cursor-pointer rounded-control bg-primary text-[#11131b] text-small font-semibold hover:bg-[#aebaff] active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none'
 export const adminBtnGhost =
   'min-h-11 cursor-pointer rounded-control border border-white/10 text-white/70 hover:border-white/25 hover:bg-white/[0.04] hover:text-white text-caption font-semibold uppercase tracking-label transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none'
 export const adminTableWrap = `${adminPanel} fico-table overflow-x-auto`

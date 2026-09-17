@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireStaffAuth } from '@/lib/auth-api'
+import { requireWorkflowAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
@@ -18,11 +18,19 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await requireStaffAuth()
-  if (authError) return authError
+  const { access, error: authError } = await requireWorkflowAuth('edit')
+  if (authError || !access) return authError
   const { id } = await params
   const admin = getSupabaseAdmin()
   if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
+  const { data: booking, error: bookingError } = await admin
+    .from('bookings')
+    .select('id')
+    .eq('id', id)
+    .eq('workspace_id', access.workspaceId)
+    .maybeSingle()
+  if (bookingError) return secureErrorResponse(bookingError, 'Could not verify this client portal.', { context: 'GET /api/bookings/[id]/portal-resources booking scope' })
+  if (!booking) return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 })
   const { data, error } = await admin
     .from('client_portal_resources')
     .select('*')
@@ -36,8 +44,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth(request)
-  if (authError) return authError
+  const { user, access, error: authError } = await requireWorkflowAuth('edit', request)
+  if (authError || !access) return authError
   try {
     const { id } = await params
     const body = (await request.json()) as Body
@@ -52,7 +60,12 @@ export async function POST(
 
     const admin = getSupabaseAdmin()
     if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
-    const { data: booking } = await admin.from('bookings').select('id').eq('id', id).maybeSingle()
+    const { data: booking } = await admin
+      .from('bookings')
+      .select('id')
+      .eq('id', id)
+      .eq('workspace_id', access.workspaceId)
+      .maybeSingle()
     if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
 
     const { data, error } = await admin
@@ -71,6 +84,7 @@ export async function POST(
 
     await admin.from('provisioning_audit').insert({
       booking_id: id,
+      workspace_id: access.workspaceId,
       action: 'portal_resource_added',
       actor_type: 'staff',
       actor_id: user?.id || null,
@@ -87,8 +101,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { user, error: authError } = await requireStaffAuth(request)
-  if (authError) return authError
+  const { user, access, error: authError } = await requireWorkflowAuth('edit', request)
+  if (authError || !access) return authError
   try {
     const { id } = await params
     const body = (await request.json()) as { resourceId?: string }
@@ -96,6 +110,13 @@ export async function DELETE(
     if (!resourceId) return NextResponse.json({ error: 'Resource ID is required.' }, { status: 400 })
     const admin = getSupabaseAdmin()
     if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
+    const { data: booking } = await admin
+      .from('bookings')
+      .select('id')
+      .eq('id', id)
+      .eq('workspace_id', access.workspaceId)
+      .maybeSingle()
+    if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
     const { data, error } = await admin
       .from('client_portal_resources')
       .delete()
@@ -106,6 +127,7 @@ export async function DELETE(
     if (!data?.length) return NextResponse.json({ error: 'Resource not found.' }, { status: 404 })
     await admin.from('provisioning_audit').insert({
       booking_id: id,
+      workspace_id: access.workspaceId,
       action: 'portal_resource_removed',
       actor_type: 'staff',
       actor_id: user?.id || null,

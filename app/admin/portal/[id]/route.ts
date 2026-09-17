@@ -10,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const snapshot = await getProvisioningSnapshot(decodeURIComponent(id))
   if (!snapshot?.clientPortalUrl) {
-    return NextResponse.redirect(new URL(`/admin/provisioning?search=${encodeURIComponent(id)}`, request.url))
+    return NextResponse.redirect(new URL(`/editor/client-portals?search=${encodeURIComponent(id)}`, 'https://editor.ficomana.com'))
   }
 
   return NextResponse.redirect(snapshot.clientPortalUrl)

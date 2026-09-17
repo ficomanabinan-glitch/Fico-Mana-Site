@@ -1,7 +1,35 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export const INQUIRY_RATE_LIMIT = 20
-export const INQUIRY_RATE_WINDOW_SECONDS = 24 * 60 * 60
+export const INQUIRY_RATE_LIMIT = 10
+export const INQUIRY_RATE_WINDOW_SECONDS = 60 * 60
+export const BOOKING_DEVICE_COOKIE = 'fico_booking_device'
+
+function hashSecret() {
+  const secret = process.env.SECURITY_HASH_SECRET || process.env.LOGIN_RATE_LIMIT_SECRET ||
+    (process.env.NODE_ENV === 'production' ? '' : 'fico-mana-local-booking-device')
+  if (!secret) throw new Error('INQUIRY_RATE_LIMIT_NOT_CONFIGURED')
+  return secret
+}
+
+async function deviceSignature(id: string) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(hashSecret()),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`booking-device:${id}`))
+  return Array.from(new Uint8Array(signature), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** A signed browser identity, not invasive hardware fingerprinting. */
+export async function resolveBookingDeviceCookie(value?: string) {
+  const [id, signature, extra] = (value ?? '').split('.')
+  if (!extra && /^[a-f0-9-]{36}$/.test(id ?? '') && /^[a-f0-9]{64}$/.test(signature ?? '')) {
+    const expected = await deviceSignature(id)
+    let difference = 0
+    for (let index = 0; index < expected.length; index++) difference |= expected.charCodeAt(index) ^ signature.charCodeAt(index)
+    if (difference === 0) return { id, value: value!, created: false }
+  }
+  const newId = crypto.randomUUID()
+  return { id: newId, value: `${newId}.${await deviceSignature(newId)}`, created: true }
+}
 
 function getClientIp(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for')

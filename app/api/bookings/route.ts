@@ -422,6 +422,9 @@ export async function POST(request: Request) {
       !bookingBecameCancelled &&
       (approvedNow || (!isExisting && alreadyProvisionable) || reconcileProvisionedProject)
 
+    // Confirmed payment is persisted above. Storage preparation and sending the
+    // confirmation email are independent; don't serialize their round trips.
+    const provisioningTask = async () => {
     if (shouldProvision) {
       try {
         provisioning = await provisionBookingResources(booking.id, {
@@ -432,7 +435,8 @@ export async function POST(request: Request) {
         console.error('Booking provisioning failed:', error)
       }
     }
-
+    }
+    const approvalEmailTask = async () => {
     if (approvedNow) {
       const customerEmail = booking.customerEmail?.trim()
       if (!customerEmail) {
@@ -447,6 +451,8 @@ export async function POST(request: Request) {
         }
       }
     }
+    }
+    await Promise.all([provisioningTask(), approvalEmailTask()])
 
     if (!supabaseResult && isSupabaseConfigured()) {
       return NextResponse.json(

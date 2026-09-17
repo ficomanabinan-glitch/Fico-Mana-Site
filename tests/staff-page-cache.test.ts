@@ -6,6 +6,18 @@ import { loadTs } from './helpers/load-ts.ts'
 type Cache = typeof import('../lib/staff-page-cache.ts')
 type Hooks = typeof import('../components/use-cached-page-read.ts')
 
+test('file writes invalidate all cached folder ancestors without evicting unrelated pages', t => {
+  const cache = setup(t)
+  const generation = cache.staffPageCacheGeneration()
+  cache.writeStaffPage('editor-files:', { items: ['date'] }, generation)
+  cache.writeStaffPage('editor-files:booking=a', { items: ['photo'] }, generation)
+  cache.writeStaffPage('dashboard', { total: 1 }, generation)
+  cache.invalidateStaffPages('editor-files:')
+  assert.equal(cache.readStaffPage('editor-files:'), undefined)
+  assert.equal(cache.readStaffPage('editor-files:booking=a'), undefined)
+  assert.deepEqual(cache.readStaffPage('dashboard'), { total: 1 })
+})
+
 function setup(t: test.TestContext) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
   Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() })

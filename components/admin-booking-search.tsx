@@ -37,6 +37,7 @@ export default function AdminBookingSearch({ bookings }: Props) {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
         <input
           value={query}
+          aria-label="Find a booking or transaction"
           onChange={(e) => setQuery(e.target.value)}
           placeholder="FM-156001, FM-RCP-156001-2076, GCash ref..."
           className={adminInput + ' pl-10 font-mono'}

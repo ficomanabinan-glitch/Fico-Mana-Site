@@ -51,7 +51,7 @@ export default function PaymentVerificationQueue() {
   /** Play the card exit animation before removing it from the queue. */
   const animateCardExit = async (bookingId: string, type: 'approve' | 'reject') => {
     setExiting({ id: bookingId, type })
-    await new Promise((resolve) => window.setTimeout(resolve, 700))
+    await new Promise((resolve) => window.setTimeout(resolve, 180))
     setBookings((prev) => prev.filter((b) => b.id !== bookingId))
     setExiting(null)
   }
@@ -110,11 +110,9 @@ export default function PaymentVerificationQueue() {
       setSelectedBooking(null)
       await animateCardExit(booking.id, 'approve')
 
-      try {
-        await dismissBookingNotifications(booking.id)
-      } catch (err) {
-        console.warn('dismissBookingNotifications failed:', err)
-      }
+      // Approval is already saved; notification housekeeping must not keep the
+      // queue locked while another network round trip completes.
+      void dismissBookingNotifications(booking.id).catch((err) => console.warn('dismissBookingNotifications failed:', err))
 
       const emailMsg = formatEmailResult(emailErrors)
       if (emailMsg) {
@@ -258,7 +256,7 @@ export default function PaymentVerificationQueue() {
           <p className="mt-2 text-xs text-white/70">There are no deposits waiting for review.</p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Link href="/admin/bookings" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">View bookings</Link>
-            <Link href="/admin/provisioning" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">Client portals</Link>
+            <a href="https://editor.ficomana.com/editor/client-portals" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">Client portals</a>
           </div>
         </div>
       ) : (

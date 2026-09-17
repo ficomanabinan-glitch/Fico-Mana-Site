@@ -88,7 +88,8 @@ export default function UserAccessPage() {
 
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     setBusy(true)
     try {
       await api('/api/admin/users', {
@@ -100,7 +101,7 @@ export default function UserAccessPage() {
           role: form.get('role'),
         }),
       })
-      event.currentTarget.reset()
+      formElement.reset()
       setShowCreate(false)
       toast.success('Account created', 'The staff member can sign in immediately with the temporary password.')
       await load()
@@ -148,7 +149,8 @@ export default function UserAccessPage() {
 
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     const newPassword = String(form.get('newPassword') || '')
     if (newPassword !== String(form.get('confirmPassword') || '')) {
       toast.error('Passwords do not match', 'Enter the same new password twice.')
@@ -160,7 +162,7 @@ export default function UserAccessPage() {
         method: 'POST',
         body: JSON.stringify({ currentPassword: form.get('currentPassword'), newPassword }),
       })
-      event.currentTarget.reset()
+      formElement.reset()
       toast.success('Password changed', 'Use the new password the next time you sign in.')
     } catch (error) {
       toast.error('Password not changed', error instanceof Error ? error.message : undefined)
@@ -193,7 +195,7 @@ export default function UserAccessPage() {
             <h2 className="text-lg font-semibold">Staff accounts</h2>
             <p className="mt-1 text-sm text-white/45">Roles are enforced by the server and the FICO MANA workspace membership.</p>
           </div>
-          <button type="button" onClick={() => setShowCreate((value) => !value)} className={`${adminBtnPrimary} inline-flex items-center justify-center gap-2 px-4`}>
+          <button type="button" onClick={() => setShowCreate((value) => !value)} className={`${adminBtnPrimary} inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap px-4`}>
             <Plus className="size-4" /> Add account
           </button>
         </div>
@@ -224,11 +226,11 @@ export default function UserAccessPage() {
             <p className="mt-1 text-sm text-white/45">Your current password is required. Other administrators cannot view it.</p>
           </div>
         </div>
-        <form onSubmit={changePassword} className="mt-5 grid gap-4 lg:grid-cols-3 lg:items-end">
+        <form onSubmit={changePassword} className="mt-5 grid items-start gap-4 lg:grid-cols-3">
           <PasswordField name="currentPassword" label="Current password" />
           <PasswordField name="newPassword" label="New password" hint="12+ characters with uppercase, lowercase, number, and symbol" />
           <PasswordField name="confirmPassword" label="Confirm new password" />
-          <div className="lg:col-span-3 flex justify-end">
+          <div className="flex justify-end lg:col-span-3">
             <button disabled={busy} className={`${adminBtnPrimary} px-5`}>Change password</button>
           </div>
         </form>
@@ -272,14 +274,17 @@ function AccountRow({ account, busy, canManage, roleChoices, onSave, onDelete }:
   const [role, setRole] = useState<ManageableStaffRole>(account.role === 'owner' || account.role === 'unassigned' ? 'editor' : account.role)
   const [displayName, setDisplayName] = useState(account.displayName)
   const changed = role !== account.role || displayName.trim() !== account.displayName
-  return <div className="grid gap-4 p-5 xl:grid-cols-[minmax(220px,1.2fr)_minmax(170px,.8fr)_minmax(200px,1fr)_auto] xl:items-center">
-    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate font-semibold">{account.displayName}</p>{account.isCurrent ? <span className="rounded-full border border-[#C4CEFF]/25 bg-[#C4CEFF]/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-[#C4CEFF]">You</span> : null}</div><p className="mt-1 truncate text-sm text-white/45">{account.email}</p></div>
-    <div><p className="text-sm font-semibold">{roleCopy[account.role].label}</p><p className="mt-1 text-xs text-white/35">{account.lastSignInAt ? `Last sign-in ${new Date(account.lastSignInAt).toLocaleDateString('en-PH')}` : 'Has not signed in yet'}</p></div>
-    {canManage ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2"><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className={adminInput} aria-label={`Display name for ${account.email}`} /><select value={role} onChange={(event) => setRole(event.target.value as ManageableStaffRole)} className={adminSelect} aria-label={`Access level for ${account.email}`}>{roleChoices.map((choice) => <option value={choice} key={choice}>{roleCopy[choice].label}</option>)}</select></div> : <p className="text-sm text-white/35">{account.role === 'owner' ? 'Owner accounts are protected.' : 'Manage your own password below.'}</p>}
-    <div className="flex gap-2 xl:justify-end">{canManage ? <><button type="button" disabled={busy || !changed || !displayName.trim()} onClick={() => void onSave(account, role, displayName.trim())} className={`${adminBtnGhost} px-4`}>Save</button><button type="button" disabled={busy} onClick={onDelete} className="inline-flex size-11 items-center justify-center rounded-control border border-red-400/20 text-red-300 hover:bg-red-400/10" aria-label={`Delete ${account.email}`}><Trash2 className="size-4" /></button></> : null}</div>
+  return <div className="grid min-w-0 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.65fr)_minmax(0,1.6fr)] xl:items-center">
+    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-semibold">{account.displayName}</p>{account.isCurrent ? <span className="rounded-full border border-[#C4CEFF]/25 bg-[#C4CEFF]/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-[#C4CEFF]">You</span> : null}</div><p className="mt-1 break-all text-sm text-white/65">{account.email}</p></div>
+    <div className="min-w-0"><p className="text-sm font-semibold">{roleCopy[account.role].label}</p><p className="mt-1 text-xs text-white/65">{account.lastSignInAt ? `Last sign-in ${new Date(account.lastSignInAt).toLocaleDateString('en-PH')}` : 'Has not signed in yet'}</p></div>
+    {canManage ? <div className="grid min-w-0 items-end gap-3 sm:col-span-2 sm:grid-cols-2 xl:col-span-1 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <label className={`${adminLabel} min-w-0`}>Display name<input value={displayName} disabled={busy} maxLength={80} onChange={(event) => setDisplayName(event.target.value)} className={`${adminInput} mt-2 font-normal normal-case tracking-normal`} aria-label={`Display name for ${account.email}`} /></label>
+      <label className={`${adminLabel} min-w-0`}>Access level<select value={role} disabled={busy} onChange={(event) => setRole(event.target.value as ManageableStaffRole)} className={`${adminSelect} mt-2 normal-case tracking-normal`} aria-label={`Access level for ${account.email}`}>{roleChoices.map((choice) => <option value={choice} key={choice}>{roleCopy[choice].label}</option>)}</select></label>
+      <div className="flex justify-end gap-2 sm:col-span-2 2xl:col-span-1"><button type="button" disabled={busy || !changed || !displayName.trim()} onClick={() => void onSave(account, role, displayName.trim())} className={`${adminBtnGhost} px-4`} aria-label={`Save access for ${account.email}`}>Save</button><button type="button" disabled={busy} onClick={onDelete} className="inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-red-400/20 text-red-300 hover:bg-red-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:opacity-50" aria-label={`Delete ${account.email}`}><Trash2 className="size-4" /></button></div>
+    </div> : <p className="text-sm text-white/65 sm:col-span-2 xl:col-span-1">{account.role === 'owner' ? 'Owner accounts are protected.' : 'Manage your own password below.'}</p>}
   </div>
 }
 
 function PasswordField({ name, label, hint }: { name: string; label: string; hint?: string }) {
-  return <label className={adminLabel}>{label}<input name={name} type="password" required minLength={name === 'currentPassword' ? 1 : 12} className={`${adminInput} mt-2 normal-case`} autoComplete={name === 'currentPassword' ? 'current-password' : 'new-password'} />{hint ? <span className="mt-1.5 block text-[11px] font-normal normal-case tracking-normal text-white/35">{hint}</span> : null}</label>
+  return <label className={`${adminLabel} block min-w-0`}>{label}<input name={name} type="password" required minLength={name === 'currentPassword' ? 1 : 12} className={`${adminInput} mt-2 font-normal normal-case tracking-normal`} aria-describedby={hint ? `${name}-hint` : undefined} autoComplete={name === 'currentPassword' ? 'current-password' : 'new-password'} />{hint ? <span id={`${name}-hint`} className="mt-2 block text-xs font-normal normal-case tracking-normal text-white/65">{hint}</span> : null}</label>
 }

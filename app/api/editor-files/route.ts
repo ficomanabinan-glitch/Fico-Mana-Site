@@ -5,6 +5,7 @@ import { createDownloadUrl } from '@/lib/storage/presigned-urls'
 import { assertStorageKeyOwnership, parseStorageKey } from '@/lib/storage/storage-keys'
 import { deleteObjects } from '@/lib/storage/storage-service'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
+import { readDatabasePages } from '@/lib/database/read-pages'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -78,23 +79,29 @@ export async function GET(request: NextRequest) {
   }
 
   const fileRows = async (ids?: string[]) => {
-    const galleryQuery = admin.from('gallery_files').select('id,booking_id,storage_key,file_name,mime_type,file_size,thumbnail_reference,preview_reference,created_at,updated_at')
+    // Parent folders need only identity/category metadata, not filenames, image
+    // references and sizes for every descendant. Never read R2 objects here.
+    const details = Boolean(bookingId && category)
+    const query = (table: 'gallery_files' | 'deliverable_files') => {
+    const projection = table === 'gallery_files' ? (details
+      ? 'id,booking_id,storage_key,file_name,file_size,thumbnail_reference,preview_reference,created_at,updated_at'
+      : 'id,booking_id,storage_key') : (details
+      ? 'id,booking_id,storage_key,file_name,relative_path,file_size,published_at,updated_at'
+      : 'id,booking_id,storage_key')
+    const scoped = admin.from(table).select(projection)
       .eq('workspace_id', access.workspaceId).eq('storage_status', 'available')
-    const deliverableQuery = admin.from('deliverable_files').select('id,booking_id,storage_key,file_name,relative_path,file_size,published_at,updated_at')
-      .eq('workspace_id', access.workspaceId).eq('storage_status', 'available')
-    if (ids?.length) {
-      galleryQuery.in('booking_id', ids)
-      deliverableQuery.in('booking_id', ids)
+    if (ids?.length) scoped.in('booking_id', ids)
+    if (bookingId) scoped.eq('booking_id', bookingId)
+    if (details) scoped.like('storage_key', `%/${category}/%`)
+    return scoped
     }
-    if (bookingId) {
-      galleryQuery.eq('booking_id', bookingId)
-      deliverableQuery.eq('booking_id', bookingId)
-    }
-    const [gallery, deliverables] = await Promise.all([galleryQuery.limit(5000), deliverableQuery.limit(5000)])
-    if (gallery.error || deliverables.error) throw new Error(gallery.error?.message || deliverables.error?.message)
+    const [gallery, deliverables] = await Promise.all([
+      readDatabasePages<Record<string, any>>(() => query('gallery_files')),
+      readDatabasePages<Record<string, any>>(() => query('deliverable_files')),
+    ])
     return [
-      ...(gallery.data || []).map((row) => indexedFile(row, 'gallery')),
-      ...(deliverables.data || []).map((row) => indexedFile(row, 'deliverable')),
+      ...gallery.map((row) => indexedFile(row, 'gallery')),
+      ...deliverables.map((row) => indexedFile(row, 'deliverable')),
     ].filter((row): row is IndexedFile => Boolean(row))
   }
 
@@ -114,24 +121,31 @@ export async function GET(request: NextRequest) {
 
     if (shootDate) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(shootDate)) return json({ error: 'Invalid shoot date.' }, 400)
-      const bookings = await admin.from('bookings').select('id,customer_name,package_name,booking_date')
-        .eq('workspace_id', access.workspaceId).eq('booking_date', shootDate).order('customer_name')
-      if (bookings.error) throw new Error(bookings.error.message)
-      const ids = (bookings.data || []).map((row) => String(row.id))
+      const bookings = await readDatabasePages<Record<string, any>>(() => admin.from('bookings')
+        .select('id,customer_name,package_name,booking_date')
+        .eq('workspace_id', access.workspaceId).eq('booking_date', shootDate))
+      bookings.sort((a, b) => String(a.customer_name).localeCompare(String(b.customer_name)))
+      const ids = bookings.map((row) => String(row.id))
       const files = ids.length ? await fileRows(ids) : []
       const counts = new Map<string, number>()
       for (const file of files) counts.set(file.bookingId, (counts.get(file.bookingId) || 0) + 1)
-      return json({ level: 'clients', shootDate, items: (bookings.data || [])
+      return json({ level: 'clients', shootDate, items: bookings
         .filter((row) => counts.has(String(row.id))).map((row) => ({ ...row, fileCount: counts.get(String(row.id)) })) })
     }
 
     const files = await fileRows()
     const ids = [...new Set(files.map((file) => file.bookingId))]
     if (!ids.length) return json({ level: 'dates', items: [] })
-    const bookings = await admin.from('bookings').select('id,booking_date').eq('workspace_id', access.workspaceId).in('id', ids)
-    if (bookings.error) throw new Error(bookings.error.message)
+    const bookings: Array<{ id: string; booking_date: string }> = []
+    // Keep query URLs bounded; one giant IN expression fails at large studios.
+    for (let start = 0; start < ids.length; start += 100) {
+      const chunk = await admin.from('bookings').select('id,booking_date')
+        .eq('workspace_id', access.workspaceId).in('id', ids.slice(start, start + 100))
+      if (chunk.error) throw new Error(chunk.error.message)
+      bookings.push(...(chunk.data || []))
+    }
     const counts = new Map<string, number>()
-    const dateByBooking = new Map((bookings.data || []).map((row) => [String(row.id), String(row.booking_date)]))
+    const dateByBooking = new Map(bookings.map((row) => [String(row.id), String(row.booking_date)]))
     for (const file of files) {
       const date = dateByBooking.get(file.bookingId)
       if (date) counts.set(date, (counts.get(date) || 0) + 1)

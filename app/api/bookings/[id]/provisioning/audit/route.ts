@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireStaffAuth } from '@/lib/auth-api'
+import { requireWorkflowAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
@@ -7,8 +7,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { error: authError } = await requireStaffAuth()
-  if (authError) return authError
+  const { access, error: authError } = await requireWorkflowAuth('edit')
+  if (authError || !access) return authError
   try {
     const { id } = await params
     const admin = getSupabaseAdmin()
@@ -17,6 +17,7 @@ export async function GET(
       .from('provisioning_audit')
       .select('id,action,actor_type,actor_id,external_resource_id,metadata,error,created_at')
       .eq('booking_id', id)
+      .eq('workspace_id', access.workspaceId)
       .order('created_at', { ascending: false })
       .limit(100)
     if (error) throw new Error(error.message)

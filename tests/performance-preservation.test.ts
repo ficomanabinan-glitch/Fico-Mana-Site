@@ -78,7 +78,9 @@ test('sidebar structure, links and states are preserved with the approved typogr
         { label: 'Overview', items: [{ label: 'Dashboard', href: '/admin/dashboard', icon: Calendar, exact: true }] },
         { label: 'Clients', items: [{ label: 'Portals', href: '/admin/provisioning', icon: Calendar, badge: 2 }, { label: 'Editor', href: 'https://editor.ficomana.com', icon: Calendar }] },
       ] }
-      assert.equal(renderToStaticMarkup(createElement(after.DashboardSidebarNavigation, props)), renderToStaticMarkup(createElement(before.DashboardSidebarNavigation, props)))
+      const polished = renderToStaticMarkup(createElement(after.DashboardSidebarNavigation, props))
+      assert.match(polished, /aria-label="Workspace navigation"/)
+      assert.equal(polished.replace(' aria-label="Workspace navigation"', ''), renderToStaticMarkup(createElement(before.DashboardSidebarNavigation, props)))
     }
   }
 })

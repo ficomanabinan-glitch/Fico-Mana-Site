@@ -3,9 +3,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isAdminHost, isAdminUser, isEditorHost } from '@/lib/auth/admin'
 import { getSupabaseUrl, getSupabaseKey } from '@/lib/supabase/env'
 import { isNewAdminHost, newAdminAlias } from '@/lib/new-admin/routing'
+import { BOOKING_DEVICE_COOKIE, INQUIRY_RATE_LIMIT, INQUIRY_RATE_WINDOW_SECONDS, resolveBookingDeviceCookie } from '@/lib/inquiry-rate-limit'
 
-const INQUIRY_LIMIT = 20
-const INQUIRY_WINDOW_SECONDS = 24 * 60 * 60
+const INQUIRY_LIMIT = INQUIRY_RATE_LIMIT
+const INQUIRY_WINDOW_SECONDS = INQUIRY_RATE_WINDOW_SECONDS
 
 async function hashIp(ip: string, salt: string) {
   const bytes = new TextEncoder().encode(`${salt}:${ip}`)
@@ -13,12 +14,6 @@ async function hashIp(ip: string, salt: string) {
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
-}
-
-function requestIp(request: NextRequest) {
-  const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]?.trim() || 'unknown'
-  return request.headers.get('x-real-ip')?.trim() || 'unknown'
 }
 
 function copyResponseCookies(source: NextResponse, target: NextResponse) {
@@ -77,14 +72,29 @@ function maybeEnforceEditorSubdomain(request: NextRequest) {
 }
 
 function isEditorHostPassThrough(pathname: string) {
+  const isClientPortalApi =
+    pathname === '/api/provisioning' ||
+    /^\/api\/bookings\/[^/]+\/(?:provisioning(?:\/audit)?|portal-resources)$/.test(pathname)
   return (
     pathname.startsWith('/editor') ||
+    isClientPortalApi ||
     pathname.startsWith('/api/editor-workflow') ||
     pathname.startsWith('/api/editor-files') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next/') ||
     isStaticAsset(pathname)
   )
+}
+
+function legacyClientPortalRedirect(request: NextRequest) {
+  const { pathname } = request.nextUrl
+  if (pathname !== '/admin/provisioning' && !pathname.startsWith('/admin/provisioning/')) return null
+  const suffix = pathname.slice('/admin/provisioning'.length)
+  const url = request.nextUrl.clone()
+  url.protocol = 'https:'
+  url.host = process.env.EDITOR_HOSTNAME?.trim() || 'editor.ficomana.com'
+  url.pathname = `/editor/client-portals${suffix}`
+  return NextResponse.redirect(url)
 }
 
 function editorSubdomainAlias(request: NextRequest) {
@@ -96,7 +106,7 @@ function editorSubdomainAlias(request: NextRequest) {
   return NextResponse.redirect(url)
 }
 
-async function enforceInquiryRateLimit(request: NextRequest) {
+async function enforceInquiryRateLimit(deviceId: string) {
   const serviceSecret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
   const rateHashSecret =
     process.env.SECURITY_HASH_SECRET ||
@@ -109,7 +119,7 @@ async function enforceInquiryRateLimit(request: NextRequest) {
     )
   }
 
-  const ipHash = await hashIp(requestIp(request), rateHashSecret)
+  const ipHash = await hashIp(`booking-device-v2:${deviceId}`, rateHashSecret)
   const response = await fetch(`${getSupabaseUrl()}/rest/v1/rpc/consume_inquiry_rate_limit`, {
     method: 'POST',
     headers: {
@@ -143,7 +153,7 @@ async function enforceInquiryRateLimit(request: NextRequest) {
   if (!result?.allowed) {
     return NextResponse.json(
       {
-        error: 'Too many submissions from this connection. Please try again after the 24-hour limit resets.',
+        error: 'This device has reached the limit of 10 reservation attempts per hour. Please wait until the limit resets and try again.',
         limit: INQUIRY_LIMIT,
         remaining: 0,
         resetAt: result?.reset_at ?? null,
@@ -151,7 +161,7 @@ async function enforceInquiryRateLimit(request: NextRequest) {
       {
         status: 429,
         headers: {
-          'Retry-After': String(INQUIRY_WINDOW_SECONDS),
+          'Retry-After': String(Math.max(1, Math.ceil((Date.parse(result?.reset_at ?? '') - Date.now()) / 1000) || INQUIRY_WINDOW_SECONDS)),
           'X-RateLimit-Limit': String(INQUIRY_LIMIT),
           'X-RateLimit-Remaining': '0',
         },
@@ -163,6 +173,9 @@ async function enforceInquiryRateLimit(request: NextRequest) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const clientPortalRedirect = legacyClientPortalRedirect(request)
+  if (clientPortalRedirect) return clientPortalRedirect
+
   const newAlias = newAdminAlias(request.headers.get('host'), request.nextUrl.pathname)
   if (newAlias) {
     const url = request.nextUrl.clone()
@@ -232,8 +245,17 @@ export async function updateSession(request: NextRequest) {
   const isPublicBookingSubmission = pathname === '/api/bookings' && request.method === 'POST' && !user
 
   if (isPublicBookingSubmission) {
-    const limited = await enforceInquiryRateLimit(request)
-    if (limited) return limited
+    try {
+      const device = await resolveBookingDeviceCookie(request.cookies.get(BOOKING_DEVICE_COOKIE)?.value)
+      const limited = await enforceInquiryRateLimit(device.id)
+      const response = limited ?? supabaseResponse
+      response.cookies.set(BOOKING_DEVICE_COOKIE, device.value, {
+        httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 365 * 24 * 60 * 60,
+      })
+      if (limited) return limited
+    } catch {
+      return NextResponse.json({ error: 'Booking service is temporarily unavailable.' }, { status: 503 })
+    }
   }
 
   if (isAdminRoute && !isAdminLogin && !admin) {

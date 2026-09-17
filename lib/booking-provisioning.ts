@@ -124,17 +124,19 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
   const admin = getSupabaseAdmin()
   if (!admin) return null
   const booking = await loadBooking(admin, bookingId)
-  const confirmedPayments = await totalConfirmedPayments(admin, booking)
-  if (!await packageUsesGraduationWorkflow(admin, booking.packageId)) return {
+  const [confirmedPayments, usesWorkflow] = await Promise.all([
+    totalConfirmedPayments(admin, booking),
+    packageUsesGraduationWorkflow(admin, booking.packageId),
+  ])
+  if (!usesWorkflow) return {
     bookingId, required: false, status: 'NOT_STARTED', confirmedPayments,
     requiredDeposit: Number(booking.depositAmount || 0),
   }
-  const row = await getProvisioningRow(admin, bookingId)
-  const { data: portal } = await admin
+  const [row, { data: portal }] = await Promise.all([getProvisioningRow(admin, bookingId), admin
     .from('client_portals')
     .select('id,public_id,status,expires_at')
     .eq('booking_id', bookingId)
-    .maybeSingle()
+    .maybeSingle()])
   const portalExpired = hasPortalExpired(portal?.expires_at)
   const portalActive = portal?.status === 'active' && !portalExpired
 
@@ -161,9 +163,11 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
 
   const booking = await loadBooking(admin, bookingId)
-  const requiresPhotoWorkflow = await packageUsesGraduationWorkflow(admin, booking.packageId)
+  const [requiresPhotoWorkflow, confirmedPayments] = await Promise.all([
+    packageUsesGraduationWorkflow(admin, booking.packageId),
+    totalConfirmedPayments(admin, booking),
+  ])
   const row = requiresPhotoWorkflow ? await getProvisioningRow(admin, bookingId) : null
-  const confirmedPayments = await totalConfirmedPayments(admin, booking)
   const requiredDeposit = Math.max(0, Number(booking.depositAmount || 0))
 
   if (requiredDeposit > 0 && confirmedPayments < requiredDeposit) {

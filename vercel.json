@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["bom1"],
   "alias": ["admin.ficomana.com", "editor.ficomana.com"],
   "env": {
     "ADMIN_HOSTNAME": "admin.ficomana.com",

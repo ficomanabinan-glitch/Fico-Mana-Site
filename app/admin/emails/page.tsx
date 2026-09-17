@@ -83,6 +83,7 @@ export default function EmailLogsConsole() {
           <input
             type="text"
             value={searchTerm}
+            aria-label="Search email logs"
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by recipient, subject, or booking reference..."
             className={`${adminInput} pl-11`}

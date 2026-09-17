@@ -108,7 +108,9 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
       delivered: 0,
       rejected: 0,
     }
-    for (const b of relevant) {
+    // Use the same source population as the review queue. Historical submissions
+    // can remain reviewable even when their booking is no longer active.
+    for (const b of bookings) {
       const status = getRawPhotoWorkflowStatus(b)
       if (status) counts[status]++
     }

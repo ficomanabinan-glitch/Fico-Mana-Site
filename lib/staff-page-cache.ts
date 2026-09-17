@@ -26,6 +26,13 @@ export function staffPageCacheGeneration() {
   return generation
 }
 
+/** Invalidate related folder snapshots after a successful write. */
+export function invalidateStaffPages(prefix: string) {
+  for (const key of pages.keys()) {
+    if (key.startsWith(prefix)) pages.delete(key)
+  }
+}
+
 export function readStaffPage<T>(key: string): T | undefined {
   if (typeof window === 'undefined' || !owner) return undefined
   const entry = pages.get(key)
