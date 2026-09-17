@@ -67,7 +67,7 @@ const editorBatch = {
     failed: 0,
   },
   clients: [],
-  driveDayFolderUrl: '',
+  storageReady: true,
 } satisfies EditorBatchSummary
 
 test('Sales cache reuses a fresh dataset and preserves the selected view', async (context) => {

@@ -3,6 +3,14 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 const LOGIN_LIMIT = 5
 const LOGIN_WINDOW_SECONDS = 15 * 60
 
+/**
+ * Temporary operational switch. The limiter implementation remains available,
+ * but is disabled unless production explicitly enables it again.
+ */
+export function isLoginRateLimitEnabled() {
+  return process.env.ADMIN_LOGIN_RATE_LIMIT_ENABLED === 'true'
+}
+
 export type LoginRateLimitState = {
   configured: boolean
   blocked: boolean

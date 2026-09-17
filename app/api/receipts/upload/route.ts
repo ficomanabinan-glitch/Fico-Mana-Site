@@ -46,12 +46,47 @@ async function duplicateImageResponse(
 ) {
   const { data, error } = await admin
     .from('receipt_fingerprints')
-    .select('booking_id')
+    .select('id,booking_id,file_url,storage_path')
     .eq('sha256', receiptHash)
     .maybeSingle()
 
   if (error) throw error
   if (!data || String(data.booking_id) === bookingId) return null
+
+  // A public booking uploads its receipt before the booking row is created. If
+  // validation interrupted that second request, the fingerprint is orphaned
+  // and a refreshed form would otherwise report the customer's own receipt as
+  // a duplicate. Reassign only verified orphaned uploads; fingerprints owned
+  // by an actual booking remain immutable and protected by the duplicate check.
+  const previousBookingId = String(data.booking_id)
+  const { data: previousBooking, error: previousBookingError } = await admin
+    .from('bookings')
+    .select('id')
+    .eq('id', previousBookingId)
+    .maybeSingle()
+
+  if (previousBookingError) throw previousBookingError
+  if (!previousBooking && data.storage_path) {
+    const { data: reassigned, error: reassignError } = await admin
+      .from('receipt_fingerprints')
+      .update({ booking_id: bookingId })
+      .eq('id', String(data.id))
+      .eq('booking_id', previousBookingId)
+      .select('id')
+      .maybeSingle()
+
+    if (reassignError) throw reassignError
+    if (reassigned) {
+      return NextResponse.json(
+        {
+          receiptUrl: `/api/receipts/${String(reassigned.id)}`,
+          receiptHash,
+          recovered: true,
+        },
+        { headers: privateNoStoreHeaders() },
+      )
+    }
+  }
 
   return NextResponse.json(
     {

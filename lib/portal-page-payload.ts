@@ -1,6 +1,6 @@
 import type { getPortalData } from './editor-workflow'
 
-/** Shared by SSR and subsequent API reads; provider credentials and Drive IDs stay on the server. */
+/** Shared by SSR and subsequent API reads; provider credentials and private storage keys stay on the server. */
 export function portalPagePayload(publicId: string, data: Awaited<ReturnType<typeof getPortalData>>) {
   const base = `/api/editor-workflow/portal/${encodeURIComponent(publicId)}`
   return {

@@ -39,6 +39,7 @@ import {
 } from '@/lib/booking-slots'
 import { generateBookingId } from '@/lib/booking-id'
 import { customerEmailsMatch, isValidCustomerEmail } from '@/lib/customer-email'
+import { normalizeCustomerFacebookUrl } from '@/lib/customer-facebook'
 
 function getPackageIcon(pkg: BookingPackage) {
   if (pkg.category === 'graduation' && pkg.slotType === 'makeup') return GraduationCap
@@ -167,6 +168,11 @@ function BookingForm() {
   const [copiedText, setCopiedText] = useState(false)
   const [copiedRef, setCopiedRef] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadedReceiptRef = useRef<{
+    bookingId: string
+    file: File
+    receiptUrl: string
+  } | null>(null)
   const stepPanelRef = useRef<HTMLDivElement>(null)
   const prevStepRef = useRef<number | null>(null)
 
@@ -292,6 +298,12 @@ function BookingForm() {
       setFormError('Email addresses do not match. Please check both fields and try again.')
       return false
     }
+    const normalizedFacebookLink = normalizeCustomerFacebookUrl(fbLink)
+    if (!normalizedFacebookLink) {
+      setFormError('Enter a valid Facebook profile link, such as facebook.com/your-profile.')
+      return false
+    }
+    if (normalizedFacebookLink !== fbLink) setFbLink(normalizedFacebookLink)
     setFormError('')
     return true
   }
@@ -328,8 +340,11 @@ function BookingForm() {
         setFormError('This session slot is now full. Please pick another slot.')
         return
       }
-      const id = generateBookingId(latest.map((b) => b.id))
-      setBookingId(id)
+      // Keep one reservation reference throughout retries. The receipt
+      // fingerprint is tied to this ID, so generating a new ID after a failed
+      // booking request would incorrectly make the same receipt look reused.
+      const id = bookingId || generateBookingId(latest.map((b) => b.id))
+      if (!bookingId) setBookingId(id)
       setSubmittedSummary({
         paymentMethod,
         transactionRef: requiresDeposit ? transactionRef.trim() : '',
@@ -338,8 +353,21 @@ function BookingForm() {
         bookingDate: dk,
       })
       const slot = isMakeupPackage ? getSlotById(selectedSlotId) : undefined
+      const previousReceipt = uploadedReceiptRef.current
       const receiptUrl =
-        requiresDeposit && receiptFile ? await uploadReceipt(id, receiptFile, email) : undefined
+        requiresDeposit && receiptFile
+          ? previousReceipt?.bookingId === id && previousReceipt.file === receiptFile
+            ? previousReceipt.receiptUrl
+            : await uploadReceipt(id, receiptFile, email).then((uploadedUrl) => {
+                uploadedReceiptRef.current = { bookingId: id, file: receiptFile, receiptUrl: uploadedUrl }
+                return uploadedUrl
+              })
+          : undefined
+      const normalizedFacebookLink = normalizeCustomerFacebookUrl(fbLink)
+      if (!normalizedFacebookLink) {
+        setFormError('Enter a valid Facebook profile link, such as facebook.com/your-profile.')
+        return
+      }
       const graduationNote = isGraduationPackage
         ? [note, `School: ${schoolName}`, `Course: ${course}`].filter(Boolean).join(' · ')
         : note
@@ -349,7 +377,7 @@ function BookingForm() {
         customerName: name,
         customerEmail: email,
         customerPhone: phone,
-        customerFbLink: fbLink,
+        customerFbLink: normalizedFacebookLink,
         customerFbName: fbName,
         packageId: selectedSession.id,
         packageName: selectedSession.title,
@@ -413,6 +441,7 @@ function BookingForm() {
     setSchoolName('')
     setCourse('')
     setReceiptFile(null)
+    uploadedReceiptRef.current = null
     setTransactionRef('')
     setSubmittedSummary(null)
     setBookingId('')
@@ -914,7 +943,7 @@ function BookingForm() {
                   </div>
                   <div>
                     <label className={labelClass}>Facebook Profile Link *</label>
-                    <input required value={fbLink} onChange={(e) => setFbLink(e.target.value)} className={inputClass} placeholder="https://facebook.com/..." />
+                    <input required inputMode="url" value={fbLink} onChange={(e) => setFbLink(e.target.value)} className={inputClass} placeholder="facebook.com/your-profile" />
                   </div>
                 </div>
                 <div>
@@ -990,7 +1019,19 @@ function BookingForm() {
                 >
                   <Upload className="w-8 h-8 mx-auto mb-2 text-white" />
                   <p className="text-sm text-white/70">{receiptFile?.name || 'Click to upload receipt *'}</p>
-                  <input ref={fileInputRef} type="file" accept="image/*,.pdf" data-receipt-upload="true" className="hidden" onChange={(e) => e.target.files?.[0] && setReceiptFile(e.target.files[0])} />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    data-receipt-upload="true"
+                    className="hidden"
+                    onChange={(e) => {
+                      const nextFile = e.target.files?.[0]
+                      if (!nextFile) return
+                      uploadedReceiptRef.current = null
+                      setReceiptFile(nextFile)
+                    }}
+                  />
                 </div>
               </div>
             </div>

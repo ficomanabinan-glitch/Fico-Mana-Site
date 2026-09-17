@@ -44,7 +44,7 @@ async function main() {
     const stateful={...React,useState(initial:any){const index=state++;return [index===0?{...data,expiry:started?{days:30,portalReadyEmailSentAt,expiresAt}:data.expiry}:index===1?false:typeof initial==='function'?initial():initial,()=>{}]}}
     const {default:Page}=loadTs<any>('app/portal/[id]/page.tsx',{
       react:stateful,'next/navigation':{useParams:()=>({id:'example'})},'@/components/portal-qr-code':()=>null,
-      '@/components/portal-sidebar':Sidebar,'@/components/portal-drive-photos':()=>null,
+      '@/components/portal-sidebar':Sidebar,
       '@/components/portal-expiry-notice':Notice,'@/components/use-portal-photo-sync':{usePortalPhotoSync(){}},
       '@/components/portal-deliverable-gallery':DeliverableGallery,
       '@/lib/portal-selection-draft':draft,'@/lib/client-selection-summary':summary,'@/components/client-photo-selection':{ClientPhotoSelection},
@@ -53,7 +53,7 @@ async function main() {
   }
   function provisioning(before:boolean) {
     const ui=loadTs<any>('lib/admin-ui.ts',{})
-    const overview={items:[{bookingId:'FM-EXAMPLE',customerName:'Sample Client',shootDate:'2026-09-08',packageName:'MANA PACKAGE',bookingStatus:'Confirmed',paymentStatus:'Paid Deposit',provisioningStatus:'PARTIAL_FAILURE',driveClientFolderUrl:'#',lastError:null,portal:{id:'sample',status:'active',expiresAt:null}}],googleDrive:{connected:true,portalExpiryDays:30}}
+    const overview={items:[{bookingId:'FM-EXAMPLE',customerName:'Sample Client',shootDate:'2026-09-08',packageName:'MANA PACKAGE',bookingStatus:'Confirmed',paymentStatus:'Paid Deposit',provisioningStatus:'PARTIAL_FAILURE',storageStatus:'error',lastError:null,portal:{id:'sample',status:'active',expiresAt:null}}],storage:{configured:true,provider:'R2',portalExpiryDays:30}}
     const {default:Page}=loadTs<any>('app/admin/provisioning/page.tsx',{
       '@/components/use-cached-page-read':{useCachedPageRead:()=>[overview,()=>{},false,()=>{},false]},
       '@/components/admin-toast-provider':{useAdminToast:()=>({})},'@/components/admin-page-header':()=>createElement('h1',{},'Client Portals'),

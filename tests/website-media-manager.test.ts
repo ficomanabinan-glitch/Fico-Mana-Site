@@ -34,12 +34,13 @@ test('public gallery and reel load managed media while keeping bundled fallbacks
 })
 
 test('admin media uploads are authorized, optimized, dynamic, resumable, and finalized server-side', async () => {
-  const [route, page, migration, uploadAuthMigration, expansionMigration, optimizer, layout] = await Promise.all([
+  const [route, page, migration, uploadAuthMigration, expansionMigration, passwordOnlyAuthMigration, optimizer, layout] = await Promise.all([
     readFile('app/api/admin/website-media/route.ts', 'utf8'),
     readFile('app/admin/media/page.tsx', 'utf8'),
     readFile('supabase/migrations/20260907180000_website_media_manager.sql', 'utf8'),
     readFile('supabase/migrations/20260906231248_fix_website_media_resumable_auth.sql', 'utf8'),
     readFile('supabase/migrations/20260907200000_expand_website_media_gallery_and_fix_tus.sql', 'utf8'),
+    readFile('supabase/migrations/20260915140209_remove_staff_mfa_requirement.sql', 'utf8'),
     readFile('lib/website-media-image.ts', 'utf8'),
     readFile('app/admin/layout.tsx', 'utf8'),
   ])
@@ -72,7 +73,9 @@ test('admin media uploads are authorized, optimized, dynamic, resumable, and fin
   assert.match(migration, /'website-media',[\s\S]*true/)
   assert.match(uploadAuthMigration, /website_media_upload_grants/)
   assert.match(uploadAuthMigration, /can_upload_website_media/)
-  assert.match(uploadAuthMigration, /auth\.jwt\(\) ->> 'aal'\) = 'aal2'/)
+  assert.doesNotMatch(passwordOnlyAuthMigration, /auth\.jwt\(\) ->> 'aal'|aal2/)
+  assert.match(passwordOnlyAuthMigration, /grant_row\.user_id = \(select auth\.uid\(\)\)/)
+  assert.match(passwordOnlyAuthMigration, /member\.role in \('owner', 'admin'\)/)
   assert.match(uploadAuthMigration, /as restrictive[\s\S]*for insert/)
   assert.match(expansionMigration, /'gallery_10'/)
   assert.match(expansionMigration, /p_object_metadata ->> 'contentLength'/)

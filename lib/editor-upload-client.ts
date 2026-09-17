@@ -1,3 +1,5 @@
+import { uploadWithPresignedPlan, type BrowserUploadPlan } from '@/lib/storage/browser-upload'
+
 export type PickedUploadFile = {
   file: File
   relativePath: string
@@ -220,37 +222,6 @@ async function sha256(file: File) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function putDriveFile(
-  uploadUrl: string,
-  file: File,
-  onProgress: (loaded: number, total: number) => void,
-) {
-  return new Promise<Record<string, unknown>>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    request.open('PUT', uploadUrl)
-    request.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-    request.upload.addEventListener('progress', (event) =>
-      onProgress(event.loaded, event.lengthComputable ? event.total : file.size),
-    )
-    request.addEventListener('error', () => reject(new Error(`Network error while uploading ${file.name}.`)))
-    request.addEventListener('abort', () => reject(new Error(`${file.name} upload was cancelled.`)))
-    request.addEventListener('load', () => {
-      let body: Record<string, unknown> = {}
-      try {
-        body = request.responseText ? (JSON.parse(request.responseText) as Record<string, unknown>) : {}
-      } catch {
-        body = {}
-      }
-      if (request.status >= 200 && request.status < 300 && body.id) resolve(body)
-      else {
-        const error = body.error as { message?: string } | undefined
-        reject(new Error(error?.message || `Google Drive rejected ${file.name}.`))
-      }
-    })
-    request.send(file)
-  })
-}
-
 export async function uploadDetectedBatch(
   batch: DetectedBatchFolder,
   options: {
@@ -363,8 +334,13 @@ export async function uploadDetectedBatch(
         const displayName = String(session.fileName || upload.file.name)
         progress(customerName, displayName)
         if (!session.duplicate) {
-          const driveFile = await putDriveFile(String(session.uploadUrl), upload.file, (loaded) =>
-            progress(customerName, displayName, loaded),
+          if (!session.upload || typeof session.upload !== 'object' || typeof session.storageKey !== 'string') {
+            throw new Error('The private upload permission was incomplete.')
+          }
+          const completion = await uploadWithPresignedPlan(
+            upload.file,
+            session.upload as BrowserUploadPlan,
+            (loaded) => progress(customerName, displayName, loaded),
           )
           const completeResponse = await fetch(
             `/api/editor-workflow/batches/${encodeURIComponent(batchId)}/complete-file`,
@@ -375,8 +351,9 @@ export async function uploadDetectedBatch(
               body: JSON.stringify({
                 uploadJobId,
                 uploadFileId,
-                driveFileId: driveFile.id,
+                storageKey: session.storageKey,
                 mimeType: upload.file.type || 'application/octet-stream',
+                ...completion,
               }),
             },
           )

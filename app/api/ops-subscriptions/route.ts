@@ -3,9 +3,8 @@ import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import {
-  addNotificationToDb,
+  addSystemNotificationToDb,
   listNotificationsFromDb,
-  markBookingNotificationsReadInDb,
 } from '@/lib/supabase-store'
 import { listNotifications, addServerNotification, markServerNotificationsReadForBooking } from '@/lib/server-store'
 import type { Notification } from '@/lib/data-store'
@@ -14,33 +13,16 @@ import {
   emailStorageOpsBookingId,
   getEmailStoragePeriod,
   isEmailStorageCyclePaid,
+  opsNotificationId,
 } from '@/lib/ops-subscriptions'
-
-function mergeNotifications(primary: Notification[], secondary: Notification[]): Notification[] {
-  const map = new Map<string, Notification>()
-  for (const n of [...primary, ...secondary]) {
-    const key = `${n.bookingId}:${n.type}:${n.message.slice(0, 40)}`
-    const existing = map.get(key)
-    if (
-      !existing ||
-      (n.isRead && !existing.isRead) ||
-      new Date(n.createdAt).getTime() > new Date(existing.createdAt).getTime()
-    ) {
-      map.set(key, n)
-    }
-  }
-  return Array.from(map.values())
-}
 
 async function loadNotifications(): Promise<Notification[]> {
   if (isSupabaseConfigured()) {
     const admin = getSupabaseAdmin()
-    if (admin) {
-      const fromDb = await listNotificationsFromDb(admin)
-      if (fromDb) {
-        return mergeNotifications(fromDb, await listNotifications())
-      }
-    }
+    if (!admin) throw new Error('Subscription records are temporarily unavailable.')
+    const fromDb = await listNotificationsFromDb(admin)
+    if (!fromDb) throw new Error('Subscription records are temporarily unavailable.')
+    return fromDb
   }
   return listNotifications()
 }
@@ -85,17 +67,17 @@ export async function POST(request: Request) {
     const bookingId = emailStorageOpsBookingId(period.cycleKey)
     const message = buildEmailStoragePaidMessage(period)
 
-    const admin = getSupabaseAdmin()
-    if (isSupabaseConfigured() && admin) {
-      await addNotificationToDb(admin, bookingId, 'OPS_PAID', message)
-      await markBookingNotificationsReadInDb(admin, bookingId)
-    }
-
-    if (!isSupabaseConfigured()) {
+    if (isSupabaseConfigured()) {
+      const admin = getSupabaseAdmin()
+      if (!admin) throw new Error('Subscription records are temporarily unavailable.')
+      const saved = await addSystemNotificationToDb(admin, opsNotificationId(period.cycleKey, 'paid'), 'OPS_PAID', message)
+      if (!saved) throw new Error('Subscription records are temporarily unavailable.')
+      const { error } = await admin.from('notifications').update({ is_read: true })
+        .eq('id', opsNotificationId(period.cycleKey, 'reminder'))
+      if (error) throw new Error('Subscription records are temporarily unavailable.')
+    } else {
       await addServerNotification(bookingId, 'OPS_PAID', message)
       await markServerNotificationsReadForBooking(bookingId)
-    } else if (!admin) {
-      throw new Error('Subscription records are temporarily unavailable.')
     }
 
     return NextResponse.json({ ok: true, cycleKey: period.cycleKey })

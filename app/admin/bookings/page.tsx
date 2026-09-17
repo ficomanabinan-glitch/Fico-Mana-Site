@@ -105,11 +105,9 @@ function BookingsManagement() {
   const [editTime, setEditTime] = useState('')
   const [editStaffNotes, setEditStaffNotes] = useState('')
   const [chargeRebookingFee, setChargeRebookingFee] = useState(false)
-  const [editDriveLink, setEditDriveLink] = useState('')
   const [saveLoading, setSaveLoading] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [completeModalMode, setCompleteModalMode] = useState<'complete' | 'gallery'>('complete')
-  const [completeDriveLink, setCompleteDriveLink] = useState('')
   const [completeSendEmail, setCompleteSendEmail] = useState(true)
   const [completeClientName, setCompleteClientName] = useState('')
   const [completeClientEmail, setCompleteClientEmail] = useState('')
@@ -320,7 +318,6 @@ function BookingsManagement() {
     )
     setEditStaffNotes(b.staffNotes || '')
     setChargeRebookingFee(false)
-    setEditDriveLink(booking.driveLink || '')
     setIsEditing(false)
     setEditingContact(false)
     setEditContactName(booking.customerName || '')
@@ -371,7 +368,7 @@ function BookingsManagement() {
       const updatedBooking: Booking = {
         ...selectedBooking,
         paymentStatus: isFullyPaid ? 'Paid Full' : 'Paid Deposit',
-        // Do NOT auto-complete here — Complete Session is where staff paste Drive + email gallery.
+        // Do not auto-complete here; staff complete the session explicitly.
         paymentHistory: updatedHistory,
       }
 
@@ -389,7 +386,7 @@ function BookingsManagement() {
       } else if (isFullyPaid) {
         toast.success(
           'Studio payment recorded',
-          `₱${studioPayAmount.toFixed(2)} logged · paid in full. Use Complete to send the Drive gallery.`,
+          `₱${studioPayAmount.toFixed(2)} logged · paid in full. Use Complete when the session is finished.`,
         )
       } else {
         toast.success(
@@ -424,7 +421,6 @@ function BookingsManagement() {
         nextTime !== selectedBooking.bookingTime ||
         (resolvedSlot?.id || '') !== (selectedBooking.slotId || '')
       const addedFee = dateChanged && chargeRebookingFee ? 500 : 0
-      const driveLinkChanged = editDriveLink !== (selectedBooking.driveLink || '')
 
       const updatedBooking: Booking = {
         ...selectedBooking,
@@ -435,14 +431,10 @@ function BookingsManagement() {
         shootTime: resolvedSlot?.shootTime ?? (isMakeup ? selectedBooking.shootTime : 'Flexible'),
         staffNotes: editStaffNotes,
         price: selectedBooking.price + addedFee,
-        driveLink: editDriveLink || undefined,
       }
 
       const { saved, emailErrors } = await runAdminTransaction(updatedBooking, [
         ...(dateChanged ? [{ action: 'booking_rescheduled' as const, booking: updatedBooking, rebookingFee: addedFee }] : []),
-        ...(driveLinkChanged && editDriveLink
-          ? [{ action: 'gallery_link' as const, booking: updatedBooking, driveLink: editDriveLink }]
-          : []),
       ])
 
       setSelectedBooking(saved)
@@ -458,8 +450,6 @@ function BookingsManagement() {
       const emailMsg = formatEmailResult(emailErrors)
       if (emailMsg) {
         toast.warning('Saved — email issue', emailMsg)
-      } else if (driveLinkChanged && editDriveLink) {
-        toast.success('Details updated', 'Reschedule saved & gallery link emailed.')
       } else if (dateChanged) {
         toast.success('Rescheduled', 'Booking moved — customer notified.')
       } else {
@@ -522,9 +512,8 @@ function BookingsManagement() {
     }
   }
 
-  const openGalleryLinkModal = (booking: Booking, mode: 'complete' | 'gallery' = 'gallery') => {
+  const openClientPortalModal = (booking: Booking, mode: 'complete' | 'gallery' = 'gallery') => {
     setCompleteModalMode(mode)
-    setCompleteDriveLink(booking.driveLink || '')
     setCompleteSendEmail(true)
     setCompleteClientName(booking.customerName || '')
     setCompleteClientEmail(
@@ -557,7 +546,7 @@ function BookingsManagement() {
 
   const handleUpdateStatus = async (booking: Booking, status: Booking['bookingStatus']) => {
     if (status === 'Completed') {
-      openGalleryLinkModal(booking, 'complete')
+      openClientPortalModal(booking, 'complete')
       return
     }
 
@@ -637,7 +626,6 @@ function BookingsManagement() {
   const handleConfirmComplete = async (opts: { sendEmail: boolean }) => {
     if (!selectedBooking) return
 
-    const driveLink = completeDriveLink.trim()
     const clientName = completeClientName.trim()
     const clientEmail = completeClientEmail.trim()
     const galleryOnly = completeModalMode === 'gallery'
@@ -646,18 +634,6 @@ function BookingsManagement() {
     if (!clientName) {
       toast.warning('Name required', 'Enter the client full name.')
       return
-    }
-
-    // Gallery send always needs a Drive link; Complete can optionally skip email
-    if (galleryOnly || opts.sendEmail) {
-      if (!driveLink) {
-        toast.warning('Drive link required', 'Paste the Google Drive gallery link to email the client.')
-        return
-      }
-      if (!driveLink.startsWith('https://drive.google.com/')) {
-        toast.warning('Invalid link', 'Use a Google Drive link (https://drive.google.com/...).')
-        return
-      }
     }
 
     if (opts.sendEmail || galleryOnly) {
@@ -682,17 +658,10 @@ function BookingsManagement() {
             ? selectedBooking.bookingStatus
             : 'Completed',
         paymentStatus: paidSum >= selectedBooking.price ? 'Paid Full' : selectedBooking.paymentStatus,
-        driveLink: driveLink || selectedBooking.driveLink || undefined,
       }
-
-      const emails =
-        !galleryOnly && shouldEmail && driveLink
-          ? [{ action: 'gallery_link' as const, booking: updatedBooking, driveLink }]
-          : []
-
-      const { saved, emailErrors } = await runAdminTransaction(updatedBooking, emails)
+      const { saved, emailErrors } = await runAdminTransaction(updatedBooking, [])
       let portalEmailError = ''
-      if (galleryOnly) {
+      if (shouldEmail) {
         const portalResponse = await fetch(`/api/editor-workflow/raw/${encodeURIComponent(saved.id)}/portal-email`, {
           method: 'POST',
           credentials: 'include',
@@ -702,7 +671,6 @@ function BookingsManagement() {
       }
 
       setSelectedBooking(saved)
-      setEditDriveLink(saved.driveLink || '')
       setEditContactName(saved.customerName)
       setEditContactEmail(
         isPlaceholderCustomerEmail(saved.customerEmail) ? '' : saved.customerEmail,
@@ -713,19 +681,14 @@ function BookingsManagement() {
       const emailMsg = portalEmailError || formatEmailResult(emailErrors)
       if (emailMsg) {
         toast.warning('Saved — email issue', emailMsg)
-      } else if (galleryOnly) {
+      } else if (shouldEmail) {
         toast.success('Client Portal sent', `${saved.id} · portal emailed to ${saved.customerEmail}.`)
-      } else if (shouldEmail && driveLink) {
-        toast.success(
-          alreadyCompleted ? 'Gallery emailed' : 'Session completed',
-          `${saved.id} · gallery emailed to ${saved.customerEmail}.`,
-        )
       } else {
         toast.success(
-          alreadyCompleted ? 'Gallery link saved' : 'Session completed',
+          alreadyCompleted ? 'Session already complete' : 'Session completed',
           alreadyCompleted
-            ? `${saved.id} Drive link updated (no email sent).`
-            : `${saved.id} marked complete (no gallery email sent).`,
+            ? `${saved.id} remains complete.`
+            : `${saved.id} marked complete (no portal email sent).`,
         )
       }
     } catch (err) {
@@ -1112,7 +1075,7 @@ function BookingsManagement() {
                     {isPlaceholderCustomerEmail(selectedBooking.customerEmail) && (
                       <p className="text-caption text-amber-300/90 leading-relaxed border border-amber-500/20 bg-amber-500/10 p-2.5">
                         This booking has no real email yet (imported). Add name + email so you can send the
-                        raw gallery Drive link to the client.
+                        secure Client Portal to the client.
                       </p>
                     )}
                     <div className="space-y-1.5">
@@ -1274,17 +1237,6 @@ function BookingsManagement() {
                         </label>
                       </div>
 
-                      <div className="col-span-2 space-y-1.5">
-                        <label htmlFor="editDrive" className="text-caption font-semibold text-white/45 uppercase">Google Drive Gallery Link</label>
-                        <input
-                          id="editDrive"
-                          type="url"
-                          value={editDriveLink}
-                          onChange={(e) => setEditDriveLink(e.target.value)}
-                          placeholder="https://drive.google.com/drive/folders/..."
-                          className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
-                        />
-                      </div>
                     </>
                   ) : (
                     <>
@@ -1301,19 +1253,6 @@ function BookingsManagement() {
                           {selectedBooking.bookingDate} at {selectedBooking.bookingTime}
                         </p>
                       </div>
-                      {selectedBooking.driveLink && (
-                        <div className="col-span-2 border-t border-white/10 pt-2 mt-1">
-                          <p className="text-white/40 font-medium">Google Drive Gallery Link</p>
-                          <a 
-                            href={selectedBooking.driveLink} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-green-400 font-semibold hover:underline mt-0.5 flex items-center gap-1 text-caption"
-                          >
-                            Open Drive Gallery <ArrowUpRight className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                      )}
                     </>
                   )}
 
@@ -1538,7 +1477,7 @@ function BookingsManagement() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => openGalleryLinkModal(selectedBooking, 'gallery')}
+                  onClick={() => openClientPortalModal(selectedBooking, 'gallery')}
                   disabled={selectedBooking.bookingStatus === 'Cancelled' || saveLoading}
                   className="rounded-control bg-primary hover:bg-[#03008F] text-white font-bold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 col-span-2 sm:col-span-3"
                 >
@@ -1591,13 +1530,13 @@ function BookingsManagement() {
               </div>
               <p className="text-caption text-white/35">
                 Use <strong className="text-white/55">Send Shoot Reminder</strong> on the morning of the session (email says “today”).
-                Use <strong className="text-white/55">Send Client Portal</strong> after photos are ready. The Google Drive folder remains an internal studio record. Cancel keeps the record; Delete permanently removes it.
+                Use <strong className="text-white/55">Send Client Portal</strong> after photos are ready in private storage. Cancel keeps the record; Delete permanently removes it.
               </p>
             </div>
           </div>
         </div>
       )}
-      {/* Complete + Gallery Link Modal */}
+      {/* Complete session / Client Portal modal */}
       {showCompleteModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
           <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
@@ -1620,7 +1559,7 @@ function BookingsManagement() {
             <p className="text-xs text-white/60 leading-relaxed">
               {completeModalMode === 'gallery'
                 ? 'Confirm the client details and internal RAW folder, then email the secure Client Portal.'
-                : "Paste the Google Drive folder of this client's raw gallery. Confirm name + email so we can email them the link and the page to submit their 5 chosen photos."}
+                : "Confirm the client details, then complete the session. You can also email the secure Client Portal when the private gallery is ready."}
             </p>
 
             <div className="space-y-2">
@@ -1653,23 +1592,6 @@ function BookingsManagement() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="completeDrive" className="text-caption font-semibold tracking-label text-white/45 uppercase">
-                Internal Google Drive Gallery Link (RAW files)
-              </label>
-              <input
-                id="completeDrive"
-                type="url"
-                value={completeDriveLink}
-                onChange={(e) => setCompleteDriveLink(e.target.value)}
-                placeholder="https://drive.google.com/drive/folders/..."
-                className="rounded-control w-full bg-black/40 border border-white/10 p-3 text-xs font-semibold focus:border-primary focus:outline-none text-white"
-              />
-              <p className="text-caption text-white/40">
-                This folder is stored for the studio workflow. The client email receives the secure portal link.
-              </p>
-            </div>
-
             {completeModalMode === 'complete' && (
               <label className="flex items-start gap-2.5 cursor-pointer select-none">
                 <input
@@ -1679,7 +1601,7 @@ function BookingsManagement() {
                   className="mt-0.5 w-3.5 h-3.5 text-primary border-white/20"
                 />
                 <span className="text-caption text-white/70 leading-snug">
-                  Email gallery link + submit page to the client email above
+                  Email the secure Client Portal to the client above
                 </span>
               </label>
             )}

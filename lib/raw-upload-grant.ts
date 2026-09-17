@@ -4,8 +4,8 @@ import { RawUploadError, rawUploadMetadataSchema } from '@/lib/raw-upload-contra
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/)
 const schema = rawUploadMetadataSchema.extend({
-  version: z.literal(1), workspaceId: z.string().uuid(), actorId: z.string().uuid(), bookingId: id,
-  rawFolderId: id, incomingFolderId: id, uploadKey: z.string().regex(/^[a-f0-9]{64}$/), expiresAt: z.number().int(),
+  version: z.literal(2), workspaceId: z.string().uuid(), actorId: z.string().uuid(), bookingId: id,
+  storageKey: z.string().min(20).max(1024), uploadKey: z.string().regex(/^[a-f0-9]{64}$/), expiresAt: z.number().int(),
   generation: z.number().int().nonnegative().optional(),
 }).strict()
 export type RawUploadGrant = z.infer<typeof schema>
@@ -18,7 +18,7 @@ function secret() {
 
 export function signRawUploadGrant(grant: RawUploadGrant) {
   const payload = Buffer.from(JSON.stringify(schema.parse(grant))).toString('base64url')
-  const signature = createHmac('sha256', secret()).update(`onsite-raw-upload:v1:${payload}`).digest('base64url')
+  const signature = createHmac('sha256', secret()).update(`onsite-raw-upload:v2:${payload}`).digest('base64url')
   return `${payload}.${signature}`
 }
 
@@ -27,7 +27,7 @@ export function verifyRawUploadGrant(token: string, workspaceId: string, actorId
   if (token.length > 6000) throw invalid()
   const [payload, signature, extra] = token.split('.')
   if (!payload || !signature || extra) throw invalid()
-  const expected = createHmac('sha256', secret()).update(`onsite-raw-upload:v1:${payload}`).digest('base64url')
+  const expected = createHmac('sha256', secret()).update(`onsite-raw-upload:v2:${payload}`).digest('base64url')
   const left = Buffer.from(signature), right = Buffer.from(expected)
   if (left.length !== right.length || !timingSafeEqual(left, right)) throw invalid()
   let grant: RawUploadGrant

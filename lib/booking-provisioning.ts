@@ -1,12 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Booking, PaymentRecord } from '@/lib/data-store'
 import { mapDbBookingToModel } from '@/lib/booking-db'
-import { ensureShootHierarchy } from '@/lib/google-drive'
 import { portalUrl } from '@/lib/client-portal'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { assertGraduationBooking, packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
-import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
+import { bookingStoragePrefix } from '@/lib/storage/storage-keys'
 
 export type ProvisioningStatus = 'NOT_STARTED' | 'PROVISIONING' | 'ACTIVE' | 'PARTIAL_FAILURE' | 'FAILED'
 
@@ -14,11 +13,9 @@ export type ProvisioningSnapshot = {
   bookingId: string
   required?: boolean
   status: ProvisioningStatus
-  driveRootFolderId?: string
-  driveMonthFolderId?: string
-  driveDayFolderId?: string
-  driveClientFolderId?: string
-  driveClientFolderUrl?: string
+  storageProvider?: 'r2' | 'legacy_external'
+  storagePrefix?: string
+  storageStatus?: 'ready' | 'migration_required' | 'error' | 'archived'
   clientPortalId?: string
   clientPortalPublicId?: string
   clientPortalStatus?: 'active' | 'disabled' | 'expired'
@@ -99,26 +96,6 @@ async function loadBooking(admin: SupabaseClient, bookingId: string) {
   return mapDbBookingToModel(data)
 }
 
-async function ensurePortal(admin: SupabaseClient, bookingId: string, actor: Actor) {
-  await assertGraduationBooking(admin, bookingId)
-  const { data: existing } = await admin
-    .from('client_portals')
-    .select('*')
-    .eq('booking_id', bookingId)
-    .maybeSingle()
-  if (existing) return existing
-
-  const { data: booking } = await admin.from('bookings').select('workspace_id').eq('id', bookingId).single()
-  const { data, error } = await admin
-    .from('client_portals')
-    .insert({ booking_id: bookingId, workspace_id: booking?.workspace_id, status: 'active' })
-    .select('*')
-    .single()
-  if (error || !data) throw new Error(error?.message || 'Client Portal creation failed.')
-  await audit(admin, bookingId, 'portal_created', actor, { externalResourceId: String(data.id) })
-  return data
-}
-
 async function getProvisioningRow(admin: SupabaseClient, bookingId: string) {
   const { data } = await admin.from('booking_provisioning').select('*').eq('booking_id', bookingId).maybeSingle()
   if (data) return data
@@ -164,11 +141,9 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
   return {
     bookingId,
     status: row.status as ProvisioningStatus,
-    driveRootFolderId: row.drive_root_folder_id || undefined,
-    driveMonthFolderId: row.drive_month_folder_id || undefined,
-    driveDayFolderId: row.drive_day_folder_id || undefined,
-    driveClientFolderId: row.drive_client_folder_id || undefined,
-    driveClientFolderUrl: row.drive_client_folder_url || undefined,
+    storageProvider: row.storage_provider || undefined,
+    storagePrefix: row.storage_prefix || undefined,
+    storageStatus: row.storage_status || undefined,
     clientPortalId: portal?.id ? String(portal.id) : undefined,
     clientPortalPublicId: portal?.public_id ? String(portal.public_id) : undefined,
     clientPortalStatus: portalExpired ? 'expired' : portal?.status || undefined,
@@ -224,7 +199,7 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   }
 
   // Payment and booking confirmation still apply to onsite packages. Only remote
-  // photo production is skipped, before any provisioning/portal/folder creation.
+  // photo production is skipped, before any storage or portal initialization.
   if (!requiresPhotoWorkflow || !row) return null
 
   await updateProvisioning(admin, bookingId, {
@@ -234,67 +209,41 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
   })
   await audit(admin, bookingId, row.status === 'NOT_STARTED' ? 'provisioning_started' : 'provisioning_retried', actor)
 
-  let driveResult: Awaited<ReturnType<typeof ensureShootHierarchy>> | null = null
-  let portal: Record<string, any> | null = null
+  let storagePrefix: string | null = null
   const errors: string[] = []
 
   try {
-    const hierarchy = await ensureShootHierarchy({
-      admin,
+    storagePrefix = bookingStoragePrefix({
+      workspaceId: String(row.workspace_id),
       bookingId,
       shootDate: booking.bookingDate,
-      clientName: booking.customerName,
-      selectionLimit: Number(booking.selectionLimit || 5),
-      existingClientFolderId: row.drive_client_folder_id,
-      existingRootFolderId: row.drive_root_folder_id,
     })
-    await saveShootFolderMappings(admin, String(row.workspace_id || ''), bookingId, hierarchy)
     await updateProvisioning(admin, bookingId, {
-      drive_root_folder_id: hierarchy.root.id,
-      drive_month_folder_id: hierarchy.month.id,
-      drive_day_folder_id: hierarchy.day.id,
-      drive_client_folder_id: hierarchy.client.id,
-      drive_client_folder_url: hierarchy.clientUrl,
+      storage_provider: 'r2',
+      storage_prefix: storagePrefix,
+      storage_status: 'ready',
     })
-    driveResult = hierarchy
-    await audit(admin, bookingId, row.drive_client_folder_id ? 'drive_folder_reconciled' : 'drive_client_folder_created', actor, {
-      externalResourceId: driveResult.client.id,
-      metadata: {
-        rootId: driveResult.root.id,
-        monthId: driveResult.month.id,
-        dayId: driveResult.day.id,
-        url: driveResult.clientUrl,
-        previousRootId: row.drive_root_folder_id || null,
-        previousClientFolderId: row.drive_client_folder_id || null,
-        rootChanged: Boolean(row.drive_root_folder_id && row.drive_root_folder_id !== driveResult.root.id),
-      },
+    await audit(admin, bookingId, row.storage_prefix ? 'storage_namespace_reconciled' : 'storage_namespace_prepared', actor, {
+      externalResourceId: storagePrefix,
+      metadata: { storageProvider: 'r2', storagePrefix },
     })
   } catch (error) {
-    const detail = error instanceof Error ? error.message : 'Google Drive provisioning failed.'
-    const message = /\bTry:/i.test(detail) ? detail : `${detail} Try: verify the current root and connected Drive account in Production storage, then click Retry.`
+    const detail = error instanceof Error ? error.message : 'Storage initialization failed.'
+    const message = /\bTry:/i.test(detail) ? detail : `${detail} Try: verify the booking date and storage configuration, then click Retry.`
     errors.push(message)
-    await audit(admin, bookingId, 'drive_provisioning_failed', actor, { error: message })
+    await audit(admin, bookingId, 'storage_initialization_failed', actor, { error: message })
   }
 
-  try {
-    const ensuredPortal = await ensurePortal(admin, bookingId, actor)
-    portal = ensuredPortal
-    await updateProvisioning(admin, bookingId, { client_portal_id: ensuredPortal.id })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Client Portal provisioning failed.'
-    errors.push(message)
-    await audit(admin, bookingId, 'portal_provisioning_failed', actor, { error: message })
-  }
-
-  const complete = !!driveResult && !!portal
-  const partial = (!!driveResult || !!portal) && !complete
-  const status: ProvisioningStatus = complete ? 'ACTIVE' : partial ? 'PARTIAL_FAILURE' : 'FAILED'
+  // Booking confirmation prepares only the private storage namespace. The
+  // first completed onsite upload activates the portal and client selection.
+  const complete = !!storagePrefix
+  const status: ProvisioningStatus = complete ? 'PROVISIONING' : 'FAILED'
   await updateProvisioning(admin, bookingId, {
     status,
-    provisioned_at: complete ? now : null,
+    provisioned_at: null,
     last_error: errors.length ? errors.join(' · ') : null,
   })
-  if (complete) await audit(admin, bookingId, 'provisioning_completed', actor)
+  if (complete) await audit(admin, bookingId, 'storage_ready_for_onsite_upload', actor)
 
   return getProvisioningSnapshot(bookingId)
 }
@@ -325,7 +274,7 @@ export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const patch: Record<string, unknown> = { status: 'active', updated_at: now.toISOString() }
   if (portal.status === 'expired' || hasPortalExpired(portal.expires_at)) {
     const { data: settings } = await admin
-      .from('google_drive_settings')
+      .from('storage_settings')
       .select('portal_expiry_days')
       .eq('id', 1)
       .maybeSingle()

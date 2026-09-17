@@ -36,11 +36,11 @@ jobs:
       SUPABASE_SECRET_KEY: ci-only-supabase-server-key
       PORTAL_SIGNING_SECRET: ci-only-portal-signing-secret-32-bytes-minimum
       SECURITY_HASH_SECRET: ci-only-rate-hash-secret-32-bytes-minimum
-      GOOGLE_CLIENT_ID: ci-only.apps.googleusercontent.com
-      GOOGLE_CLIENT_SECRET: ci-only-not-a-real-secret
-      GOOGLE_TOKEN_ENCRYPTION_KEY: ci-only-drive-encryption-key-32-bytes-minimum
-      GOOGLE_OAUTH_STATE_SECRET: ci-only-oauth-state-secret-32-bytes-minimum
-      GOOGLE_DRIVE_ALLOWED_EMAIL: ci@example.com
+      CLOUDFLARE_ACCOUNT_ID: ci-only-account
+      R2_ACCESS_KEY_ID: ci-only-access-key
+      R2_SECRET_ACCESS_KEY: ci-only-secret-key
+      R2_BUCKET_NAME: ci-only-private-bucket
+      R2_ENDPOINT: https://ci-only-account.r2.cloudflarestorage.com
       RESEND_API_KEY: re_ci_only_not_a_real_credential
       NEXT_PUBLIC_STAGING_ADMIN_EMAIL: ''
       NEXT_PUBLIC_STAGING_ADMIN_PASSWORD: ''

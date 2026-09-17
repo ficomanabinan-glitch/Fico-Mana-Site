@@ -17,7 +17,7 @@ const signatures = [
   },
   {
     name: 'non-empty tracked secret assignment',
-    pattern: /^(?:GOOGLE_CLIENT_SECRET|GOOGLE_TOKEN_ENCRYPTION_KEY|GOOGLE_OAUTH_STATE_SECRET|PORTAL_SIGNING_SECRET|SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY)[ \t]*=[ \t]*[^\s#][^\r\n]*$/m,
+    pattern: /^(?:R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|PORTAL_SIGNING_SECRET|SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY)[ \t]*=[ \t]*[^\s#][^\r\n]*$/m,
   },
 ]
 

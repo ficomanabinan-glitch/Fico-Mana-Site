@@ -1,10 +1,17 @@
-import { MAX_RAW_UPLOAD_BYTES, validateRawSessionUrl } from '@/lib/raw-upload-shared'
+import { MAX_RAW_UPLOAD_BYTES } from '@/lib/raw-upload-shared'
+import { uploadWithPresignedPlan, type BrowserUploadPlan } from '@/lib/storage/browser-upload'
 
-type Session = { grant: string; expiresAt: number; mimeType: string; uploadUrl?: string; driveFileId?: string; started?: boolean }
-type ChunkResponse = { status: number; range: string | null; body: Record<string, unknown> }
+type Session = {
+  grant: string
+  expiresAt: number
+  mimeType: string
+  storageKey: string
+  completed?: boolean
+  upload?: BrowserUploadPlan
+}
+
 const sessions = new WeakMap<File, Map<string, Session>>()
 const sessionStarts = new Map<string, Promise<unknown>>()
-const CHUNK_BYTES = 4 * 1024 * 1024 // A multiple of Google's required 256 KiB.
 
 class TransferError extends Error {
   constructor(message: string, readonly status = 0) { super(message) }
@@ -21,55 +28,16 @@ async function api(bookingId: string, action: string, payload: unknown) {
 }
 
 async function startSession(bookingId: string, payload: unknown) {
-  // Initialize folders one at a time per client; transfers proceed in parallel afterwards.
   const previous = sessionStarts.get(bookingId) || Promise.resolve()
   const pending = previous.catch(() => {}).then(() => api(bookingId, 'upload-session', payload))
   sessionStarts.set(bookingId, pending)
   try { return await pending } finally { if (sessionStarts.get(bookingId) === pending) sessionStarts.delete(bookingId) }
 }
 
-function connectionMessage() {
-  return typeof navigator !== 'undefined' && navigator.onLine === false
-    ? 'This browser is offline. Try: reconnect, keep this page open, and retry the failed file.'
-    : 'The browser could not reach or read the Google Drive upload response. This can be a browser permission or connection issue, even when other websites work. Try: reload this page to renew the upload permission, then select the failed files again. If it continues, check extensions or VPN settings that block Google requests.'
-}
-
-function put(url: string, body: Blob | null, range: string, mimeType: string, progress: (bytes: number) => void) {
-  return new Promise<ChunkResponse>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    request.open('PUT', validateRawSessionUrl(url))
-    // Do not send app cookies or Google access/refresh tokens to the upload endpoint.
-    request.withCredentials = false
-    request.timeout = 120_000
-    request.setRequestHeader('Content-Type', mimeType)
-    request.setRequestHeader('Content-Range', range)
-    request.upload.addEventListener('progress', event => progress(Math.min(event.loaded, body?.size || 0)))
-    request.addEventListener('error', () => reject(new TransferError(connectionMessage())))
-    request.addEventListener('timeout', () => reject(new TransferError('The upload timed out. Try: check your connection and retry the failed file.')))
-    request.addEventListener('abort', () => reject(new TransferError('The upload was cancelled. Try: retry the failed file.')))
-    request.addEventListener('load', () => {
-      let parsed: Record<string, unknown> = {}
-      try { parsed = JSON.parse(request.responseText || '{}') } catch { /* 308 has no JSON body. */ }
-      resolve({ status: request.status, range: request.getResponseHeader('Range'), body: parsed })
-    })
-    request.send(body)
-  })
-}
-
-export function rawResumeOffset(range: string | null, total: number) {
-  if (!range) return 0
-  const match = /^bytes=0-(\d+)$/.exec(range)
-  const next = match ? Number(match[1]) + 1 : NaN
-  if (!Number.isSafeInteger(next) || next < 1 || next > total) {
-    throw new TransferError('The upload position could not be verified. Try: refresh the page and retry.')
-  }
-  return next
-}
-
-/** Only the photo PUTs go to Drive. Session/confirmation requests to the app contain small JSON bodies. */
+/** File bytes go directly from the browser to private R2; app requests contain metadata only. */
 export async function uploadRawDirect(bookingId: string, file: File, onProgress: (loaded: number, total: number) => void) {
   if (!file.size || file.size > MAX_RAW_UPLOAD_BYTES) {
-    throw new Error(`${file.name} must be between 1 byte and 100 MB. Try: select an original within that limit, or upload a larger original in Drive and use Sync Drive.`)
+    throw new Error(`${file.name} must be between 1 byte and 100 MB.`)
   }
   const byBooking = sessions.get(file) || new Map<string, Session>()
   sessions.set(file, byBooking)
@@ -80,71 +48,35 @@ export async function uploadRawDirect(bookingId: string, file: File, onProgress:
     const checksum = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())))
       .map(value => value.toString(16).padStart(2, '0')).join('')
     const response = await startSession(bookingId, { fileName: file.name, fileSize: file.size, checksum })
-    if (typeof response.grant !== 'string' || typeof response.expiresAt !== 'number' || typeof response.mimeType !== 'string' ||
-      (typeof response.uploadUrl !== 'string' && typeof response.driveFileId !== 'string')) {
+    if (typeof response.grant !== 'string' || typeof response.expiresAt !== 'number' ||
+      typeof response.mimeType !== 'string' || typeof response.storageKey !== 'string' ||
+      (!response.completed && (!response.upload || typeof response.upload !== 'object'))) {
       throw new Error('The upload permission was incomplete. Try: refresh the page and retry.')
     }
-    session = response as Session
-    if (session.uploadUrl) validateRawSessionUrl(session.uploadUrl)
+    session = response as unknown as Session
     byBooking.set(bookingId, session)
   }
+
   try {
-    if (!session.driveFileId) {
-      const url = session.uploadUrl!
-      let offset = 0
-      let queryPosition = Boolean(session.started)
-      let failures = 0
-      let stalls = 0
-      while (!session.driveFileId) {
-        let response: ChunkResponse
-        try {
-          if (queryPosition) {
-            response = await put(url, null, `bytes */${file.size}`, session.mimeType, () => {})
-          } else {
-            session.started = true
-            const end = Math.min(offset + CHUNK_BYTES, file.size)
-            if (end <= offset) throw new TransferError('Drive has not confirmed the finished photo. Try: retry the failed file.')
-            response = await put(url, file.slice(offset, end), `bytes ${offset}-${end - 1}/${file.size}`, session.mimeType,
-              loaded => onProgress(Math.min(file.size, offset + loaded), file.size))
-          }
-        } catch (error) {
-          if (!(error instanceof TransferError) || error.status || ++failures > 3) throw error
-          queryPosition = true
-          await new Promise(resolve => setTimeout(resolve, 500 * 2 ** failures))
-          continue
-        }
-        if (response.status === 200 || response.status === 201) {
-          if (typeof response.body.id !== 'string') throw new TransferError('Drive did not confirm a photo ID. Try: retry the failed file.')
-          session.driveFileId = response.body.id
-          break
-        }
-        if (response.status === 308) {
-          const next = rawResumeOffset(response.range, file.size)
-          if (next <= offset) {
-            if (++stalls > 3) throw new TransferError('Drive is not accepting more data. Try: retry the failed file.')
-          } else stalls = 0
-          offset = next; queryPosition = next === file.size; failures = 0
-          onProgress(offset, file.size)
-          continue
-        }
-        if ((response.status >= 500 || response.status === 429) && ++failures <= 3) {
-          queryPosition = true
-          await new Promise(resolve => setTimeout(resolve, 500 * 2 ** failures))
-          continue
-        }
-        throw new TransferError(response.status === 404 || response.status === 410
-          ? 'The Drive upload session expired. Try: retry the failed file to start a fresh session.'
-          : 'Google Drive could not accept the upload. Try: check available Drive storage and the studio Drive connection, then retry.', response.status)
-      }
-    }
+    const completion = session.completed || !session.upload
+      ? {}
+      : await uploadWithPresignedPlan(file, session.upload, onProgress)
+    // Once R2 has accepted every byte, a transient app confirmation failure must
+    // retry metadata finalization only. Re-uploading a 50-100 MB original wastes
+    // bandwidth and can create unnecessary multipart work for the client.
+    session.completed = true
+    session.upload = undefined
     onProgress(file.size, file.size)
-    const result = await api(bookingId, 'complete-file', { grant: session.grant, driveFileId: session.driveFileId })
+    const result = await api(bookingId, 'complete-file', {
+      grant: session.grant,
+      storageKey: session.storageKey,
+      ...completion,
+    })
     if (result.success !== true) throw new Error('The portal has not confirmed this photo. Try: retry the failed file.')
     byBooking.delete(bookingId)
     return result
   } catch (error) {
     if (error instanceof TransferError && [401, 403, 404, 410].includes(error.status)) byBooking.delete(bookingId)
-    // Otherwise retain the same session/file ID in memory for Retry Failed, never in browser storage.
     throw error
   }
 }

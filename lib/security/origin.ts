@@ -55,12 +55,3 @@ export function isAllowedRequestOrigin(request: Request) {
 
   return process.env.NODE_ENV !== 'production' && !origin
 }
-
-/** Browser upload sessions must be initialized for the exact approved caller, never a payload-supplied origin. */
-export function validateDriveUploadOrigin(value: string) {
-  const origin = normalizedOrigin(value)
-  if (!origin || origin !== value || !(configuredOrigins().has(origin) || isLocalDevelopmentOrigin(origin))) {
-    throw new Error('The upload website could not be verified. Try: reload the official admin or editor page and retry.')
-  }
-  return origin
-}

@@ -56,8 +56,8 @@ function adminSubdomainAlias(request: NextRequest) {
 function maybeEnforceAdminSubdomain(request: NextRequest) {
   if (process.env.ADMIN_ENFORCE_SUBDOMAIN !== 'true') return null
   if (isAdminHost(request.headers.get('host'))) return null
-  // The new console reuses the existing host-local sign-in and MFA pages.
-  if (isNewAdminHost(request.headers.get('host')) && ['/admin', '/admin/mfa'].includes(request.nextUrl.pathname)) return null
+  // The new console reuses the existing host-local sign-in page.
+  if (isNewAdminHost(request.headers.get('host')) && request.nextUrl.pathname === '/admin') return null
   if (!request.nextUrl.pathname.startsWith('/admin')) return null
 
   const url = request.nextUrl.clone()
@@ -80,6 +80,7 @@ function isEditorHostPassThrough(pathname: string) {
   return (
     pathname.startsWith('/editor') ||
     pathname.startsWith('/api/editor-workflow') ||
+    pathname.startsWith('/api/editor-files') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next/') ||
     isStaticAsset(pathname)
@@ -195,6 +196,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/api/sales') ||
     pathname.startsWith('/api/provisioning') ||
     pathname.startsWith('/api/editor-workflow') ||
+    pathname.startsWith('/api/editor-files') ||
     pathname.startsWith('/api/integrations') ||
     pathname.startsWith('/api/sync')
   const isAuthCallback = pathname === '/auth/callback'
@@ -227,11 +229,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
   const admin = isAdminUser(user)
-  const assurance = admin
-    ? (await supabase.auth.mfa.getAuthenticatorAssuranceLevel()).data
-    : null
-  const hasAdminMfa = assurance?.currentLevel === 'aal2'
-  const isAdminMfa = pathname === '/admin/mfa'
   const isPublicBookingSubmission = pathname === '/api/bookings' && request.method === 'POST' && !user
 
   if (isPublicBookingSubmission) {
@@ -248,20 +245,6 @@ export async function updateSession(request: NextRequest) {
     return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }
 
-  if (isAdminRoute && !isAdminLogin && !isAdminMfa && admin && !hasAdminMfa) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin/mfa'
-    url.search = ''
-    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
-  }
-
-  if (isAdminMfa && admin && hasAdminMfa) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin/dashboard'
-    url.search = ''
-    return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
-  }
-
   if (isFilteringRoute && !admin) {
     const url = request.nextUrl.clone()
     url.pathname = '/admin'
@@ -271,7 +254,7 @@ export async function updateSession(request: NextRequest) {
 
   if (isAdminLogin && admin) {
     const url = request.nextUrl.clone()
-    url.pathname = hasAdminMfa ? '/admin/dashboard' : '/admin/mfa'
+    url.pathname = '/admin/dashboard'
     url.search = ''
     return copyResponseCookies(supabaseResponse, NextResponse.redirect(url))
   }

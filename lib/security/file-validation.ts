@@ -122,8 +122,8 @@ const EDITED_PHOTO_MIME: Record<string, ReadonlySet<string>> = {
 }
 
 /**
- * Resumable Drive uploads bypass the application body, so validate the metadata
- * before issuing an upload URL and then verify size/hash after Drive accepts it.
+ * Direct object uploads bypass the application body, so validate the metadata
+ * before issuing an upload URL and then verify size/hash after storage accepts it.
  */
 export function validateEditedPhotoMetadata(fileName: string, mimeType: string) {
   const extension = fileExtension(fileName)

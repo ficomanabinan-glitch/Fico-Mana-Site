@@ -11,30 +11,19 @@ import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-li
 /** API authorization is server-side RBAC, not merely "has a Supabase session". */
 export async function requireStaffAuth(
   request?: Request,
-  options: { requireMfa?: boolean } = {},
 ) {
   const originError = request ? rejectUntrustedMutation(request) : null
-  if (originError) return { user: null, assurance: null, error: originError }
+  if (originError) return { user: null, error: originError }
 
-  const { user, assurance } = await getAdminAuthContext()
+  const { user } = await getAdminAuthContext()
   if (!user) {
-    return { user: null, assurance, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  }
-  if (options.requireMfa !== false && assurance?.currentLevel !== 'aal2') {
-    return {
-      user,
-      assurance,
-      error: NextResponse.json(
-        { error: 'Multi-factor verification is required.', code: 'MFA_REQUIRED', mfaUrl: '/admin/mfa' },
-        { status: 428, headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
-      ),
-    }
+    return { user: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
   if (request && !['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())) {
     const limitError = await enforceApiRateLimit(request, API_RATE_LIMITS.adminMutation, [user.id])
-    if (limitError) return { user, assurance, error: limitError }
+    if (limitError) return { user, error: limitError }
   }
-  return { user, assurance, error: null }
+  return { user, error: null }
 }
 
 /** Editor-portal authorization uses workspace membership, not editable client metadata. */
@@ -43,7 +32,7 @@ export async function requireWorkflowAuth(capability: WorkflowCapability = 'view
   if (originError) {
     return { user: null, access: null, error: originError }
   }
-  const { user, assurance } = await getStaffAuthContext()
+  const { user } = await getStaffAuthContext()
   if (!user) {
     return {
       user: null,
@@ -57,15 +46,6 @@ export async function requireWorkflowAuth(capability: WorkflowCapability = 'view
       user,
       access,
       error: NextResponse.json({ error: 'This staff role cannot perform that action.' }, { status: 403 }),
-    }
-  }
-  if (canUseWorkflow(access, 'admin') && assurance?.currentLevel !== 'aal2') {
-    return {
-      user, access,
-      error: NextResponse.json(
-        { error: 'Multi-factor verification is required.', code: 'MFA_REQUIRED', mfaUrl: '/admin/mfa' },
-        { status: 428, headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
-      ),
     }
   }
   return { user, access, error: null }

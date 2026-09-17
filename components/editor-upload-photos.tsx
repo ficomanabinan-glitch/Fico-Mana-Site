@@ -5,7 +5,6 @@ import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cache
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
-  ExternalLink,
   FileCheck2,
   FolderOpen,
   FolderUp,
@@ -33,7 +32,7 @@ type UploadReportClient = {
   uploadedFiles: number
   lastError: string | null
   updatedAt: string
-  editedFolderUrl: string
+  storageReady: boolean
 }
 
 type UploadReport = {
@@ -192,7 +191,7 @@ export default function EditorUploadPhotos({
     if (failed > 0) {
       toast.warning('Upload finished with failures', `${completed} client${completed === 1 ? '' : 's'} delivered · ${failed} failed.`)
     } else {
-      toast.success('Upload complete', `${completed} client${completed === 1 ? '' : 's'} delivered to Google Drive.`)
+      toast.success('Upload complete', `${completed} client${completed === 1 ? '' : 's'} delivered to secure storage.`)
     }
   }
 
@@ -221,9 +220,9 @@ export default function EditorUploadPhotos({
 
       <div className="border-b border-white/[0.08] pb-5">
         <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Upload Photos</p>
-        <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Return edited batches to Google Drive</h1>
+        <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Return edited batches to clients</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/40">
-          Drop the unzipped batch folder to upload each client’s EDITED photos to Google Drive.
+          Drop the unzipped batch folder to upload each client’s EDITED photos to private storage.
         </p>
       </div>
 
@@ -293,7 +292,7 @@ export default function EditorUploadPhotos({
                 className={`${adminBtnPrimary} inline-flex items-center gap-2 px-5 py-2.5 disabled:opacity-40`}
               >
                 <UploadCloud className="size-4" />
-                {uploading ? 'Uploading…' : 'Upload to Google Drive'}
+                {uploading ? 'Uploading…' : 'Upload edited photos'}
               </button>
             </div>
           </div>
@@ -412,13 +411,9 @@ export default function EditorUploadPhotos({
                         {client.lastError ? <p className="mt-1 text-caption text-red-300/70">{client.lastError}</p> : null}
                       </div>
                       <span className="text-caption text-white/40">{client.uploadedFiles} / {client.expectedFiles} photos</span>
-                      <div className="flex flex-wrap gap-2">
-                        {client.editedFolderUrl ? (
-                          <a href={client.editedFolderUrl} target="_blank" rel="noopener noreferrer" className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}>
-                            Drive Folder <ExternalLink className="size-3" />
-                          </a>
-                        ) : null}
-                      </div>
+                      <span className={`text-caption font-semibold ${client.storageReady ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {client.storageReady ? 'Storage ready' : 'Storage needs attention'}
+                      </span>
                     </div>
                   ))}
                 </div>

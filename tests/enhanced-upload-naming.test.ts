@@ -27,7 +27,7 @@ test('safe enhanced names retain Unicode, normalize spacing and reserve room for
   assert.throws(() => enhancedUploadName('Client', 'photo', 'EDITED/photo', []), /extension/)
 })
 
-test('server reserves names under the existing booking lock and uses them before creating the Drive session', () => {
+test('server reserves names under the existing booking lock before creating the private R2 upload plan', () => {
   const source = readFileSync('lib/editor-workflow.ts', 'utf8')
   const reservation = source.slice(source.indexOf('async function reserveEnhancedUpload'), source.indexOf('export async function createDeliverableUploadSession'))
   assert.match(reservation, /download_lock_expires_at.is.null,download_lock_expires_at.lte/)
@@ -35,6 +35,7 @@ test('server reserves names under the existing booking lock and uses them before
   assert.match(reservation, /file_name: fileName/)
   assert.match(reservation, /finally[\s\S]*eq\('download_lock_expires_at', lockUntil\)/)
   const session = source.slice(source.indexOf('export async function createDeliverableUploadSession'), source.indexOf('export async function completeDeliverableUpload'))
-  assert.match(session, /reserveEnhancedUpload[\s\S]*createDriveResumableUpload\([\s\S]*relativePath,\s*fileName,/)
+  assert.match(session, /reserveEnhancedUpload[\s\S]*createStorageKey\([\s\S]*createMultipartUpload\(|reserveEnhancedUpload[\s\S]*createStorageKey\([\s\S]*createUploadUrl\(/)
+  assert.match(session, /update\(\{ storage_key: storageKey, storage_provider: 'r2'/)
   assert.match(session, /if \(duplicate\)[\s\S]*duplicate: true/)
 })

@@ -9,8 +9,6 @@ import { isAllowedRequestOrigin } from '../lib/security/origin.ts'
 import { validateProductionSecurityEnvironment } from '../lib/security/environment.ts'
 import { validateReceiptImageContent, detectFileSignature } from '../lib/security/file-validation.ts'
 import { escapeEmailText, safeEmailUrl, renderTemplate } from '../lib/email-templates.ts'
-import * as packageWorkflow from '../lib/package-workflow.ts'
-import * as packageWorkflowServer from '../lib/package-workflow-server.ts'
 
 const json = { NextResponse: { json: Response.json } }
 const noStore = { privateNoStoreHeaders: () => ({ 'Cache-Control': 'private, no-store' }), rejectUntrustedMutation: () => null }
@@ -72,11 +70,11 @@ test('revoked/disabled/foreign workspace membership cannot be recreated from an 
   }
 })
 
-test('real workflow authorization rejects anonymous, role escalation and non-MFA admins', async () => {
+test('real workflow authorization rejects anonymous users and role escalation without requiring MFA', async () => {
   const roles = loadTs<typeof import('../lib/auth/workflow.ts')>('lib/auth/workflow.ts', { '@/lib/supabase/admin': {} })
   for (const [role, capability, level, expected] of [
     ['none', 'view', 'aal1', 401], ['onsite', 'edit', 'aal1', 403],
-    ['editor', 'admin', 'aal2', 403], ['admin', 'view', 'aal1', 428],
+    ['editor', 'admin', 'aal2', 403], ['admin', 'view', 'aal1', 200],
     ['owner', 'admin', 'aal2', 200], ['editor', 'edit', 'aal1', 200],
   ] as const) {
     const auth = loadTs<typeof import('../lib/auth-api.ts')>('lib/auth-api.ts', {
@@ -89,70 +87,6 @@ test('real workflow authorization rejects anonymous, role escalation and non-MFA
     const response = await auth.requireWorkflowAuth(capability)
     assert.equal(response.error?.status ?? 200, expected)
   }
-})
-
-function workflowFixture(options: { expired?: boolean; mismatchedPortal?: boolean } = {}) {
-  const db = database({
-    bookings: [{ id: 'booking-a', workspace_id: 'studio', customer_phone: '+63 900 000 0042' }],
-    client_portals: [{ id: 'portal-row', public_id: 'portal-a', booking_id: 'booking-a', workspace_id: 'studio', status: 'active', expires_at: options.expired ? '2000-01-01' : '2099-01-01', bookings: { workspace_id: options.mismatchedPortal ? 'other' : 'studio' }, workspaces: { slug: 'fico-mana', status: 'active' } }],
-    gallery_files: [
-      { id: 'own', booking_id: 'booking-a', workspace_id: 'studio', drive_file_id: 'drive-own' },
-      { id: 'foreign-client', booking_id: 'booking-b', workspace_id: 'studio', drive_file_id: 'drive-foreign' },
-      { id: 'foreign-workspace', booking_id: 'booking-a', workspace_id: 'other', drive_file_id: 'drive-other' },
-    ],
-    deliverable_files: [{ id: 'foreign-deliverable', booking_id: 'booking-b', workspace_id: 'studio' }],
-    photo_selections: [{ id: 'selection-a', booking_id: 'booking-a', workspace_id: 'studio', status: 'OPEN', included_limit: 1 }],
-    batch_upload_files: [{ id: 'upload-file', batch_upload_items: { upload_job_id: 'upload-job', editing_job_id: 'foreign-job', booking_id: 'booking-b' } }],
-    editing_jobs: [{ id: 'foreign-job', workspace_id: 'other', booking_id: 'booking-b' }],
-  })
-  const driveReads: string[] = []
-  const workflow = loadTs<typeof import('../lib/editor-workflow.ts')>('lib/editor-workflow.ts', {
-    '@/lib/raw-upload-generation': {}, '@/lib/onsite-drive-sync': {},
-    '@/lib/portal-selection-source': { PortalSelectionError: class extends Error {} },
-    '@/lib/google-drive': {
-      downloadDriveFile: async (id: string) => { driveReads.push(id); return Buffer.from('synthetic') },
-      getDriveFile: async (id: string) => { driveReads.push(id); throw new Error('unexpected Drive lookup') },
-    },
-    '@/lib/google-drive-scopes': {}, '@/lib/client-portal': {}, '@/lib/email': {},
-    '@/lib/print-manifest': {}, '@/lib/print-workflow': {},
-    '@/lib/drive-folder-mappings': {},
-    '@/lib/portal-expiry': { hasPortalExpired: (value: string) => Date.parse(value) < Date.now() },
-    '@/lib/booking-provisioning': {}, '@/lib/security/file-validation': {},
-    '@/lib/supabase/admin': { getSupabaseAdmin: () => db },
-    '@/lib/security/audit-metadata': { safeMetadata },
-    '@/lib/package-workflow': packageWorkflow,
-    '@/lib/package-workflow-server': packageWorkflowServer,
-  })
-  return { workflow, driveReads, db }
-}
-
-test('real portal file reader rejects cross-client/workspace files and expired or mismatched portals', async () => {
-  const { workflow, driveReads } = workflowFixture()
-  for (const fileId of ['foreign-client', 'foreign-workspace']) await assert.rejects(workflow.getPortalFile('portal-a', fileId, 'gallery'), /Photo not found/)
-  await assert.rejects(workflow.getPortalFile('portal-a', 'foreign-deliverable', 'deliverable'), /Photo not found/)
-  assert.equal(driveReads.length, 0)
-  const own = await workflow.getPortalFile('portal-a', 'own', 'gallery')
-  assert.equal(own.notModified, false)
-  assert.equal(own.data?.toString(), 'synthetic')
-  assert.deepEqual(driveReads, ['drive-own'])
-  await assert.rejects(workflowFixture({ expired: true }).workflow.getPortalFile('portal-a', 'own', 'gallery'), /expired/)
-  await assert.rejects(workflowFixture({ mismatchedPortal: true }).workflow.getPortalFile('portal-a', 'own', 'gallery'), /Portal not found/)
-})
-
-test('real selection and edited completion reject foreign resources before Drive access', async () => {
-  const { workflow, driveReads } = workflowFixture()
-  await assert.rejects(workflow.submitPhotoSelection('portal-a', {
-    pin: '0042',
-    fileIds: ['foreign-client'], includedFileIds: ['foreign-client'], acknowledgeNoRevision: true,
-    printAllocations: ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'].map(category => ({ category, fileId: 'foreign-client', quantity: category === 'WALLET_SIZE' ? 4 : 1 })) as never,
-  }), /do not belong/)
-  await assert.rejects(workflow.completeDeliverableUpload('studio', 'upload-job', 'upload-file', 'untrusted-drive-file', 'image/jpeg'), /outside this workspace/)
-  assert.equal(driveReads.length, 0)
-})
-
-test('Drive thumbnail allowlist rejects local, non-TLS, credentials, alternate ports and deceptive hosts', () => {
-  for (const url of ['http://lh3.googleusercontent.com/a', 'https://127.0.0.1/a', 'https://[::1]/a', 'https://169.254.169.254/a', 'https://lh3.googleusercontent.com.attacker.example/a', 'https://lh3.googleusercontent.com:444/a', 'https://user:pass@lh3.googleusercontent.com/a', 'file:///a']) assert.throws(() => urls.googleThumbnailUrl(url))
-  assert.equal(urls.googleThumbnailUrl('https://lh3.googleusercontent.com/a').hostname, 'lh3.googleusercontent.com')
 })
 
 test('bounded external reads reject oversized declared and streamed bodies', async () => {
@@ -193,18 +127,20 @@ test('email escaping preserves visible text and rejects executable links', () =>
 test('production security keys must be present and independent without exposing values', t => {
   const values = {
     NODE_ENV: 'production', NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'synthetic-public',
-    SUPABASE_SECRET_KEY: 'synthetic-service-key', PORTAL_SIGNING_SECRET: 'p'.repeat(43), GOOGLE_TOKEN_ENCRYPTION_KEY: 'g'.repeat(43),
-    SECURITY_HASH_SECRET: 'h'.repeat(43), GOOGLE_OAUTH_STATE_SECRET: 's'.repeat(43), GOOGLE_CLIENT_ID: 'synthetic-client',
-    GOOGLE_CLIENT_SECRET: 'synthetic-client-secret', GOOGLE_DRIVE_ALLOWED_EMAIL: 'sample@example.test', RESEND_API_KEY: 'synthetic-email-key',
+    SUPABASE_SECRET_KEY: 'synthetic-service-key', PORTAL_SIGNING_SECRET: 'p'.repeat(43),
+    SECURITY_HASH_SECRET: 'h'.repeat(43), CLOUDFLARE_ACCOUNT_ID: 'synthetic-account',
+    R2_ACCESS_KEY_ID: 'synthetic-access-key', R2_SECRET_ACCESS_KEY: 'r'.repeat(43),
+    R2_BUCKET_NAME: 'synthetic-private-bucket', R2_ENDPOINT: 'https://synthetic-account.r2.cloudflarestorage.com',
+    RESEND_API_KEY: 'synthetic-email-key',
   }
   const previous = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]))
   t.after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value } })
   Object.assign(process.env, values)
   assert.doesNotThrow(validateProductionSecurityEnvironment)
-  process.env.GOOGLE_TOKEN_ENCRYPTION_KEY = values.PORTAL_SIGNING_SECRET
+  process.env.R2_SECRET_ACCESS_KEY = values.PORTAL_SIGNING_SECRET
   assert.throws(validateProductionSecurityEnvironment, /independent/)
-  delete process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
-  assert.throws(validateProductionSecurityEnvironment, /GOOGLE_TOKEN_ENCRYPTION_KEY is missing/)
+  delete process.env.R2_SECRET_ACCESS_KEY
+  assert.throws(validateProductionSecurityEnvironment, /R2_SECRET_ACCESS_KEY is missing/)
 })
 
 test('distributed rate limiting returns 429 and retains the extra aggregate bucket', async () => {

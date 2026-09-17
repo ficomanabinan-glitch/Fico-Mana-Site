@@ -16,11 +16,11 @@ from information_schema.role_table_grants
 where table_schema = 'public'
   and table_name in (
     'workspaces', 'workspace_members', 'clients', 'bookings', 'notifications',
-    'payments', 'receipt_fingerprints', 'drive_folders', 'editing_batches',
+    'payments', 'receipt_fingerprints', 'editing_batches',
     'editing_jobs', 'gallery_files', 'photo_selections', 'photo_selection_items',
     'deliverable_files', 'batch_upload_jobs', 'batch_upload_items',
     'batch_upload_files', 'workflow_audit_logs', 'workflow_match_reviews',
-    'google_drive_settings', 'client_portals', 'client_portal_resources',
+    'storage_settings', 'storage_multipart_uploads', 'client_portals', 'client_portal_resources',
     'booking_provisioning', 'provisioning_audit', 'admin_login_events',
     'admin_login_rate_limits', 'api_rate_limits', 'security_audit_events',
     'sales_expenses', 'sales_settings', 'email_logs', 'packages',

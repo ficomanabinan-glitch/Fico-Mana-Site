@@ -15,7 +15,7 @@ import styles from './new-admin.module.css'
 
 const navigation = [
   { label: 'Workspace', items: [['dashboard', LayoutDashboard], ['bookings', CalendarDays], ['filtering', ListFilter], ['editor', PenTool], ['selections', Images]] },
-  { label: 'Business', items: [['payments', ReceiptText], ['drive', FolderOpen], ['reports', TrendingUp], ['settings', Settings]] },
+  { label: 'Business', items: [['payments', ReceiptText], ['storage', FolderOpen], ['reports', TrendingUp], ['settings', Settings]] },
 ] as const
 
 function Brand() { return <Link href="/newadmin" className={styles.brand}><span className={styles.brandMark}><Aperture size={24} aria-hidden="true" /></span><span><strong>FICO MANA</strong><small>Studio workspace</small></span></Link> }

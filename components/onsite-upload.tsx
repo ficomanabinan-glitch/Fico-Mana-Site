@@ -31,7 +31,7 @@ type Job = {
   bookingTime: string
   galleryCount: number
   lastUploadAt?: string | null
-  rawFolderDriveId?: string | null
+  storageReady?: boolean
   lastError?: string | null
   resetId?: string | null
   portalEmailStatus?: 'SENT' | 'FAILED' | null
@@ -130,10 +130,10 @@ export default function OnsiteUpload({
         credentials: 'include',
       })
       const body = await responseJson(response)
-      if (!response.ok) throw new Error(String(body.error || 'Could not sync the RAW folder.'))
-      const detail = `${Number(body.indexed || 0)} photos indexed · ${Number(body.removed || 0)} unavailable records removed.${body.recovered ? ' The missing or outdated folder link was repaired.' : ''}`
-      if (body.warning) toast.warning('Drive synced — review needed', String(body.warning))
-      else toast.success('RAW folder synchronized', detail)
+      if (!response.ok) throw new Error(String(body.error || 'Could not refresh the private gallery.'))
+      const detail = `${Number(body.indexed || 0)} photos indexed · ${Number(body.removed || 0)} unavailable records removed.${body.recovered ? ' The private gallery metadata was repaired.' : ''}`
+      if (body.warning) toast.warning('Gallery refreshed — review needed', String(body.warning))
+      else toast.success('Private gallery refreshed', detail)
       await load(true)
       notifyOnsitePhotosChanged()
     } catch (error) {
@@ -265,7 +265,7 @@ export default function OnsiteUpload({
             <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
               Onsite Upload
             </p>
-            <h1 className="mt-2 text-h2 font-semibold tracking-heading text-balance">Send every shoot to its assigned Drive folder</h1>
+            <h1 className="mt-2 text-h2 font-semibold tracking-heading text-balance">Upload each shoot to its private client gallery</h1>
             <p className="mt-2 max-w-2xl text-xs leading-relaxed text-white/40">
               Choose a date and client, then upload their shoot photos.
             </p>
@@ -320,17 +320,15 @@ export default function OnsiteUpload({
           {jobs.map((job) => {
             const state = progress[job.bookingId]
             const isBusy = busy === job.bookingId || uploading.current.has(job.bookingId) || state?.status === 'uploading'
-            const driveStatus = job.resetId ? 'Deletion pending' : job.rawFolderDriveId
+            const storageStatus = job.resetId ? 'Deletion pending' : job.storageReady
               ? 'Ready'
-              : job.lastError && /permission/i.test(job.lastError)
-                ? 'Permission Error'
-                : job.lastError
-                  ? 'Drive Error'
-                  : 'Missing Folder'
-            const driveTone =
-              driveStatus === 'Ready'
+              : job.lastError
+                ? 'Storage Error'
+                : 'Needs Setup'
+            const storageTone =
+              storageStatus === 'Ready'
                 ? 'text-emerald-300'
-                : driveStatus === 'Missing Folder'
+                : storageStatus === 'Needs Setup'
                   ? 'text-amber-300'
                   : 'text-red-300'
 
@@ -340,7 +338,7 @@ export default function OnsiteUpload({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-card-title font-semibold tracking-heading">{job.customerName}</h2>
-                      <span className={`text-caption font-semibold uppercase ${driveTone}`}>{driveStatus}</span>
+                      <span className={`text-caption font-semibold uppercase ${storageTone}`}>{storageStatus}</span>
                     </div>
                     <div className="mt-2 space-y-1 text-small text-white/40">
                       <p>{date} · {job.bookingTime}</p>
@@ -394,7 +392,7 @@ export default function OnsiteUpload({
                       className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 disabled:opacity-35`}
                     >
                       <FolderSync className="size-3.5" />
-                      Sync Drive
+                      Refresh Gallery
                     </button>
                     <button type="button" disabled={isBusy} onClick={() => { setDeleteJob(job); setDeleteError(''); setDeleteProgress('') }}
                       className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 text-red-300 hover:border-red-400/40 hover:bg-red-500/10`}>
@@ -535,7 +533,7 @@ export default function OnsiteUpload({
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-4 px-4 text-small leading-relaxed text-white/65">
-            <p>This clears this client’s indexed gallery, previews, and unfinished photo choices. Uploads in their RAW folder and system-generated selection copies go to Google Drive Trash.</p>
+            <p>This permanently clears this client’s indexed gallery, previews, and unfinished photo choices from private storage. This action cannot be undone.</p>
             <p>The booking, payments, folders, and edited deliverables are kept. Files moved outside these folders are not deleted. Submitted selections and clients already being edited cannot be cleared here.</p>
             <p>Keep this page open while clearing files. If interrupted, use Resume Delete Files. Clients cannot submit choices until deletion finishes.</p>
             {deleteProgress ? <p role="status" aria-live="polite" className="text-[#C4CEFF]">{deleteProgress}</p> : null}

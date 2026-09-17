@@ -6,7 +6,7 @@ import { adminBtnGhost, adminInput, adminLabel, adminModal, adminSelect } from '
 import type { CleanupCategory, CleanupOutcome, CleanupRange } from '@/lib/shoot-storage-cleanup'
 
 const categories: { id: CleanupCategory; label: string }[] = [
-  { id: 'RAW', label: 'RAW photos' }, { id: 'SELECTED', label: 'Selected photo copies' },
+  { id: 'RAW', label: 'RAW photos and previews' }, { id: 'SELECTED', label: 'Generated print copies' },
   { id: 'EDITED', label: 'Edited photos' }, { id: 'DELIVERABLES', label: 'Client deliverables' },
 ]
 const dangerButton = 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-3 text-xs font-semibold text-red-200 transition-colors hover:border-red-400/60 hover:bg-red-400/10 disabled:pointer-events-none disabled:opacity-40'
@@ -119,7 +119,7 @@ export default function ShootStorageCleanup() {
         results.push(report)
         for (const chunk of shoot.chunks) {
           if (stop.current) break
-          setProgress(`Moving ${targetLabel} to Trash: ${shoot.name}`)
+          setProgress(`Deleting ${targetLabel}: ${shoot.name}`)
           try {
             const body = await readResponse<{ results: CleanupOutcome[] }>(await fetch('/api/admin/shoot-storage', {
               method: 'POST', credentials: 'include', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
@@ -128,12 +128,12 @@ export default function ShootStorageCleanup() {
             report.done += body.results.filter(result => result.status !== 'failed').length
             report.failed += body.results.filter(result => result.status === 'failed').length
             if (body.results.some(result => result.status === 'failed')) {
-              report.message = `Some ${targetLabel} were not confirmed in Trash. Try: check Drive access and review again.`
+              report.message = `Some ${targetLabel} were not confirmed as deleted. Review the shoot again.`
               stop.current = true
             }
           } catch (error) {
             report.failed += folderMode ? 1 : chunk.files.length
-            report.message = error instanceof Error ? error.message : 'Result not confirmed. Try: check Drive Trash and review again.'
+            report.message = error instanceof Error ? error.message : 'Result not confirmed. Review the shoot again.'
             // An uncertain response is never blindly replayed or followed by more destructive requests.
             stop.current = true
           }
@@ -180,9 +180,9 @@ export default function ShootStorageCleanup() {
           </label>)}</div>
         </fieldset>}
         <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-relaxed text-amber-100/90">
-          {folderMode ? 'Selected client shoot folders and all their contents go to Google Drive Trash, not permanent deletion. This includes non-photo files, nested folders, and shortcut objects, but not the files those shortcuts point to. The main storage root, month/day folders, other clients, bookings, payments, receipts, photo selections, thumbnails, and activity records are kept.' : 'Files go to Google Drive Trash, not permanent deletion. Folder structure, bookings, payments, receipts, photo selections, thumbnails, and activity records are kept. Only files inside this system’s registered shoot folders are included; shortcuts and unrelated files are excluded.'}
-          <p className="mt-2">Affected client portals and their QR access will be disabled. Stored photo counts and selection history are retained. Restore the files from Drive Trash before reactivating a portal. Google Drive normally removes trashed files after 30 days; they still use storage space until then. Existing direct Drive sharing permissions are not changed.</p>
-          <p className="mt-2">Finish any uploads and avoid moving or changing shoot files while cleanup is running. {folderMode ? 'Folder contents are checked again before removal. Restore the entire folder from Trash before reactivating its portal.' : 'Only the files in this review will be moved.'}</p>
+          {folderMode ? 'This permanently deletes every private object in each selected client’s shoot namespace. Other clients, bookings, payments, receipts, selection history, and activity records are kept.' : 'This permanently deletes only the reviewed private objects. Bookings, payments, receipts, selection history, and activity records are kept.'}
+          <p className="mt-2">Affected client portals and QR access will be disabled. Cloudflare R2 deletion is not a recycle-bin action, so restore is possible only from a separate backup.</p>
+          <p className="mt-2">Finish all uploads and avoid changing shoot files while cleanup is running. Every target is checked again immediately before deletion.</p>
         </div>
         <button type="button" className={`${adminBtnGhost} cursor-pointer px-4 py-3 disabled:pointer-events-none disabled:opacity-40`} disabled={!!busy || (!folderMode && !chosen.length)} onClick={() => void review()}>{busy === 'review' ? `Reviewing ${targetLabel}…` : folderMode ? 'Review folders' : 'Review files'}</button>
         {progress && <p role="status" className="break-words text-xs text-white/60">{progress}</p>}
@@ -212,14 +212,14 @@ export default function ShootStorageCleanup() {
             </div>
           })}</div>
           {!finished && !!targetCount && <>
-            <label className="flex cursor-pointer items-start gap-3 text-xs leading-relaxed"><input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-red-400" checked={acknowledged} disabled={!!busy} onChange={event => setAcknowledged(event.target.checked)} />{folderMode ? 'I understand that each selected shoot folder and everything inside it will move to Trash, including empty folders, and affected client portals will be disabled. Booking and payment records are kept.' : 'I understand that selected files will move to Trash and the affected client portals will be disabled. Records are retained, and files must be restored before those portals are reactivated.'}</label>
+            <label className="flex cursor-pointer items-start gap-3 text-xs leading-relaxed"><input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-red-400" checked={acknowledged} disabled={!!busy} onChange={event => setAcknowledged(event.target.checked)} />{folderMode ? 'I understand that every object in each selected shoot namespace will be permanently deleted and affected client portals will be disabled. Booking and payment records are kept.' : 'I understand that the selected private files will be permanently deleted and affected client portals will be disabled. Records are retained.'}</label>
             <label htmlFor="cleanup-confirmation" className="block text-xs text-white/60">Type <strong>{confirmationText}</strong> to confirm</label>
             <input id="cleanup-confirmation" className={adminInput} autoComplete="off" spellCheck={false} value={confirmation} disabled={!!busy} onChange={event => setConfirmation(event.target.value)} />
-            <button type="button" className={`${dangerButton} w-full`} disabled={!!busy || !acknowledged || confirmation !== confirmationText} onClick={() => void clearFiles()}><Trash2 className="size-4" />Move {targetCount} {targetLabel} to Trash</button>
+            <button type="button" className={`${dangerButton} w-full`} disabled={!!busy || !acknowledged || confirmation !== confirmationText} onClick={() => void clearFiles()}><Trash2 className="size-4" />Permanently delete {targetCount} {targetLabel}</button>
           </>}
         </section>}
         {(busy === 'delete' || finished) && <div className="space-y-2"><progress aria-label="Storage cleanup progress" className="h-2 w-full accent-red-400" max={Math.max(1, targetCount)} value={processed} /><p className="text-xs text-white/50">{processed} of {targetCount} {targetLabel} processed. Keep this page open.</p></div>}
-        {reports.length > 0 && <section aria-label="Cleanup report" className="space-y-2"><h3 className="text-sm font-semibold">Cleanup report</h3>{reports.map(report => <div key={report.bookingId} className="rounded-lg border border-white/10 p-3 text-xs"><p>{report.name}: {report.done} confirmed in Trash · {report.failed} failed or unconfirmed</p>{report.message && <p className="mt-2 text-amber-200">{report.message}</p>}</div>)}<p className="text-xs text-white/50">The activity log keeps a record of each attempted cleanup. Review again to check remaining files; already-trashed files are excluded.</p></section>}
+        {reports.length > 0 && <section aria-label="Cleanup report" className="space-y-2"><h3 className="text-sm font-semibold">Cleanup report</h3>{reports.map(report => <div key={report.bookingId} className="rounded-lg border border-white/10 p-3 text-xs"><p>{report.name}: {report.done} confirmed deleted · {report.failed} failed or unconfirmed</p>{report.message && <p className="mt-2 text-amber-200">{report.message}</p>}</div>)}<p className="text-xs text-white/50">The activity log keeps a record of every cleanup attempt. Review again to check any remaining files.</p></section>}
         {busy && <button type="button" className={`${adminBtnGhost} cursor-pointer px-4 py-3`} onClick={() => { stop.current = true; setProgress('Stopping after the current request…') }}>Stop after current request</button>}
       </div>
     </dialog>

@@ -35,7 +35,7 @@ export class PortalPreviewCache {
   }
   setBackgroundEnabled(enabled: boolean) { this.backgroundEnabled = enabled; this.pump() }
   load(source: string, urgent = false): Promise<string | null> {
-    // Only managed gallery previews, never Drive originals or full-resolution deliverables.
+    // Only managed gallery previews, never originals or full-resolution deliverables.
     if (!/^\/api\/editor-workflow\/portal\/[^/?]+\/file\/[^/?]+\?kind=gallery$/.test(source)) return Promise.resolve(null)
     const cached = this.peek(source)
     if (cached) { this.entries.get(source)!.touched = Date.now(); return Promise.resolve(cached) }

@@ -42,10 +42,8 @@ export async function getStaffAuthContext() {
     data: { user },
     error,
   } = await supabase.auth.getUser()
-  if (error || !user) return { supabase, user: null, assurance: null }
-
-  const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-  return { supabase, user, assurance }
+  if (error || !user) return { supabase, user: null }
+  return { supabase, user }
 }
 
 /** Returns a server-validated administrator, never trusting user_metadata. */
@@ -56,7 +54,7 @@ export async function getAdminUser() {
   return access && canUseWorkflow(access, 'admin') ? user : null
 }
 
-/** Server-validated admin plus the current Supabase MFA assurance level. */
+/** Server-validated administrator and workspace membership. */
 export async function getAdminAuthContext() {
   const context = await getStaffAuthContext()
   const access = context.user && isAdminUser(context.user) ? await getWorkflowAccess(context.user) : null

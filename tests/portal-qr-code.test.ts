@@ -29,8 +29,8 @@ test('client portal QR uses the existing signed portal URL without an external Q
   assert.doesNotMatch(qrCode, /api\.qrserver|chart\.googleapis|quickchart/i)
 
   assert.match(provisioningPage, /showPortalQr/)
-  assert.match(provisioningPage, /This QR expired with the Client Portal link/)
-  assert.match(provisioningPage, /portalUrl:await getPortalUrl\(item\.bookingId\)/)
+  assert.match(provisioningPage, /Portal QR expired/)
+  assert.match(provisioningPage, /portalUrl:\s*await getPortalUrl\(item\.bookingId\)/)
   assert.match(provisioningPage, /<PortalQrDialog portal=\{qrPortal\}/)
   assert.match(provisioningPage, /aria-label="Close client portal QR"/)
 })

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { copyEnhancedPrint, findOrCreateFolder, getDriveFile, hashDriveFileSha256, upsertDriveFile } from '@/lib/google-drive'
 import { buildPrintManifest, enhancedPrintSourceName, matchEnhancedPrintSource, printOutputName } from '@/lib/print-manifest'
-import type { EnhancedPrintSource, PrintManifest } from '@/lib/print-manifest'
+import type { EnhancedPrintSource } from '@/lib/print-manifest'
 import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
+import { copyObject, getObjectMetadata, hashObjectSha256 } from '@/lib/storage/storage-service'
+import { createStorageKey, parseStorageKey } from '@/lib/storage/storage-keys'
 
 export async function loadBookingPrintManifest(admin: SupabaseClient, workspaceId: string, bookingId: string) {
   const { data: selection, error } = await admin.from('photo_selections').select('id,status')
@@ -23,20 +24,6 @@ export async function loadBookingPrintManifest(admin: SupabaseClient, workspaceI
   }) }
 }
 
-export async function savePrintManifest(selectedFolderId: string, manifest: PrintManifest) {
-  const data = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8')
-  return upsertDriveFile({
-    destinationFolderId: selectedFolderId,
-    bookingId: manifest.booking_id,
-    relativePath: 'SELECTED/manifest.json',
-    fileName: 'manifest.json',
-    mimeType: 'application/json',
-    checksum: createHash('sha256').update(data).digest('hex'),
-    purpose: 'print-manifest',
-    data,
-  })
-}
-
 /** Run after every file has completed verification, but before a client is marked delivered. */
 export async function fulfillBookingPrints(input: {
   admin: SupabaseClient
@@ -44,62 +31,88 @@ export async function fulfillBookingPrints(input: {
   bookingId: string
   editingJobId: string
   uploadItemId: string
-  selectedFolderId: string
-  editedFolderId: string
 }) {
   const { admin, workspaceId, bookingId } = input
   const { manifest, selectionStatus } = await loadBookingPrintManifest(admin, workspaceId, bookingId)
   if (selectionStatus !== 'SUBMITTED') {
     throw new Error('The client selection is not locked yet. Try: have the client submit their selections before finishing the enhanced upload.')
   }
-  if (!manifest.outputs.length) return manifest // Compatibility with older bookings without print choices.
+  if (!manifest.outputs.length) return manifest
+
   const [{ data: deliveries, error: deliveryError }, { data: uploads, error: uploadError }] = await Promise.all([
-    admin.from('deliverable_files').select('drive_file_id,file_name,checksum,relative_path')
-      .eq('workspace_id', workspaceId).eq('booking_id', bookingId).eq('editing_job_id', input.editingJobId),
-    admin.from('batch_upload_files').select('drive_file_id,checksum,relative_path')
+    admin.from('deliverable_files').select('storage_key,file_name,mime_type,file_size,checksum,relative_path')
+      .eq('workspace_id', workspaceId).eq('booking_id', bookingId).eq('editing_job_id', input.editingJobId)
+      .eq('storage_status', 'available'),
+    admin.from('batch_upload_files').select('storage_key,checksum,relative_path')
       .eq('upload_item_id', input.uploadItemId).in('status', ['UPLOADED', 'SKIPPED_DUPLICATE']),
   ])
   if (deliveryError || uploadError) throw new Error('The enhanced uploads could not be checked. Try: retry this client upload.')
-  // Ignore old or failed versions and every file that was not part of this verified upload run.
+
   const sources: EnhancedPrintSource[] = (deliveries || []).filter(file => (uploads || []).some(upload =>
-    upload.drive_file_id === file.drive_file_id && upload.checksum === file.checksum && upload.relative_path === file.relative_path,
+    upload.storage_key === file.storage_key && upload.checksum === file.checksum && upload.relative_path === file.relative_path,
   ))
   const plan = manifest.outputs.map(output => ({ output, source: matchEnhancedPrintSource(output, sources) }))
-  const verifiedSources = new Map<string, Awaited<ReturnType<typeof getDriveFile>>>()
-  // Check every source before creating any print: missing/ambiguous names cannot produce partial wrong sets.
+  const verifiedSources = new Map<string, Awaited<ReturnType<typeof getObjectMetadata>>>()
+
   for (const { source } of plan) {
-    if (verifiedSources.has(source.drive_file_id)) continue
-    const file = await getDriveFile(source.drive_file_id)
-    validateEditedPhotoMetadata(file.name, file.mimeType)
-    if (!file.parents?.includes(input.editedFolderId) || file.appProperties?.bookingId !== bookingId ||
-      file.appProperties?.checksum !== source.checksum || file.name !== source.file_name ||
-      !file.md5Checksum) {
-      throw new Error('An enhanced photo no longer matches the verified upload. Try: upload that enhanced photo again before making prints.')
+    if (verifiedSources.has(source.storage_key)) continue
+    const object = await getObjectMetadata(source.storage_key)
+    const delivery = (deliveries || []).find((file) => file.storage_key === source.storage_key)
+    if (!delivery) throw new Error('An enhanced photo is no longer available. Try: upload it again before making prints.')
+    validateEditedPhotoMetadata(String(delivery.file_name), String(delivery.mime_type))
+    const parsed = parseStorageKey(source.storage_key)
+    if (parsed.workspaceId !== workspaceId || parsed.bookingId !== bookingId || parsed.category !== 'enhanced' ||
+      object.contentLength !== Number(delivery.file_size) || String(delivery.checksum) !== source.checksum) {
+      throw new Error('An enhanced photo no longer matches the verified upload. Try: upload it again before making prints.')
     }
-    const verified = await hashDriveFileSha256(file.id, 500 * 1024 * 1024)
-    if (verified.checksum !== source.checksum || verified.bytes !== Number(file.size)) {
-      throw new Error('An enhanced photo changed after upload. Try: upload that enhanced photo again before making prints.')
+    const actual = object.checksum || (await hashObjectSha256(source.storage_key, 500 * 1024 * 1024)).sha256
+    if (actual !== source.checksum) {
+      throw new Error('An enhanced photo changed after upload. Try: upload it again before making prints.')
     }
-    verifiedSources.set(file.id, file)
+    verifiedSources.set(source.storage_key, object)
   }
-  const prints = await findOrCreateFolder(input.selectedFolderId, 'PRINTS')
-  // Publish pending instructions before attempting copies, so a interrupted run cannot appear ready.
-  await savePrintManifest(input.selectedFolderId, manifest)
+
   for (const { output, source } of plan) {
-    const copy = await copyEnhancedPrint({
-      source: verifiedSources.get(source.drive_file_id)!, destinationFolderId: prints.id,
-      bookingId, selectionId: manifest.selection_id, printKey: output.key,
-      checksum: source.checksum, fileName: printOutputName(output, enhancedPrintSourceName(source)),
+    const parsed = parseStorageKey(source.storage_key)
+    const sourceDelivery = (deliveries || []).find((file) => file.storage_key === source.storage_key)!
+    const outputName = printOutputName(output, enhancedPrintSourceName(source))
+    const objectId = createHash('sha256').update(`${manifest.selection_id}:${output.key}`).digest('hex').slice(0, 40)
+    const printKey = createStorageKey({
+      workspaceId,
+      bookingId,
+      shootDate: parsed.shootDate,
+      category: 'print',
+      objectId,
+      fileName: outputName,
+    })
+    await copyObject({
+      sourceKey: source.storage_key,
+      destinationKey: printKey,
+      contentType: String(sourceDelivery.mime_type || 'application/octet-stream'),
+      metadata: {
+        bookingid: bookingId,
+        selectionid: manifest.selection_id,
+        printkey: output.key,
+        sha256: source.checksum,
+        filename: outputName,
+      },
     })
     Object.assign(output, {
-      status: 'ready', enhanced_file_id: source.drive_file_id, enhanced_checksum: source.checksum,
-      output_file_name: copy.name, print_file_id: copy.id,
+      status: 'ready',
+      enhanced_storage_key: source.storage_key,
+      enhanced_checksum: source.checksum,
+      output_file_name: outputName,
+      print_storage_key: printKey,
     })
   }
-  await savePrintManifest(input.selectedFolderId, manifest)
-  // Existing column remains a representative copy; the manifest records every individual wallet copy.
+
   for (const output of manifest.outputs.filter(row => row.copy_number === 1)) {
-    const { error } = await admin.from('print_allocations').update({ drive_file_id: output.print_file_id })
+    const { error } = await admin.from('print_allocations').update({
+      storage_provider: 'r2',
+      print_storage_key: output.print_storage_key,
+      enhanced_storage_key: output.enhanced_storage_key,
+      storage_status: 'available',
+    })
       .eq('workspace_id', workspaceId).eq('booking_id', bookingId)
       .eq('selection_id', manifest.selection_id).eq('category', output.category)
     if (error) throw new Error('The print report could not be saved. Try: retry this client upload; existing verified copies will be reused.')

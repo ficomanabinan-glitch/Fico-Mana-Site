@@ -173,12 +173,14 @@ test('portal file and selection lookups are constrained to the portal booking', 
   assert.match(source, /One or more selected photos do not belong to this portal/)
 })
 
-test('edited Drive uploads are destination, size, and SHA-256 verified server-side', async () => {
+test('enhanced R2 uploads are reservation, ownership, size, metadata, and SHA-256 verified server-side', async () => {
   const source = await readFile('lib/editor-workflow.ts', 'utf8')
-  assert.match(source, /driveFile\.parents\?\.includes\(hierarchy\.edited\.id\)/)
-  assert.match(source, /driveBytes !== expectedBytes/)
-  assert.match(source, /hashDriveFileSha256\(driveFile\.id/)
-  assert.match(source, /verified\.checksum !== uploadFile\.checksum/)
+  assert.match(source, /completion\.storageKey !== uploadFile\.storage_key/)
+  assert.match(source, /assertStorageKeyOwnership\(completion\.storageKey, workspaceId, bookingId\)/)
+  assert.match(source, /object\.contentLength !== expectedBytes/)
+  assert.match(source, /object\.metadata\.bookingid !== bookingId/)
+  assert.match(source, /hashObjectSha256\(completion\.storageKey, 500 \* 1024 \* 1024\)/)
+  assert.match(source, /verified\.sha256 !== uploadFile\.checksum/)
   assert.match(source, /UPLOAD_CHECKSUM_FAILED/)
 })
 

@@ -1,96 +1,57 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { googleOAuthAppConfigured } from '@/lib/google-oauth'
-import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { secureErrorResponse } from '@/lib/security/error-response'
 import { graduationPackageIds } from '@/lib/package-workflow-server'
+import { isR2Configured } from '@/lib/storage/r2-client'
 
-// Internal project folders are intentionally separate from client-facing gallery links.
 export async function GET() {
   const { error: authError } = await requireStaffAuth()
   if (authError) return authError
-
   try {
     const admin = getSupabaseAdmin()
     if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
     const eligiblePackageIds = await graduationPackageIds(admin)
-
     const [{ data: bookings, error: bookingsError }, { data: states }, { data: portals }, { data: settings }] = await Promise.all([
-      admin
-        .from('bookings')
-        .select('id,customer_name,customer_email,booking_date,package_name,booking_status,payment_status,deposit_amount,price,drive_link,created_at')
+      admin.from('bookings')
+        .select('id,customer_name,customer_email,booking_date,package_name,booking_status,payment_status,deposit_amount,price,created_at')
         .in('package_id', eligiblePackageIds.length ? eligiblePackageIds : ['__no_graduation_packages__'])
         .order('booking_date', { ascending: true }),
       admin.from('booking_provisioning').select('*'),
       admin.from('client_portals').select('id,public_id,booking_id,status,expires_at,created_at,last_accessed_at'),
-      admin
-        .from('google_drive_settings')
-        .select('root_folder_id,root_folder_name,portal_expiry_days,account_email,refresh_token_encrypted,granted_scopes,connected_at,updated_at')
-        .eq('id', 1)
-        .maybeSingle(),
+      admin.from('storage_settings').select('portal_expiry_days,signed_url_ttl_seconds').eq('id', 1).maybeSingle(),
     ])
     if (bookingsError) throw new Error(bookingsError.message)
-
-    const stateMap = new Map((states || []).map((row) => [String(row.booking_id), row]))
-    const portalMap = new Map((portals || []).map((row) => [String(row.booking_id), row]))
-
-    const items = (bookings || []).map((booking) => {
+    const stateMap = new Map((states || []).map(row => [String(row.booking_id), row]))
+    const portalMap = new Map((portals || []).map(row => [String(row.booking_id), row]))
+    const items = (bookings || []).map(booking => {
       const state = stateMap.get(String(booking.id))
       const portal = portalMap.get(String(booking.id))
       const portalExpired = hasPortalExpired(portal?.expires_at)
       return {
-        bookingId: String(booking.id),
-        customerName: String(booking.customer_name),
-        customerEmail: String(booking.customer_email),
-        shootDate: String(booking.booking_date),
-        packageName: String(booking.package_name),
-        bookingStatus: String(booking.booking_status),
-        paymentStatus: String(booking.payment_status),
-        requiredDeposit: Number(booking.deposit_amount || 0),
-        price: Number(booking.price || 0),
-        clientGalleryLink: booking.drive_link || null,
-        provisioningStatus: state?.status || 'NOT_STARTED',
-        driveClientFolderId: state?.drive_client_folder_id || null,
-        driveClientFolderUrl: state?.drive_client_folder_url || null,
-        lastError: state?.last_error || null,
-        provisionedAt: state?.provisioned_at || null,
-        lastRetryAt: state?.last_retry_at || null,
-        portal: portal
-          ? {
-              id: portal.id,
-              publicId: portal.public_id,
-              status: portalExpired ? 'expired' : portal.status,
-              expiresAt: portal.expires_at,
-              createdAt: portal.created_at,
-              lastAccessedAt: portal.last_accessed_at,
-            }
-          : null,
+        bookingId: String(booking.id), customerName: String(booking.customer_name), customerEmail: String(booking.customer_email),
+        shootDate: String(booking.booking_date), packageName: String(booking.package_name),
+        bookingStatus: String(booking.booking_status), paymentStatus: String(booking.payment_status),
+        requiredDeposit: Number(booking.deposit_amount || 0), price: Number(booking.price || 0),
+        provisioningStatus: state?.status || 'NOT_STARTED', storageProvider: state?.storage_provider || null,
+        storageStatus: state?.storage_status || 'not_prepared', storagePrefix: state?.storage_prefix || null,
+        lastError: state?.last_error || null, provisionedAt: state?.provisioned_at || null, lastRetryAt: state?.last_retry_at || null,
+        portal: portal ? {
+          id: portal.id, publicId: portal.public_id, status: portalExpired ? 'expired' : portal.status,
+          expiresAt: portal.expires_at, createdAt: portal.created_at, lastAccessedAt: portal.last_accessed_at,
+        } : null,
       }
     })
-
-    const connected = Boolean(settings?.refresh_token_encrypted || process.env.GOOGLE_REFRESH_TOKEN?.trim())
-    const needsReconnect = Boolean(
-      settings?.refresh_token_encrypted && !hasRequiredGoogleDriveScopes(settings.granted_scopes),
-    )
-
     return NextResponse.json({
       items,
-      googleDrive: {
-        rootFolderId: settings?.root_folder_id || null,
-        rootFolderName: settings?.root_folder_name || 'FICOMANA SHOOTS',
+      storage: {
+        provider: 'Cloudflare R2', configured: isR2Configured(), privateBucket: true,
         portalExpiryDays: Number(settings?.portal_expiry_days || 30),
-        oauthAppConfigured: googleOAuthAppConfigured(),
-        connected,
-        needsReconnect,
-        accountEmail: settings?.account_email || (process.env.GOOGLE_REFRESH_TOKEN?.trim() ? 'Environment connection' : null),
-        connectedAt: settings?.connected_at || null,
+        signedUrlTtlSeconds: Number(settings?.signed_url_ttl_seconds || 600),
       },
     })
   } catch (error) {
-    return secureErrorResponse(error, 'Could not load provisioning overview.', {
-      context: 'GET /api/provisioning',
-    })
+    return secureErrorResponse(error, 'Could not load provisioning overview.', { context: 'GET /api/provisioning' })
   }
 }

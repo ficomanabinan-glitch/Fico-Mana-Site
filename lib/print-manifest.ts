@@ -13,7 +13,7 @@ export type SavedPrintAllocation = {
 }
 export type PrintGalleryFile = { id: string; file_name: string }
 export type EnhancedPrintSource = {
-  drive_file_id: string
+  storage_key: string
   file_name: string
   checksum: string
   relative_path?: string
@@ -32,10 +32,10 @@ export type PrintOutput = {
   source_file_name: string
   name_prefix: string
   status: 'awaiting_enhanced_upload' | 'ready'
-  enhanced_file_id: string | null
+  enhanced_storage_key: string | null
   enhanced_checksum: string | null
   output_file_name: string | null
-  print_file_id: string | null
+  print_storage_key: string | null
 }
 
 function filenameKey(value: string) {
@@ -85,10 +85,10 @@ export function buildPrintManifest(input: {
         source_file_name: file.file_name,
         name_prefix: isWallet ? `${rule.prefix} ${copyNumber}` : rule.prefix,
         status: 'awaiting_enhanced_upload',
-        enhanced_file_id: null,
+        enhanced_storage_key: null,
         enhanced_checksum: null,
         output_file_name: null,
-        print_file_id: null,
+        print_storage_key: null,
       })
     }
   }
@@ -112,7 +112,7 @@ export type PrintManifest = ReturnType<typeof buildPrintManifest>
 
 /** Never match by order, trailing digits, fuzzy names, or a different client's files. */
 export function matchEnhancedPrintSource(output: PrintOutput, files: EnhancedPrintSource[]) {
-  const candidates = [...new Map(files.map(file => [file.drive_file_id, file])).values()]
+  const candidates = [...new Map(files.map(file => [file.storage_key, file])).values()]
     .filter(file => /^[a-f0-9]{64}$/i.test(file.checksum))
   const exact = candidates.filter(file => filenameKey(enhancedPrintSourceName(file)) === filenameKey(output.source_file_name))
   const matches = exact.length ? exact : candidates.filter(file => stem(enhancedPrintSourceName(file)) === stem(output.source_file_name))

@@ -16,6 +16,7 @@ import {
 import {
   CloudUpload,
   FolderDown,
+  FolderOpen,
   FolderUp,
   LayoutDashboard,
   ListChecks,
@@ -155,6 +156,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
       { label: 'Client Selections', href: '/editor/filtering', icon: ListChecks, show: session.capabilities.edit },
       { label: 'Upload Photos', href: '/editor/upload', icon: FolderUp, show: session.capabilities.edit },
       { label: 'Onsite Upload', href: '/editor/onsite', icon: CloudUpload, show: session.capabilities.onsite },
+      { label: 'Files Management', href: '/editor/files', icon: FolderOpen, show: session.capabilities.edit },
     ]
     return [
       {

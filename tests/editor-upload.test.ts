@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  createUploadWork,
-  detectBatchFolders,
-  type PickedUploadFile,
-} from '../lib/editor-upload-client.ts'
+import { loadTs } from './helpers/load-ts.ts'
+
+type PickedUploadFile = { file: File; relativePath: string }
+const { createUploadWork, detectBatchFolders } = loadTs<typeof import('../lib/editor-upload-client.ts')>(
+  'lib/editor-upload-client.ts',
+  { '@/lib/storage/browser-upload': { uploadWithPresignedPlan: async () => undefined } },
+)
 
 function picked(relativePath: string, contents = 'photo'): PickedUploadFile {
   return {

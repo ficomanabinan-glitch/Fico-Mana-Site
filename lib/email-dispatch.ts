@@ -14,7 +14,6 @@ export type EmailAction =
   | 'booking_cancelled'
   | 'booking_rescheduled'
   | 'booking_reminder'
-  | 'gallery_link'
 
 export type EmailDispatchPayload = {
   action: EmailAction
@@ -23,7 +22,6 @@ export type EmailDispatchPayload = {
   reason?: string
   reasonId?: string
   rebookingFee?: number
-  driveLink?: string
 }
 
 export async function dispatchEmail(payload: EmailDispatchPayload): Promise<{ success: boolean; error?: string }> {

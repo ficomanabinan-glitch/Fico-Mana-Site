@@ -184,7 +184,25 @@ export async function POST(request: Request) {
     if (originError) return originError
     const parsed = bookingMutationSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid booking information.' }, { status: 400 })
+      const invalidFields = Array.from(
+        new Set(parsed.error.issues.map((issue) => String(issue.path[0] ?? 'booking'))),
+      )
+      console.warn('Booking validation rejected fields:', invalidFields)
+      const firstField = invalidFields[0]
+      const error =
+        firstField === 'customerFbLink'
+          ? 'Enter a valid Facebook profile link, such as https://facebook.com/your-profile.'
+          : firstField === 'customerEmail'
+            ? 'Enter a valid email address and try again.'
+            : firstField === 'customerPhone'
+              ? 'Check the phone number and try again.'
+              : firstField === 'receiptUrl'
+                ? 'The receipt uploaded, but it could not be linked to this reservation. Please submit again.'
+                : 'Some reservation details could not be verified. Please review the form and submit again.'
+      return NextResponse.json(
+        { error, code: 'INVALID_BOOKING_INFORMATION', field: firstField },
+        { status: 400 },
+      )
     }
     const incoming = parsed.data as Booking
 
@@ -239,13 +257,10 @@ export async function POST(request: Request) {
           ? {
               ...trustedIncoming,
               depositAmount: Number(trustedIncoming.depositAmount) || (requiresDeposit ? 500 : 0),
-              driveLink: undefined,
-              rawPhotoLink: undefined,
               rawPhotoStatus: undefined,
               rawPhotoNotes: undefined,
               rawPhotoSubmittedAt: undefined,
               rawPhotoApprovedAt: undefined,
-              editedPhotoLink: undefined,
               editedPhotoDeliveredAt: undefined,
               paymentHistory: Array.isArray(incoming.paymentHistory) ? incoming.paymentHistory : [],
             }
@@ -257,13 +272,10 @@ export async function POST(request: Request) {
                 rejectionReason: undefined,
                 rejectionReasonId: undefined,
                 staffNotes: undefined,
-                driveLink: undefined,
-                rawPhotoLink: undefined,
                 rawPhotoStatus: undefined,
                 rawPhotoNotes: undefined,
                 rawPhotoSubmittedAt: undefined,
                 rawPhotoApprovedAt: undefined,
-                editedPhotoLink: undefined,
                 editedPhotoDeliveredAt: undefined,
                 depositAmount: 500,
                 paymentHistory: [
@@ -284,13 +296,10 @@ export async function POST(request: Request) {
                 rejectionReason: undefined,
                 rejectionReasonId: undefined,
                 staffNotes: undefined,
-                driveLink: undefined,
-                rawPhotoLink: undefined,
                 rawPhotoStatus: undefined,
                 rawPhotoNotes: undefined,
                 rawPhotoSubmittedAt: undefined,
                 rawPhotoApprovedAt: undefined,
-                editedPhotoLink: undefined,
                 editedPhotoDeliveredAt: undefined,
                 receiptUrl: undefined,
                 transactionRef: undefined,

@@ -12,7 +12,6 @@ import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import {
   Check,
   X,
-  ExternalLink,
   AlertCircle,
   Search,
   Image as ImageIcon,
@@ -36,15 +35,16 @@ import {
 type FilteringTab = 'Pending Review' | 'Approved' | 'Rejected' | 'All'
 
 type RawRejectionReason = 'blurry' | 'already_edited' | 'invalid_link' | 'unmatching_booking' | 'other'
+type SelectionFile = { id: string; fileName: string; available: boolean; preference: string; extraEdit: boolean }
 
 const RAW_REJECTION_MESSAGES: Record<RawRejectionReason, string> = {
   blurry: 'One or more of your selected photos are blurry or out of focus. Please replace them with clear, sharp photos.',
   already_edited:
     'One or more of your selected photos appear to have been edited, cropped, or filtered. We require the original raw photo files for professional editing.',
   invalid_link:
-    'The Google Drive folder link provided is invalid, restricted, or empty. Please ensure the folder is shared with "Anyone with the link" and contains your 5 chosen photos.',
+    'The client gallery is unavailable or empty. Confirm that the RAW photos finished uploading to private storage, then refresh the queue.',
   unmatching_booking:
-    'The photos in the folder do not seem to match your booking details. Please verify your selection.',
+    'The selected photos do not seem to match your booking details. Please verify your selection.',
   other: 'Other (details provided below)',
 }
 
@@ -68,6 +68,8 @@ export default function AdminRawPhotoQueue({
   const [rejectionReason, setRejectionReason] = useState<RawRejectionReason>('blurry')
   const [customReason, setCustomReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [selectionFiles, setSelectionFiles] = useState<SelectionFile[]>([])
+  const [selectionFilesLoading, setSelectionFilesLoading] = useState(false)
   const [exiting, setExiting] = useState<{ id: string; type: 'approve' | 'reject' } | null>(null)
 
   /** Play the card exit animation before the queue refreshes (skipped on the All tab where cards stay visible). */
@@ -98,6 +100,26 @@ export default function AdminRawPhotoQueue({
   }, [fetchQueue])
 
   usePageBackgroundSync(() => fetchQueue(true))
+
+  const openSelectionDetails = async (booking: Booking) => {
+    setSelectedBooking(booking)
+    setSelectionFiles([])
+    setSelectionFilesLoading(true)
+    setShowDetailModal(true)
+    try {
+      const response = await fetch(`/api/editor-workflow/selections/${encodeURIComponent(booking.id)}/files`, {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      const body = (await response.json().catch(() => ({}))) as { files?: SelectionFile[]; error?: string }
+      if (!response.ok) throw new Error(body.error || 'Could not load the selected photos.')
+      setSelectionFiles(Array.isArray(body.files) ? body.files : [])
+    } catch (error) {
+      toast.error('Selection unavailable', error instanceof Error ? error.message : 'Try: refresh the queue.')
+    } finally {
+      setSelectionFilesLoading(false)
+    }
+  }
 
   const handleApprove = async (booking: Booking) => {
     if (!window.confirm(`Approve raw photo selection for ${booking.id}?`)) return
@@ -283,7 +305,7 @@ export default function AdminRawPhotoQueue({
       {embedded && (
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-white/50">
-            Review client 5-pick folders — approve for editing or reject with feedback.
+            Review client photo selections — approve for editing or reject with feedback.
           </p>
           <WorkspaceRefreshButton onRefresh={() => fetchQueue()} refreshing={refreshing} />
         </div>
@@ -359,7 +381,7 @@ export default function AdminRawPhotoQueue({
           </div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-white">No submissions found</h3>
           <p className="text-xs text-white/40 mt-1 max-w-md mx-auto">
-            Clients submit a Drive folder with their 5 chosen photos after the gallery link email is sent.
+            Submitted Client Portal selections will appear here for review.
           </p>
         </div>
       ) : (
@@ -428,14 +450,13 @@ export default function AdminRawPhotoQueue({
                 </div>
 
                 <div className="bg-white/[0.03] px-5 py-4 border-t border-white/10 space-y-3">
-                  <a
-                    href={booking.rawPhotoLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => void openSelectionDetails(booking)}
                     className="w-full rounded-control bg-[#0500D0]/10 hover:bg-[#0500D0]/20 border border-[#0500D0]/30 text-white text-xs font-semibold py-2.5 flex items-center justify-center gap-1.5 transition-colors uppercase tracking-wider"
                   >
-                    Open Photo Folder (5 Picks) <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                    Review Selected Photos <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
 
                   {status === 'Pending Review' && (
                     <div className="flex gap-2">
@@ -487,10 +508,7 @@ export default function AdminRawPhotoQueue({
                   {(status === 'Approved' || status === 'Rejected' || status === 'Reopened') && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedBooking(booking)
-                        setShowDetailModal(true)
-                      }}
+                      onClick={() => void openSelectionDetails(booking)}
                       className="w-full text-center text-white/50 hover:text-white text-caption uppercase tracking-wider py-1 font-semibold flex items-center justify-center gap-1 hover:underline"
                     >
                       View Full Details <ChevronRight className="w-3 h-3" />
@@ -505,10 +523,10 @@ export default function AdminRawPhotoQueue({
 
       {showDetailModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-6">
+          <div className="max-h-[90vh] w-full max-w-4xl space-y-6 overflow-y-auto rounded-card border border-white/10 bg-[#222222] p-6 shadow-2xl md:p-8">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-white text-lg">Raw Photo Details</h3>
+                <h3 className="font-bold text-white text-lg">Selected Photos</h3>
                 <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
@@ -534,17 +552,34 @@ export default function AdminRawPhotoQueue({
                   <p className="font-semibold text-primary mt-0.5">{selectedBooking.packageName}</p>
                 </div>
               </div>
-              <div>
-                <p className="text-white/40 font-medium mb-1.5">Submitted Link</p>
-                <a
-                  href={selectedBooking.rawPhotoLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 font-mono text-primary hover:underline break-all"
-                >
-                  {selectedBooking.rawPhotoLink} <ExternalLink className="w-3 h-3 shrink-0" />
-                </a>
-              </div>
+              {selectionFilesLoading ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5" aria-label="Loading selected photos">
+                  {Array.from({ length: 5 }, (_, index) => <div key={index} className="aspect-[4/5] animate-pulse rounded-control bg-white/[0.06]" />)}
+                </div>
+              ) : selectionFiles.length ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+                  {selectionFiles.map((file) => (
+                    <figure key={file.id} className="overflow-hidden rounded-control border border-white/10 bg-black/25">
+                      {file.available ? (
+                        <img
+                          src={`/api/editor-workflow/files/${encodeURIComponent(file.id)}?variant=thumbnail`}
+                          alt={file.fileName}
+                          className="aspect-[4/5] w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex aspect-[4/5] items-center justify-center p-3 text-center text-caption text-amber-200/70">Photo unavailable</div>
+                      )}
+                      <figcaption className="space-y-1 p-2">
+                        <p className="truncate text-caption font-medium text-white/75" title={file.fileName}>{file.fileName}</p>
+                        <p className="text-caption text-white/35">{file.extraEdit ? 'Extra edit' : 'Included'} · {file.preference}</p>
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-control border border-white/10 bg-black/20 p-4 text-caption text-white/45">No selected photos are available for this submission.</p>
+              )}
             </div>
 
             <div className="flex gap-3 border-t border-white/10 pt-4">
@@ -642,7 +677,7 @@ export default function AdminRawPhotoQueue({
               >
                 <option value="blurry">Blurry Photo / Out of Focus</option>
                 <option value="already_edited">Already Edited / Cropped / Filtered</option>
-                <option value="invalid_link">Invalid Drive Link / Access Restricted</option>
+                <option value="invalid_link">Gallery Unavailable / Photos Missing</option>
                 <option value="unmatching_booking">Does Not Match Booking Session Details</option>
                 <option value="other">Other (custom reason below)</option>
               </select>

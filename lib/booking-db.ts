@@ -79,13 +79,10 @@ export function mapDbBookingToModel(b: DbBookingRow): Booking {
     createdAt: String(b.created_at),
     receiptUrl,
     paymentHistory,
-    driveLink: b.drive_link ? String(b.drive_link) : undefined,
-    rawPhotoLink: b.raw_photo_link ? String(b.raw_photo_link) : undefined,
     rawPhotoStatus: b.raw_photo_status ? (b.raw_photo_status as Booking['rawPhotoStatus']) : undefined,
     rawPhotoNotes: b.raw_photo_notes ? String(b.raw_photo_notes) : undefined,
     rawPhotoSubmittedAt: b.raw_photo_submitted_at ? String(b.raw_photo_submitted_at) : undefined,
     rawPhotoApprovedAt: b.raw_photo_approved_at ? String(b.raw_photo_approved_at) : undefined,
-    editedPhotoLink: b.edited_photo_link ? String(b.edited_photo_link) : undefined,
     editedPhotoDeliveredAt: b.edited_photo_delivered_at
       ? String(b.edited_photo_delivered_at)
       : undefined,
@@ -132,7 +129,6 @@ export function mapModelBookingToDbCore(b: Booking): Record<string, unknown> {
     payment_status: b.paymentStatus,
     rejection_reason: b.rejectionReason ?? null,
     created_at: b.createdAt,
-    drive_link: b.driveLink ?? null,
   }
 }
 
@@ -175,23 +171,19 @@ export function mapModelBookingToDb(b: Booking): Record<string, unknown> {
           ? null
           : (b.receiptUrl ?? null),
     payment_history: b.paymentHistory ?? [],
-    drive_link: b.driveLink ?? null,
-    ...(b.rawPhotoLink ||
-    b.rawPhotoStatus ||
+    ...(b.rawPhotoStatus ||
     b.rawPhotoNotes ||
     b.rawPhotoSubmittedAt ||
     b.rawPhotoApprovedAt
       ? {
-          raw_photo_link: b.rawPhotoLink ?? null,
           raw_photo_status: b.rawPhotoStatus ?? null,
           raw_photo_notes: b.rawPhotoNotes ?? null,
           raw_photo_submitted_at: b.rawPhotoSubmittedAt ?? null,
           raw_photo_approved_at: b.rawPhotoApprovedAt ?? null,
         }
       : {}),
-    ...(b.editedPhotoLink || b.editedPhotoDeliveredAt
+    ...(b.editedPhotoDeliveredAt
       ? {
-          edited_photo_link: b.editedPhotoLink ?? null,
           edited_photo_delivered_at: b.editedPhotoDeliveredAt ?? null,
         }
       : {}),

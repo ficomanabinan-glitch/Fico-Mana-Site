@@ -30,7 +30,7 @@ type TodayJob = {
   packageName: string
   bookingTime: string
   galleryCount: number
-  rawFolderDriveId?: string | null
+  storageReady?: boolean
 }
 
 function dateKey(date = new Date()) {
@@ -217,8 +217,8 @@ export default function EditorDashboard() {
                 </div>
                 <div className="text-caption text-white/40 sm:text-right">
                   <p>{job.galleryCount} photo{job.galleryCount === 1 ? '' : 's'} uploaded</p>
-                  <p className={job.rawFolderDriveId ? 'mt-1 text-emerald-300' : 'mt-1 text-amber-300'}>
-                    {job.rawFolderDriveId ? 'Drive folder ready' : 'Drive folder needs setup'}
+                  <p className={job.storageReady ? 'mt-1 text-emerald-300' : 'mt-1 text-amber-300'}>
+                    {job.storageReady ? 'Private storage ready' : 'Private storage needs setup'}
                   </p>
                 </div>
                 {session?.capabilities.onsite ? (

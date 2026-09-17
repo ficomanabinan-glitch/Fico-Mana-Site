@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Notification } from '@/lib/data-store'
 
 export const EMAIL_STORAGE_SUB = {
@@ -38,6 +39,10 @@ export function getEmailStoragePeriod(now = new Date()): SubscriptionPeriod {
   }
 }
 export function emailStorageOpsBookingId(cycleKey: string): string { return `${EMAIL_STORAGE_SUB.bookingIdPrefix}-${cycleKey}` }
+export function opsNotificationId(cycleKey: string, kind: 'reminder' | 'paid'): string {
+  const hash = createHash('sha256').update(`fico-mana/email-storage/${cycleKey}/${kind}`).digest('hex')
+  return `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-8${hash.slice(17,20)}-${hash.slice(20,32)}`
+}
 export function buildEmailStorageReminderMessage(period: SubscriptionPeriod): string {
   const endLabel = period.periodEnd.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
   if (period.isOverdue || period.daysLeft < 0) return `${EMAIL_STORAGE_SUB.label} period ended on ${endLabel}. Renew the monthly storage plan so client gallery and system emails keep working.`
@@ -45,20 +50,22 @@ export function buildEmailStorageReminderMessage(period: SubscriptionPeriod): st
   if (period.daysLeft === 1) return `${EMAIL_STORAGE_SUB.label} renews tomorrow (${endLabel}). Confirm billing / payment before it ends.`
   return `${EMAIL_STORAGE_SUB.label} renews in ${period.daysLeft} days (${endLabel}). Availed ${EMAIL_STORAGE_SUB.startedOn} — renew before the period ends.`
 }
-export function isEmailStorageCyclePaid(notifications: Pick<Notification, 'bookingId' | 'type'>[], cycleKey: string): boolean {
+export function isEmailStorageCyclePaid(notifications: Pick<Notification, 'id' | 'bookingId' | 'type'>[], cycleKey: string): boolean {
   const bookingId = emailStorageOpsBookingId(cycleKey)
-  return notifications.some((n) => n.type === 'OPS_PAID' && n.bookingId === bookingId)
+  const paidId = opsNotificationId(cycleKey, 'paid')
+  return notifications.some((n) => n.type === 'OPS_PAID' && (n.id === paidId || n.bookingId === bookingId))
 }
 export function buildEmailStoragePaidMessage(period: SubscriptionPeriod): string {
   const endLabel = period.periodEnd.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
   return `${EMAIL_STORAGE_SUB.label} marked paid for period ending ${endLabel}.`
 }
-export function getActiveEmailStorageReminder(now = new Date(), notifications: Pick<Notification, 'bookingId' | 'type'>[] = []): Notification | null {
+export function getActiveEmailStorageReminder(now = new Date(), notifications: Pick<Notification, 'id' | 'bookingId' | 'type'>[] = []): Notification | null {
   const period = getEmailStoragePeriod(now)
   if (!period.shouldNotify || isEmailStorageCyclePaid(notifications, period.cycleKey)) return null
   return {
-    id: `pending-${emailStorageOpsBookingId(period.cycleKey)}`,
-    bookingId: emailStorageOpsBookingId(period.cycleKey),
+    id: opsNotificationId(period.cycleKey, 'reminder'),
+    // System notifications deliberately have no booking foreign key.
+    bookingId: '',
     type: 'OPS_REMINDER',
     message: buildEmailStorageReminderMessage(period),
     isRead: false,

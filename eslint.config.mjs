@@ -5,7 +5,17 @@ const config = [
   ...nextVitals,
   ...nextTypeScript,
   {
-    ignores: ['.next/**', 'node_modules/**', '.staging-data/**', 'public/**'],
+    ignores: [
+      '.next/**',
+      'node_modules/**',
+      '.staging-data/**',
+      '.audit/**',
+      '.agents/**',
+      '.codex/**',
+      '.pnpm-store/**',
+      'ficomana-proposal-newui/**',
+      'public/**',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       'prefer-const': 'off',

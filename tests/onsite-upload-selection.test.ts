@@ -29,7 +29,7 @@ test('onsite selection snapshots the live file list before clearing the input', 
   assert.deepEqual(onsite.snapshotOnsiteFiles(null, input), [], 'Cancelling does not start an upload')
 })
 
-test('onsite UI uses direct Drive upload and separates failed names from the solution', () => {
+test('onsite UI uses direct private-storage upload and separates failed names from the solution', () => {
   const source = readFileSync('components/onsite-upload.tsx', 'utf8')
   assert.match(source, /uploadRawDirect as uploadRawFile/)
   assert.doesNotMatch(source, /new FormData|form\.append\('file'/)

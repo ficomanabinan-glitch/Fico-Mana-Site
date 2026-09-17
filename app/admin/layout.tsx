@@ -96,8 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const scrollPositionsRef = useRef(new Map<string, number>())
 
   const isLoginPage = pathname === '/admin'
-  const isMfaPage = pathname === '/admin/mfa'
-  const isAuthPage = isLoginPage || isMfaPage
+  const isAuthPage = isLoginPage
 
   useEffect(() => {
     const client = createSupabaseBrowserClient()
@@ -134,7 +133,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [])
 
   const refreshConsoleData = useCallback(async () => {
-    if (!isLoggedIn || isMfaPage) return
+    if (!isLoggedIn) return
     try {
       const [notifs, bookings] = await Promise.all([getNotifications(), getBookings()])
       setNotifications(notifs)
@@ -144,14 +143,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       setPendingRawPhotoReviews(
         bookings.filter(
           (booking) =>
-            Boolean(booking.rawPhotoLink) &&
+            Boolean(booking.rawPhotoSubmittedAt) &&
             (booking.rawPhotoStatus || 'Pending Review') === 'Pending Review',
         ).length,
       )
     } catch (error) {
       console.error('Navigation refresh failed:', error)
     }
-  }, [isLoggedIn, isMfaPage])
+  }, [isLoggedIn])
 
   useEffect(() => {
     if (!isLoggedIn) return

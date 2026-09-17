@@ -19,19 +19,16 @@ export async function PATCH(
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (admin) {
-        const { data: notification, error: readError } = await admin.from('notifications').select('type').eq('id', id).maybeSingle()
-        if (readError) throw new Error('Notification unavailable')
-        if (notification?.type === SHOOT_REMINDER_NOTIFICATION_TYPE
-          && !canManageShootReminders(await getWorkflowAccess(user!))) {
-          return NextResponse.json({ error: 'Only a Fico Mana administrator can dismiss reminder alerts.' }, { status: 403 })
-        }
-        const { error } = await admin.from('notifications').update({ is_read: true }).eq('id', id)
-        if (!error) {
-          await markServerNotificationRead(id)
-          return NextResponse.json({ ok: true })
-        }
+      if (!admin) throw new Error('Notification storage unavailable')
+      const { data: notification, error: readError } = await admin.from('notifications').select('type').eq('id', id).maybeSingle()
+      if (readError) throw new Error('Notification unavailable')
+      if (notification?.type === SHOOT_REMINDER_NOTIFICATION_TYPE
+        && !canManageShootReminders(await getWorkflowAccess(user!))) {
+        return NextResponse.json({ error: 'Only a Fico Mana administrator can dismiss reminder alerts.' }, { status: 403 })
       }
+      const { error } = await admin.from('notifications').update({ is_read: true }).eq('id', id)
+      if (error) throw new Error('Notification unavailable')
+      return NextResponse.json({ ok: true })
     }
 
     await markServerNotificationRead(id)

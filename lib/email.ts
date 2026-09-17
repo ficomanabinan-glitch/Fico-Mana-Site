@@ -2,7 +2,7 @@ import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import { persistEmailLog } from './server-email-log'
 import { escapeEmailText, getServerEmailTemplate, renderTemplate, safeEmailUrl } from './email-templates'
 import { LATE_FEE_POLICY } from './booking-slots'
-import { resubmitBookingUrl, submitRawPhotoUrl } from './site-url'
+import { resubmitBookingUrl } from './site-url'
 import { isForgedRejection } from './rejection-reasons'
 import {
   getResendClient,
@@ -808,153 +808,6 @@ export async function sendBookingRescheduledEmail(booking: any, rebookingFee: nu
   return sendEmail({ bookingId: booking.id, to: booking.customerEmail, subject, html })
 }
 
-export async function sendGalleryLinkEmail(booking: any, driveLink: string) {
-  const submitUrl = submitRawPhotoUrl(booking.id)
-  const subject = `Your Raw Photos Are Ready — How to Submit Your 5 Enhanced Photos - Booking: ${booking.id}`
-  const html = brandedEmail(
-    'Your Raw Photos Are Ready',
-    `
-      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
-      <p>Your session raw photos are ready. Please follow the steps below carefully so your 5 chosen photos reach our filtering team.</p>
-
-      <div style="background-color: #EEF0FF; padding: 20px; border: 1px solid #D4D8F0; margin: 25px 0;">
-        <p style="font-size: 14px; font-weight: bold; margin: 0 0 10px; color: #0500D0;">Step 1 — Access Your Raw Photos</p>
-        <p style="font-size: 12px; color: #5A5A8A; margin: 0 0 14px; line-height: 1.6;">
-          Click the Google Drive link below to access all of your session&apos;s raw photos.
-        </p>
-        <p style="text-align: center; margin: 0 0 22px;">
-          <a href="${safeEmailUrl(driveLink)}" target="_blank" rel="noopener noreferrer" style="background-color: #0500D0; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block;">
-            Open Google Drive Gallery
-          </a>
-        </p>
-
-        <p style="font-size: 14px; font-weight: bold; margin: 0 0 10px; color: #0500D0;">Step 2 — Select Your 5 Enhanced Photos</p>
-        <p style="font-size: 12px; color: #5A5A8A; margin: 0 0 10px; line-height: 1.6;">
-          Inside the Google Drive folder, choose the <strong>5 photos</strong> you would like to have professionally enhanced.
-        </p>
-        <ul style="font-size: 12px; color: #5A5A8A; line-height: 1.7; margin: 0 0 18px; padding-left: 18px;">
-          <li>Drag your selected <strong>5 original raw photos</strong> into the folder named <strong>&quot;5 Enhanced Photos.&quot;</strong></li>
-          <li><strong>Do not download</strong> the photos — simply drag and drop them into the folder.</li>
-          <li>Please <strong>do not</strong> submit cropped, filtered, edited, or screenshot versions. Only the original raw photos will be accepted.</li>
-        </ul>
-
-        <p style="font-size: 14px; font-weight: bold; margin: 0 0 10px; color: #0500D0;">Step 3 — Complete the Printing Template</p>
-        <p style="font-size: 12px; color: #5A5A8A; margin: 0 0 8px; line-height: 1.6;">
-          Inside the <strong>5 Enhanced Photos</strong> folder:
-        </p>
-        <ol style="font-size: 12px; color: #5A5A8A; line-height: 1.7; margin: 0 0 18px; padding-left: 18px;">
-          <li>Fill out the <strong>Printing Template</strong> that we provided to you during your studio session by writing the filename of each selected photo in the designated spaces.</li>
-          <li>Take a clear photo of the completed template.</li>
-          <li>Upload a clear photo of the completed Printing Template inside the <strong>&quot;5 Enhanced Photos&quot;</strong> folder.</li>
-        </ol>
-
-        <p style="font-size: 14px; font-weight: bold; margin: 0 0 10px; color: #0500D0;">Step 4 — Submit Through Our Website</p>
-        <ol style="font-size: 12px; color: #5A5A8A; line-height: 1.7; margin: 0 0 16px; padding-left: 18px;">
-          <li>Open the submission page using the link below.</li>
-          <li>Enter your <strong>full name</strong> (the same name used during booking).</li>
-          <li>Paste the Google Drive link to your <strong>&quot;5 Enhanced Photos&quot;</strong> folder.</li>
-          <li>Click <strong>Submit for Filtering</strong> to complete your submission.</li>
-        </ol>
-        <p style="text-align: center; margin: 0;">
-          <a href="${submitUrl}" target="_blank" rel="noopener noreferrer" style="background-color: #111111; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block; border: 2px solid #0500D0;">
-            Submit for Filtering
-          </a>
-        </p>
-      </div>
-
-      <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; margin: 0 0 18px; font-size: 12px; color: #475569; line-height: 1.6;">
-        <strong style="color: #0F172A;">Important</strong><br/>
-        • Use original unedited files only<br/>
-        • Place exactly 5 raw photos in the &quot;5 Enhanced Photos&quot; folder<br/>
-        • Include a clear photo of your completed Printing Template<br/>
-        • Booking reference: <strong>${escapeEmailText(booking.id)}</strong>
-      </div>
-
-      <p style="font-size: 12px; color: #5A5A8A; line-height: 1.6;">
-        After you submit, our filtering team will review your picks. You will get another email when your selection is approved or if we need you to resubmit.
-      </p>
-      <p style="font-size: 12px; color: #5A5A8A;">Questions? Reply to this email or call +63 49 576 5176.</p>
-    `,
-  )
-
-  const results = []
-  if (!isPlaceholderCustomerEmail(booking.customerEmail)) {
-    results.push(await sendEmail({ bookingId: booking.id, to: booking.customerEmail, subject, html }))
-  }
-  results.push(
-    await sendEmail({
-      bookingId: booking.id,
-      to: 'supplier@ficomana.studio',
-      subject: `[Supplier Copy] Raw Gallery Ready - ${booking.id}`,
-      html,
-    }),
-  )
-
-  const failed = results.find((r) => !r.success)
-  return failed || { success: true }
-}
-
-/** Client confirmation + staff notice after public name+Drive submit lands in filtering. */
-export async function sendRawPhotoSubmittedEmails(booking: any) {
-  const clientSubject = `We Received Your Photo Selection - Booking: ${booking.id}`
-  const clientHtml = brandedEmail(
-    'Selection Received',
-    `
-      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
-      <p>Thank you — your Google Drive folder with your 5 chosen photos is now in our <strong>filtering queue</strong>.</p>
-      <div style="background-color: #EEF0FF; padding: 15px; border-left: 4px solid #0500D0; margin: 20px 0; font-size: 13px;">
-        <strong>Submission details</strong><br/>
-        Booking: <strong>${escapeEmailText(booking.id)}</strong><br/>
-        Package: ${escapeEmailText(booking.packageName)}<br/>
-        Status: <strong>Pending Review</strong><br/>
-        Folder: <a href="${safeEmailUrl(booking.rawPhotoLink)}" target="_blank" style="color: #0500D0; word-break: break-all;">Open submitted folder</a>
-      </div>
-      <p style="font-size: 12px; color: #5A5A8A; line-height: 1.6;">
-        Our editors will check that the photos are original and not blurry. You will receive another email once your selection is approved, or if we need a resubmission.
-      </p>
-      <p style="font-size: 12px; color: #5A5A8A;">No further action is needed right now.</p>
-    `,
-  )
-
-  const staffSubject = `[Filtering] New selection submitted - ${booking.id}`
-  const staffHtml = brandedEmail(
-    'New Filtering Submission',
-    `
-      <p><strong>${escapeEmailText(booking.customerName)}</strong> submitted a 5-pick Drive folder.</p>
-      <div style="background-color: #EEF0FF; padding: 15px; border-left: 4px solid #0500D0; margin: 20px 0; font-size: 13px;">
-        Booking: <strong>${escapeEmailText(booking.id)}</strong><br/>
-        Package: ${escapeEmailText(booking.packageName)}<br/>
-        Shoot: ${escapeEmailText(booking.bookingDate)} · ${escapeEmailText(booking.bookingTime)}<br/>
-        Folder: <a href="${safeEmailUrl(booking.rawPhotoLink)}" target="_blank" style="color: #0500D0; word-break: break-all;">${safeEmailUrl(booking.rawPhotoLink)}</a>
-      </div>
-      <p style="font-size: 12px; color: #5A5A8A;">Open the Filtering Dashboard → Review Queue to approve or reject.</p>
-    `,
-  )
-
-  const results = []
-  if (!isPlaceholderCustomerEmail(booking.customerEmail)) {
-    results.push(
-      await sendEmail({
-        bookingId: booking.id,
-        to: booking.customerEmail,
-        subject: clientSubject,
-        html: clientHtml,
-      }),
-    )
-  }
-  results.push(
-    await sendEmail({
-      bookingId: booking.id,
-      to: 'supplier@ficomana.studio',
-      subject: staffSubject,
-      html: staffHtml,
-    }),
-  )
-
-  const failed = results.find((r) => !r.success)
-  return failed || { success: true }
-}
-
 export async function sendBookingReminderEmail(booking: any) {
   if (isPlaceholderCustomerEmail(booking.customerEmail)) {
     return { success: false, error: 'Client email is missing or is a placeholder.' }
@@ -1029,29 +882,6 @@ export async function sendBookingReminderEmail(booking: any) {
   })
 }
 
-export async function sendRawPhotoApprovedEmail(booking: any) {
-  if (isPlaceholderCustomerEmail(booking.customerEmail)) {
-    return { success: true }
-  }
-  const subject = `Raw Photo Selection Approved - Booking: ${booking.id}`
-  const html = brandedEmail(
-    'Raw Photo Selection Approved',
-    `
-      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
-      <p>Great news! Your chosen raw photo selection for booking reference <strong>${escapeEmailText(booking.id)}</strong> has been approved for editing.</p>
-      <p>Our editors are processing your photos. When the edits are finished, you will receive another email with a Google Drive download link to your edited pictures.</p>
-      <div style="background-color: #EEF0FF; padding: 15px; border-left: 4px solid #0500D0; margin: 20px 0; font-size: 13px;">
-        <strong>Details:</strong><br/>
-        Booking Code: ${escapeEmailText(booking.id)}<br/>
-        Package: ${escapeEmailText(booking.packageName)}<br/>
-        Submitted Photos: <a href="${safeEmailUrl(booking.rawPhotoLink)}" target="_blank" style="color: #0500D0; word-break: break-all;">Open Submitted Folder</a>
-      </div>
-      <p style="font-size: 12px; color: #5A5A8A;">No action is required from you. Thank you for choosing FICO MANA!</p>
-    `
-  )
-  return sendEmail({ bookingId: booking.id, to: booking.customerEmail, subject, html })
-}
-
 export async function sendPortalSelectionRejectedEmail(input: { bookingId: string; name: string; email: string; reason: string; url: string; revision: string }) {
   const html = brandedEmail('Please update your photo selection', `
     <p>Hi <strong>${escapeEmailText(input.name)}</strong>,</p>
@@ -1080,45 +910,8 @@ export async function sendPortalSelectionReopenedEmail(input: { bookingId: strin
   })
 }
 
-export async function sendRawPhotoRejectedEmail(booking: any, reason: string, customDetails?: string) {
-  if (isPlaceholderCustomerEmail(booking.customerEmail)) {
-    return { success: true }
-  }
-  const subject = `Action Required: Raw Photo Selection Rejected - Booking: ${booking.id}`
-  const url = submitRawPhotoUrl(booking.id)
-  const html = brandedEmail(
-    'Raw Photo Selection Rejected',
-    `
-      <p>Hello <strong>${escapeEmailText(booking.customerName)}</strong>,</p>
-      <p>We reviewed your submitted raw photo Google Drive folder for booking reference <strong>${escapeEmailText(booking.id)}</strong>, and unfortunately, it was rejected by our editors.</p>
-      
-      <div style="background-color: #FEF2F2; border-left: 4px solid #DC2626; padding: 15px; margin: 20px 0; font-size: 13px; color: #991B1B;">
-        <p style="margin: 0; font-weight: bold;">Rejection Reason:</p>
-        <p style="margin: 5px 0 0 0; font-style: italic;">${escapeEmailText(reason)}</p>
-        ${customDetails ? `<p style="margin: 5px 0 0 0; font-size: 12px; color: #7F1D1D;"><strong>Editor Notes:</strong> ${escapeEmailText(customDetails)}</p>` : ''}
-      </div>
-
-      <p><strong>How to resubmit:</strong></p>
-      <ol style="font-size: 13px; color: #334155; line-height: 1.7; padding-left: 18px;">
-        <li>Update your folder with 5 clear, original raw photos (not blurry, not already edited).</li>
-        <li>Confirm sharing is set to <strong>Anyone with the link</strong>.</li>
-        <li>Open the page below, enter your <strong>full name</strong>, and paste the new folder link.</li>
-      </ol>
-
-      <div style="margin: 25px 0; text-align: center;">
-        <a href="${url}" target="_blank" rel="noopener noreferrer" style="background-color: #0500D0; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block;">
-          Resubmit Name + Drive Link
-        </a>
-      </div>
-
-      <p style="font-size: 12px; color: #5A5A8A;">If you have any questions, please feel free to reply to this email or contact us at +63 49 576 5176.</p>
-    `
-  )
-  return sendEmail({ bookingId: booking.id, to: booking.customerEmail, subject, html })
-}
-
-/** Editor delivers final edited photos Drive folder to the client. */
-export async function sendEditedPhotosEmail(booking: any, editedPhotoLink: string) {
+/** Notify a client that enhanced photos are available in their private portal. */
+export async function sendEditedPhotosEmail(booking: any, clientPortalUrl: string) {
   const subject = `Your Edited Photos Are Ready - Booking: ${booking.id}`
   const html = brandedEmail(
     'Your Edited Photos Are Ready',
@@ -1128,11 +921,11 @@ export async function sendEditedPhotosEmail(booking: any, editedPhotoLink: strin
 
       <div style="background-color: #EEF0FF; padding: 20px; border: 1px solid #D4D8F0; margin: 25px 0; text-align: center;">
         <p style="font-size: 14px; font-weight: bold; margin: 0 0 14px; color: #0500D0;">Download your edited photos</p>
-        <a href="${editedPhotoLink}" target="_blank" rel="noopener noreferrer" style="background-color: #0500D0; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block;">
-          Open Edited Photos (Google Drive)
+        <a href="${safeEmailUrl(clientPortalUrl)}" target="_blank" rel="noopener noreferrer" style="background-color: #0500D0; color: white; padding: 12px 25px; text-decoration: none; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block;">
+          Open Edited Photos
         </a>
         <p style="font-size: 12px; color: #5A5A8A; margin: 16px 0 0; line-height: 1.6;">
-          Tip: In Google Drive, select the files → right-click → <strong>Download</strong> to save them to your device.
+          Tip: Use the download controls in your private client portal to save the photos to your device.
         </p>
       </div>
 

@@ -27,11 +27,27 @@ function setup(t: test.TestContext) {
     './admin-cache-policy.ts': { STAFF_READ_FRESH_MS: 5 * 60_000 },
   })
   const seed = (data: Booking[]) => {
+    records.set('ficomana_admin_cache_epoch', '2026-09-15-r2-clean-start')
     records.set('ficomana_bookings', JSON.stringify(data))
     records.set('ficomana_bookings_cached_at', String(Date.now()))
   }
   return { store, records, storage, events, seed, salesSignals: () => salesSignals }
 }
+
+test('the R2 clean-start epoch purges booking and notification snapshots from an already-signed-in browser', t => {
+  const { store, records } = setup(t)
+  records.set('ficomana_bookings', JSON.stringify([first, second]))
+  records.set('ficomana_bookings_cached_at', String(Date.now()))
+  records.set('ficomana_notifications', JSON.stringify([{ id: 'legacy-notification' }]))
+  records.set('ficomana_notifications_cached_at', String(Date.now()))
+
+  assert.equal(store.peekBookings(), undefined)
+  assert.equal(records.get('ficomana_admin_cache_epoch'), '2026-09-15-r2-clean-start')
+  assert.equal(records.has('ficomana_bookings'), false)
+  assert.equal(records.has('ficomana_bookings_cached_at'), false)
+  assert.equal(records.has('ficomana_notifications'), false)
+  assert.equal(records.has('ficomana_notifications_cached_at'), false)
+})
 
 test('session changes clear cached booking rows and reject older email reads without losing the new request', async t => {
   const { store, seed } = setup(t)

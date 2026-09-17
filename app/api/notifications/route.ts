@@ -3,7 +3,7 @@ import { addServerNotification, listNotifications } from '@/lib/server-store'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
-import { listNotificationsFromDb, addNotificationToDb } from '@/lib/supabase-store'
+import { listNotificationsFromDb, addNotificationToDb, addSystemNotificationToDb } from '@/lib/supabase-store'
 import type { Notification } from '@/lib/data-store'
 import { getActiveEmailStorageReminder } from '@/lib/ops-subscriptions'
 import { getWorkflowAccess } from '@/lib/auth/workflow'
@@ -12,38 +12,22 @@ import { getShootReminderHealth, notifyShootReminderIssue } from '@/lib/shoot-re
 import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
 
-function mergeNotifications(primary: Notification[], secondary: Notification[]) {
-  const map = new Map<string, Notification>()
-  for (const n of [...primary, ...secondary]) {
-    const key = n.type === SHOOT_REMINDER_NOTIFICATION_TYPE ? n.id : `${n.bookingId}:${n.type}:${n.message.slice(0, 40)}`
-    const existing = map.get(key)
-    if (
-      !existing ||
-      (n.isRead && !existing.isRead) ||
-      new Date(n.createdAt).getTime() > new Date(existing.createdAt).getTime()
-    ) {
-      map.set(key, n)
-    }
-  }
-  return Array.from(map.values()).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )
-}
-
 /** Ensure the email-storage renewal reminder exists in DB so mark-read works. */
 async function ensureOpsReminders(existing: Notification[]): Promise<Notification[]> {
   const draft = getActiveEmailStorageReminder(new Date(), existing)
   if (!draft) return existing
 
   const already = existing.find(
-    (n) => n.type === 'OPS_REMINDER' && n.bookingId === draft.bookingId,
+    (n) => n.type === 'OPS_REMINDER' && n.id === draft.id,
   )
   if (already) return existing
 
-  const admin = getSupabaseAdmin()
-  if (isSupabaseConfigured() && admin) {
-    const saved = await addNotificationToDb(admin, draft.bookingId, draft.type, draft.message)
-    if (saved) return [saved, ...existing]
+  if (isSupabaseConfigured()) {
+    const admin = getSupabaseAdmin()
+    if (!admin) throw new Error('Notification storage unavailable')
+    const saved = await addSystemNotificationToDb(admin, draft.id, draft.type, draft.message)
+    if (!saved) throw new Error('Notification storage unavailable')
+    return [saved, ...existing]
   }
 
   const saved = await addServerNotification(draft.bookingId, draft.type, draft.message)
@@ -71,20 +55,14 @@ export async function GET() {
       }
     }
 
-    let notifications: Notification[] = []
-
+    let notifications: Notification[]
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (admin) {
-        const fromDb = await listNotificationsFromDb(admin)
-        if (fromDb) {
-          const fileNotifications = await listNotifications()
-          notifications = mergeNotifications(fromDb, fileNotifications)
-        }
-      }
-    }
-
-    if (notifications.length === 0) {
+      if (!admin) throw new Error('Notification storage unavailable')
+      const fromDb = await listNotificationsFromDb(admin)
+      if (!fromDb) throw new Error('Notification storage unavailable')
+      notifications = fromDb
+    } else {
       notifications = await listNotifications()
     }
 
@@ -110,10 +88,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'This notification reference is reserved for the reminder service.' }, { status: 400, headers: privateNoStoreHeaders() })
     }
 
-    const admin = getSupabaseAdmin()
-    if (isSupabaseConfigured() && admin) {
+    if (isSupabaseConfigured()) {
+      const admin = getSupabaseAdmin()
+      if (!admin) throw new Error('Notification storage unavailable')
       const saved = await addNotificationToDb(admin, bookingId, type, message)
-      if (saved) return NextResponse.json(saved, { status: 201 })
+      if (!saved) throw new Error('Notification storage unavailable')
+      return NextResponse.json(saved, { status: 201 })
     }
 
     const notification = await addServerNotification(bookingId, type, message)

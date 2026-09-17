@@ -304,7 +304,7 @@ export default function WebsiteMediaPage() {
       const { data: authData, error: authError } = await supabase.auth.getSession()
       const accessToken = authData.session?.access_token
       if (authError || !accessToken) {
-        throw new Error('Your secure session expired. Sign in and complete MFA again.')
+        throw new Error('Your secure session expired. Sign in again.')
       }
 
       await runResumableUpload(slot.slotKey, file, session, accessToken)

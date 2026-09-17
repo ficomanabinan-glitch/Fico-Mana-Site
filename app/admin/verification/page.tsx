@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { getBookings, peekBookings, dismissBookingNotifications, addNotification, Booking } from '@/lib/data-store'
 import { GraduationSessionDetails } from '@/components/graduation-session-details'
 import { runAdminTransaction, formatEmailResult } from '@/lib/admin-actions'
@@ -256,8 +257,8 @@ export default function PaymentVerificationQueue() {
           <h3 className="text-sm font-bold uppercase tracking-wider text-white">Verification Queue Empty</h3>
           <p className="mt-2 text-xs text-white/70">There are no deposits waiting for review.</p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            <a href="/admin/bookings" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">View bookings</a>
-            <a href="/admin/provisioning" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">Client portals</a>
+            <Link href="/admin/bookings" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">View bookings</Link>
+            <Link href="/admin/provisioning" className="inline-flex min-h-11 items-center rounded-control border border-white/10 px-4 py-2 text-xs font-semibold text-[#C4CEFF]">Client portals</Link>
           </div>
         </div>
       ) : (

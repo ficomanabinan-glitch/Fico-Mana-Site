@@ -8,11 +8,11 @@ export function getRawPhotoStatus(booking: Pick<Booking, 'rawPhotoStatus'>): Raw
   return booking.rawPhotoStatus
 }
 
-export function hasRawPhotoSubmission(booking: Pick<Booking, 'rawPhotoLink'>): boolean {
-  return Boolean(booking.rawPhotoLink?.trim())
+export function hasRawPhotoSubmission(booking: Pick<Booking, 'rawPhotoSubmittedAt' | 'rawPhotoStatus'>): boolean {
+  return Boolean(booking.rawPhotoSubmittedAt || booking.rawPhotoStatus)
 }
 
-export function isPendingRawPhotoReview(booking: Pick<Booking, 'rawPhotoLink' | 'rawPhotoStatus'>): boolean {
+export function isPendingRawPhotoReview(booking: Pick<Booking, 'rawPhotoSubmittedAt' | 'rawPhotoStatus'>): boolean {
   return getRawPhotoWorkflowStatus(booking as Booking) === 'pending_review'
 }
 
@@ -31,8 +31,4 @@ export function rawPhotoStatusBadgeClass(status: RawPhotoStatus | 'Pending Revie
     default:
       return 'bg-amber-500/15 text-amber-400 border-amber-500/30'
   }
-}
-
-export function clientSubmitRawPhotoPath(bookingId: string): string {
-  return `/submit-raw-photo?booking=${encodeURIComponent(bookingId)}`
 }

@@ -138,7 +138,7 @@ const RAW_PHOTO_ACTIVE_STATUSES = new Set<Booking['bookingStatus']>(['Confirmed'
 
 /** Whether this booking is in the post-shoot raw photo selection workflow. */
 export function isRawPhotoWorkflowBooking(booking: Booking): boolean {
-  if (booking.driveLink || booking.rawPhotoLink || booking.rawPhotoStatus || booking.editedPhotoLink) {
+  if (booking.rawPhotoSubmittedAt || booking.rawPhotoStatus || booking.editedPhotoDeliveredAt) {
     return true
   }
   return RAW_PHOTO_ACTIVE_STATUSES.has(booking.bookingStatus)
@@ -147,12 +147,11 @@ export function isRawPhotoWorkflowBooking(booking: Booking): boolean {
 /** Current step in the raw photo filtering workflow. */
 export function getRawPhotoWorkflowStatus(booking: Booking): RawPhotoWorkflowStatus | null {
   if (!isRawPhotoWorkflowBooking(booking)) return null
-  if (booking.editedPhotoLink) return 'delivered'
+  if (booking.editedPhotoDeliveredAt) return 'delivered'
   if (booking.rawPhotoStatus === 'Approved') return 'approved'
   if (booking.rawPhotoStatus === 'Rejected') return 'rejected'
   if (booking.rawPhotoStatus === 'Reopened') return 'awaiting_selection'
-  if (booking.rawPhotoLink || booking.rawPhotoStatus === 'Pending Review') return 'pending_review'
-  if (booking.driveLink) return 'awaiting_selection'
+  if (booking.rawPhotoSubmittedAt || booking.rawPhotoStatus === 'Pending Review') return 'pending_review'
   if (RAW_PHOTO_ACTIVE_STATUSES.has(booking.bookingStatus)) return 'awaiting_gallery'
   return null
 }

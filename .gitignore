@@ -9,6 +9,12 @@ data/blocked-slots.json
 data/fico-spot-blocks.json
 previews/
 artifacts/
+.audit/
+.agents/
+.codex/
+.pnpm-store/
+ficomana-proposal-newui/
+skills-lock.json
 
 .env*
 !.env.example

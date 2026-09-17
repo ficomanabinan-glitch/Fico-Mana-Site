@@ -46,7 +46,8 @@ test('confirmed reset clears only its explicit tables and preserves configuratio
   for(const name of cleared) assert.deepEqual((await db.query(`select count(*)::int as n from public.${name}`)).rows,[{n:0}])
   for(const name of preserved) assert.deepEqual((await db.query(`select * from ${name}`)).rows,before.get(name))
   assert.equal((await db.query<{relrowsecurity:boolean}>("select relrowsecurity from pg_class where oid='public.bookings'::regclass")).rows[0].relrowsecurity,true)
-  assert.ok(!cleared.includes('packages')&&!cleared.includes('google_drive_settings')&&!cleared.includes('shoot_reminder_settings'))
+  assert.ok(!cleared.includes('packages')&&!cleared.includes('storage_settings')&&!cleared.includes('shoot_reminder_settings'))
+  assert.ok(cleared.includes('storage_multipart_uploads'))
 })
 
 for(const [name,change,expected] of [

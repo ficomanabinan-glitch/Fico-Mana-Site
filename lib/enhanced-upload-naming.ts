@@ -1,6 +1,6 @@
 type NamedUpload = { relative_path: string; file_name: string }
 
-/** The source path stays stable for retries and print matching; only Drive's display name changes. */
+/** The source path stays stable for retries and print matching; only the uploaded display name changes. */
 export function enhancedUploadName(clientName: string, sourceName: string, relativePath: string, existing: NamedUpload[]) {
   const extension = sourceName.match(/\.[a-z0-9]+$/i)?.[0]
   if (!extension) throw new Error('The enhanced photo needs its original image extension.')

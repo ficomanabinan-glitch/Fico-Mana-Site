@@ -14,7 +14,7 @@ declare
     'bookings','clients','payments','receipts','receipt_fingerprints',
     'notifications','email_logs','sales_expenses',
     'client_portals','client_portal_resources','booking_provisioning','provisioning_audit',
-    'drive_folders','editing_batches','editing_jobs','gallery_files',
+    'editing_batches','editing_jobs','gallery_files','storage_multipart_uploads',
     'photo_selections','photo_selection_items','client_addon_orders','print_allocations',
     'deliverable_files','batch_upload_jobs','batch_upload_items','batch_upload_files',
     'workflow_match_reviews','workflow_audit_logs','shoot_invitations',
@@ -24,7 +24,7 @@ declare
   preserved_tables constant text[] := array[
     'auth.users','public.workspaces','public.workspace_members','public.packages',
     'public.addon_catalog','public.website_media_slots','public.website_media_upload_grants',
-    'public.google_drive_settings','public.sales_settings','public.shoot_reminder_settings',
+    'public.storage_settings','public.sales_settings','public.shoot_reminder_settings',
     'public.blocked_slots','public.blocked_days','public.fico_spot_blocks',
     'storage.objects','storage.buckets'
   ];

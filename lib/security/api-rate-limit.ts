@@ -25,8 +25,7 @@ export const API_RATE_LIMITS = {
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
   editorUpload: { name: 'editor-upload', limit: 1_000, windowSeconds: 60 * 60, failClosed: true },
   websiteMediaUpload: { name: 'website-media-upload', limit: 60, windowSeconds: 60 * 60, failClosed: true },
-  driveOperation: { name: 'drive-operation', limit: 120, windowSeconds: 15 * 60, failClosed: true },
-  mfaEvent: { name: 'mfa-event', limit: 20, windowSeconds: 15 * 60, failClosed: true },
+  storageOperation: { name: 'storage-operation', limit: 120, windowSeconds: 15 * 60, failClosed: true },
   adminMutation: { name: 'admin-mutation', limit: 180, windowSeconds: 5 * 60, failClosed: true },
 } as const satisfies Record<string, ApiRateLimitPolicy>
 

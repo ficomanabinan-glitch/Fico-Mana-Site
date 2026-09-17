@@ -7,7 +7,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve))
 test('completed onsite upload sends portal email; Retry resends only email and partial uploads do not send', async t => {
   const savedFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = savedFetch })
-  const dataset = { batch: { jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, rawFolderDriveId: 'raw' }] } }
+  const dataset = { batch: { jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, storageReady: true }] } }
   let uploadCalls = 0, emailCalls = 0, emailFails = true, partial = false
   globalThis.fetch = async url => {
     if (String(url).endsWith('/portal-email')) {
@@ -69,7 +69,7 @@ test('actual onsite handlers keep Upload first, combine Sync, require delete con
   const savedFetch=globalThis.fetch;t.after(()=>{globalThis.fetch=savedFetch})
   const calls:Array<{url:string;body?:any}>=[],messages:string[]=[]
   let synced=0,release:(value:Response)=>void=()=>{}
-  const job={bookingId:'ONE',customerName:'Synthetic Client',packageName:'MANA',bookingTime:'1 PM',galleryCount:2,rawFolderDriveId:'raw'}
+  const job={bookingId:'ONE',customerName:'Synthetic Client',packageName:'MANA',bookingTime:'1 PM',galleryCount:2,storageReady:true}
   const dataset={batch:{jobs:[job]},shootDate:'2026-09-08'}
   globalThis.fetch=async(url,options)=>{
     const body=options?.body?JSON.parse(String(options.body)):undefined
@@ -96,13 +96,13 @@ test('actual onsite handlers keep Upload first, combine Sync, require delete con
   const button=(label:string)=>elements(render(),el=>el.type==='button'&&content(el)===label)[0]
   const tree=render();await tick()
   const actions=elements(tree,el=>el.props.className==='onsite-actions')[0]
-  assert.deepEqual(elements(actions,el=>el.type==='button').map(content),['Upload Photos','Sync Drive','Delete Files'])
-  button('Sync Drive').props.onClick();await tick();await tick()
+  assert.deepEqual(elements(actions,el=>el.type==='button').map(content),['Upload Photos','Refresh Gallery','Delete Files'])
+  button('Refresh Gallery').props.onClick();await tick();await tick()
   assert.ok(calls.some(call=>call.url.endsWith('/index')));assert.ok(!calls.some(call=>call.url.includes('/folders/')))
   const count=calls.length
   button('Delete Files').props.onClick();assert.equal(calls.length,count,'Opening confirmation never deletes')
   button('Delete Files for This Client').props.onClick();await tick()
-  assert.equal(button('Upload Photos').props.disabled,true);assert.equal(button('Sync Drive').props.disabled,true)
+  assert.equal(button('Upload Photos').props.disabled,true);assert.equal(button('Refresh Gallery').props.disabled,true)
   assert.equal(calls.filter(call=>call.url.endsWith('/reset')).length,2,'Start followed by resume, both scoped to the confirmed client')
   release(Response.json({complete:true,cleared:2,total:2}));await tick();await tick()
   assert.equal(button('Upload Photos').props.disabled,false);assert.ok(messages.includes('Uploaded files cleared'));assert.equal(synced,2)
@@ -118,7 +118,7 @@ test('reset route requires onsite capability, trusted origin, rate budget and ex
     'next/server':{NextResponse:{json:Response.json}},archiver:{},'@/lib/editor-workflow':{},'@/lib/package-workflow':{},
     '@/lib/selection-review':{SelectionReviewError:class SelectionReviewError extends Error{},reviewSelection:async()=>({success:true})},
     '@/lib/auth-api':{requireWorkflowAuth:async(_capability:unknown,request:Request)=>{assert.equal(request.method,'POST');return trusted?{user:{id:'staff'},access,error:null}:{error:Response.json({},{status:403})}}},
-    '@/lib/auth/workflow':{canUseWorkflow:()=>allowed},'@/lib/google-drive':{},
+    '@/lib/auth/workflow':{canUseWorkflow:()=>allowed},'@/lib/storage/storage-service':{},
     '@/lib/security/api-rate-limit':{API_RATE_LIMITS:{},enforceApiRateLimit:async()=>limited?Response.json({},{status:429}):null},
     '@/lib/security/file-validation':{},'@/lib/security/schemas':{},'@/lib/security/security-audit':{},'@/lib/security/upload-scanner':{},'@/lib/security/request-security':{},
     '@/lib/raw-upload-contract':{RawUploadError},'@/lib/raw-upload-server':{},

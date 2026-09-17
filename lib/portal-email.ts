@@ -59,7 +59,7 @@ export async function sendPortalAccessIfNeeded(
     return { sent: false, error: 'The client portal is not active. Try: retry provisioning in Client Portals, then retry the email.' }
   }
   if (!galleryResult.data?.length) {
-    return { sent: false, error: 'No uploaded photos are available. Try: finish uploading and Sync Drive before retrying the email.' }
+    return { sent: false, error: 'No uploaded photos are available. Try: finish uploading and refresh the gallery before retrying the email.' }
   }
   // Old provisioning emails must not suppress this photos-ready notification.
   if (historyResult.data?.length) {

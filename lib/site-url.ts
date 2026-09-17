@@ -28,7 +28,3 @@ export function getSiteUrl(): string {
 export function resubmitBookingUrl(bookingId: string): string {
   return `${getSiteUrl()}/?booking=${encodeURIComponent(bookingId)}#resubmit`
 }
-
-export function submitRawPhotoUrl(bookingId: string): string {
-  return `${getSiteUrl()}/submit-raw-photo?booking=${encodeURIComponent(bookingId)}`
-}

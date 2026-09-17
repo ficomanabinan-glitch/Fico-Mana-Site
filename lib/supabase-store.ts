@@ -69,13 +69,22 @@ export async function listNotificationsFromDb(client: SupabaseClient): Promise<N
   if (!isSupabaseConfigured()) return null
   const { data, error } = await client.from('notifications').select('*').order('created_at', { ascending: false })
   if (error) return null
-  return data.map((n) => ({ id: String(n.id), bookingId: String(n.booking_id), type: n.type as Notification['type'], message: String(n.message), isRead: Boolean(n.is_read), createdAt: String(n.created_at) }))
+  return data.map((n) => ({ id: String(n.id), bookingId: n.booking_id == null ? '' : String(n.booking_id), type: n.type as Notification['type'], message: String(n.message), isRead: Boolean(n.is_read), createdAt: String(n.created_at) }))
 }
 export async function addNotificationToDb(client: SupabaseClient, bookingId: string, type: Notification['type'], message: string): Promise<Notification | null> {
   if (!isSupabaseConfigured()) return null
   const { data, error } = await client.from('notifications').insert({ booking_id: bookingId, type, message }).select().single()
   if (error) { console.error('addNotificationToDb:', error.message); return null }
   return { id: String(data.id), bookingId: String(data.booking_id), type: data.type as Notification['type'], message: String(data.message), isRead: Boolean(data.is_read), createdAt: String(data.created_at) }
+}
+export async function addSystemNotificationToDb(client: SupabaseClient, id: string, type: Notification['type'], message: string): Promise<Notification | null> {
+  if (!isSupabaseConfigured()) return null
+  const { error } = await client.from('notifications').upsert(
+    { id, booking_id: null, type, message, is_read: false },
+    { onConflict: 'id', ignoreDuplicates: true },
+  )
+  if (error) { console.error('addSystemNotificationToDb:', error.message); return null }
+  return { id, bookingId: '', type, message, isRead: false, createdAt: new Date().toISOString() }
 }
 export async function markBookingNotificationsReadInDb(client: SupabaseClient, bookingId: string): Promise<number> {
   if (!isSupabaseConfigured()) return 0

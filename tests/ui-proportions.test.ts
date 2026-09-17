@@ -37,7 +37,7 @@ test('client portal statuses are rounded badges without pretending to be action 
   const portals = source('app/admin/provisioning/page.tsx')
   assert.match(portals, /<p className="flex items-center gap-2 whitespace-nowrap">/)
   assert.match(portals, /<span className=\{`inline-flex rounded-md border px-2 py-1 text-caption font-semibold capitalize/)
-  assert.match(portals, />\{item\.portal\.status\}<\/span>\{item\.portal\.expiresAt\?/)
+  assert.match(portals, />\{item\.portal\.status\}<\/span>/)
   assert.doesNotMatch(portals, /item\.portal\.expiresAt\?<span className="mt-1 block/)
   assert.match(portals, /inline-flex rounded-md border px-2 py-1 text-caption font-semibold uppercase \$\{statusClass/)
 })
@@ -49,9 +49,11 @@ test('all three client portal summary cards use the shared rounded card style', 
   assert.equal((portals.match(/<Metric label=/g) || []).length, 3)
 })
 
-test('Open Folder uses the existing button wrapper and keeps direct new-tab navigation', () => {
+test('client portal actions stay internal and expose no retired external-folder link', () => {
   const portals = source('app/admin/provisioning/page.tsx')
-  assert.match(portals, /<a href=\{item\.driveClientFolderUrl\} target="_blank" rel="noopener noreferrer" className=\{`\$\{actionButton\} min-h-10 whitespace-nowrap text-green-300`\}>Open folder/)
+  assert.match(portals, /onClick=\{\(\) => openPortal\(item\.bookingId\)\}/)
+  assert.match(portals, /showPortalQr\(item, item\.portal!\)/)
+  assert.doesNotMatch(portals, /Open folder|driveClientFolderUrl/)
 })
 
 test('sales insight cards use the same rounded corners as other dashboard metrics', () => {

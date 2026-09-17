@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
 import { emptyConsoleData, sampleConsoleData, type ConsoleData } from '@/lib/new-admin/presentation-data'
 
-const sources = { bookings: '/api/bookings', batches: '/api/editor-workflow/batches', sales: '/api/sales/summary?period=month', drive: '/api/provisioning', packages: '/api/admin/packages' } as const
+const sources = { bookings: '/api/bookings', batches: '/api/editor-workflow/batches', sales: '/api/sales/summary?period=month', storage: '/api/provisioning', packages: '/api/admin/packages' } as const
 type Context = { data: ConsoleData; loading: boolean; refreshing: boolean; errors: string[]; sample: boolean; setSample: (value: boolean) => void; refresh: () => Promise<void> }
 const DataContext = createContext<Context | null>(null)
 export class ConsoleAccessError extends Error {}

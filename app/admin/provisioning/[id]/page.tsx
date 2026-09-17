@@ -12,7 +12,7 @@ type Snapshot = {
   bookingId: string
   required?: boolean
   status: string
-  driveClientFolderUrl?: string
+  storageStatus?: string
   clientPortalUrl?: string
   clientPortalStatus?: string
   confirmedPayments: number
@@ -118,7 +118,7 @@ export default function ProvisioningBookingPage() {
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'Provisioning retry failed.')
-      toast.success('Provisioning refreshed', data.status === 'ACTIVE' ? 'Drive and Client Portal are active.' : data.lastError || data.status)
+      toast.success('Provisioning refreshed', data.status === 'ACTIVE' ? 'Private storage and Client Portal are active.' : data.lastError || data.status)
       await load()
     } catch (error) {
       toast.error('Retry failed', error instanceof Error ? error.message : 'Provisioning retry failed.')
@@ -191,7 +191,6 @@ export default function ProvisioningBookingPage() {
           <p className="text-xs text-white/45 mt-1">{booking.packageName} · {booking.bookingDate}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {snapshot?.driveClientFolderUrl ? <a href={snapshot.driveClientFolderUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-caption font-semibold uppercase hover:border-white/30">Drive <ExternalLink className="w-3.5 h-3.5" /></a> : null}
           {snapshot?.clientPortalUrl ? <a href={snapshot.clientPortalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/15 px-3 py-2 text-caption font-semibold uppercase hover:border-white/30">Client Portal <ExternalLink className="w-3.5 h-3.5" /></a> : null}
           <button disabled={busy || snapshot?.required === false} onClick={retry} className="inline-flex items-center gap-1.5 bg-primary px-3 py-2 text-caption font-semibold uppercase disabled:opacity-50"><RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />{snapshot?.required === false ? 'Portal not required' : 'Retry / Reconcile'}</button>
         </div>
@@ -229,7 +228,7 @@ export default function ProvisioningBookingPage() {
         </section>
 
         <section className="border border-white/10 bg-white/[0.02] p-5">
-          <div><h2 className="text-sm font-semibold">Provisioning audit trail</h2><p className="text-xs text-white/45 mt-1">Payment, booking, Drive, portal, retry, resource, and access events.</p></div>
+          <div><h2 className="text-sm font-semibold">Provisioning audit trail</h2><p className="text-xs text-white/45 mt-1">Payment, booking, storage, portal, retry, resource, and access events.</p></div>
           <div className="mt-5 space-y-2 max-h-[760px] overflow-y-auto pr-1">
             {audit.length === 0 ? <p className="text-xs text-white/40">No audit events yet.</p> : audit.map((event) => (
               <div key={event.id} className="border-l-2 border-white/10 pl-3 py-2">

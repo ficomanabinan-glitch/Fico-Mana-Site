@@ -6,7 +6,7 @@ import { graduationPackageIds } from '@/lib/package-workflow-server'
 export const dynamic = 'force-dynamic'
 const headers = { 'Cache-Control': 'private, no-store' }
 // Only workflow fields: no receipts, payment history or private staff notes.
-const columns = 'id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,slot_id,booking_status,created_at,drive_link,raw_photo_link,raw_photo_status,raw_photo_notes,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_link,edited_photo_delivered_at'
+const columns = 'id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,slot_id,booking_status,created_at,raw_photo_status,raw_photo_notes,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_delivered_at'
 export async function GET(request: Request) {
   const { access, error } = await requireWorkflowAuth('edit', request)
   if (error) return error

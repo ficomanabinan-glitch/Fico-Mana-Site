@@ -33,7 +33,7 @@ test('Client Portals uses the available width and keeps Portal/QR actions withou
   assert.doesNotMatch(page,/max-w-7xl|copyPortal|portalCopying/)
   assert.match(page,/min-w-\[330px\]/)
   assert.ok(page.includes('lg:grid-cols-[minmax(0,1fr)_200px_230px]'),'filters stack when the sidebar leaves too little width')
-  assert.ok(page.includes('xl:grid-cols-[minmax(0,1fr)_180px_auto]'),'Drive settings align in one row only when there is room')
+  assert.ok(page.includes('sm:grid-cols-[minmax(0,240px)_auto]'),'storage settings align in one row only when there is room')
   assert.match(page,/filterAndSortClientPortals/)
   assert.match(page,/showPortalQr/)
   assert.match(page,/openPortal/)

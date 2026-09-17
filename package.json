@@ -19,9 +19,14 @@
     "security:check": "node scripts/security-check.mjs",
     "security:http": "node scripts/security-http-check.mjs",
     "security:secrets": "node scripts/secret-scan.mjs",
-    "security:receipts": "node scripts/harden-receipt-storage.mjs"
+    "security:receipts": "node scripts/harden-receipt-storage.mjs",
+    "admins:provision": "node scripts/provision-master-admins.mjs",
+    "storage:configure-cors": "node scripts/configure-r2-cors.mjs",
+    "storage:reconcile": "node scripts/reconcile-r2.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1131.0",
+    "@aws-sdk/s3-request-presigner": "3.1131.0",
     "@base-ui/react": "^1.5.0",
     "@supabase/ssr": "0.12.6",
     "@supabase/supabase-js": "2.115.0",

@@ -18,17 +18,18 @@ import {
   getOnsiteBatchSummary,
   getUploadReport,
   getPortalData,
-  getPortalDrivePhotos,
   getPortalPhotoRevision,
   getPortalFile,
+  getStaffGalleryFile,
+  getStaffSelectionFiles,
   getWorkflowMembers,
-  indexRawFolder,
+  refreshRawFiles,
   markBatchDownloaded,
   prepareBatchDownload,
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
   recordPortalFirstDownload,
-  reconcileBookingFolders,
+  reconcileBookingStorage,
   recordMatchReviews,
   resolveMatchReview,
   saveRawFile,
@@ -38,7 +39,7 @@ import {
   PortalSelectionError,
   type EditingJobStatus,
 } from '@/lib/editor-workflow'
-import { openDriveFile } from '@/lib/google-drive'
+import { getObject } from '@/lib/storage/storage-service'
 import { trackCompletedPortalDownload } from '@/lib/portal-download-stream'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/lib/security/file-validation'
@@ -52,7 +53,6 @@ import {
   editorUploadFailureSchema,
   editorUploadSessionSchema,
   portalSelectionSchema,
-  portalDrivePhotosSchema,
 } from '@/lib/security/schemas'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { scanUpload } from '@/lib/security/upload-scanner'
@@ -67,7 +67,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-type ZipEntry = { name: string; data?: Buffer; driveFileId?: string }
+type ZipEntry = { name: string; data?: Buffer; storageKey?: string }
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, {
@@ -90,12 +90,12 @@ function errorResponse(error: unknown, fallback: string, requestId: string, stat
   )
 }
 
-function lazyDriveStream(fileId: string) {
+function lazyStorageStream(storageKey: string) {
   return Readable.from(
     (async function* () {
-      const response = await openDriveFile(fileId)
-      const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream)
-      for await (const chunk of stream) yield chunk
+      const response = await getObject(storageKey)
+      if (!response.Body) throw new Error('This file is currently unavailable.')
+      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) yield chunk
     })(),
   )
 }
@@ -112,8 +112,8 @@ function zipResponse(
   archive.on('error', (error) => output.destroy(error))
   archive.pipe(output)
   for (const entry of entries) {
-    if (entry.driveFileId) {
-      const source = lazyDriveStream(entry.driveFileId)
+    if (entry.storageKey) {
+      const source = lazyStorageStream(entry.storageKey)
       source.once('error', (error) => output.destroy(error))
       sources.push(source)
       archive.append(source, { name: entry.name })
@@ -173,14 +173,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
     const parsed = portalSelectionSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return json({ error: 'A valid photo selection and 4-digit PIN are required. Try: review your choices and enter the last 4 digits of your booking phone number.', code: 'SELECTION_INVALID' }, 400)
     try {
-      const result = await submitPhotoSelection(publicId, parsed.data)
-      // A Drive-link failure must not turn an already-saved selection into a failed submission.
-      try {
-        const photos = await getPortalDrivePhotos(publicId, parsed.data.pin)
-        return json({ ...result, allPhotosUrl: photos.url })
-      } catch {
-        return json({ ...result, allPhotosWarning: 'Your selection was saved, but the Google Drive link is not available yet. Try: use View All Photos again, or ask FICO MANA to check your photo folder.' })
-      }
+      return json(await submitPhotoSelection(publicId, parsed.data))
     } catch (error) {
       if (error instanceof PortalSelectionError && error.code === 'SELECTION_PIN_INVALID') {
         await recordSecurityAuditEvent({ eventType: 'portal_submission_pin_failed', outcome: 'blocked', route: '/api/editor-workflow/portal/selection' })
@@ -188,30 +181,19 @@ async function handlePortal(request: NextRequest, path: string[]) {
       throw error
     }
   }
-  if (path.length === 3 && path[2] === 'drive-photos' && method === 'POST') {
-    // Use the exact same IP-only PIN budget as final submission; switching endpoints cannot bypass it.
-    const pinLimited = await enforceApiRateLimit(request, API_RATE_LIMITS.portalSubmissionPin)
-    if (pinLimited) return pinLimited
-    const parsed = portalDrivePhotosSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return json({ error: 'Enter your 4-digit PIN. Try: use the last 4 digits of your booking phone number.', code: 'SELECTION_INVALID' }, 400)
-    try {
-      const response = json(await getPortalDrivePhotos(publicId, parsed.data.pin))
-      response.headers.set('Referrer-Policy', 'no-referrer')
-      return response
-    } catch (error) {
-      if (error instanceof PortalSelectionError && error.code === 'SELECTION_PIN_INVALID') {
-        await recordSecurityAuditEvent({ eventType: 'portal_submission_pin_failed', outcome: 'blocked', route: '/api/editor-workflow/portal/drive-photos' })
-      }
-      throw error
-    }
-  }
   if (path[2] === 'file' && path[3] && method === 'GET') {
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'gallery'
-    const file = await getPortalFile(publicId, decodeURIComponent(path[3]), kind, request.headers.get('if-none-match'))
-    return new Response(file.data, {
-      status: file.notModified ? 304 : 200,
+    const variant = request.nextUrl.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'preview'
+    const file = await getPortalFile(publicId, decodeURIComponent(path[3]), kind, request.headers.get('if-none-match'), variant)
+    if (!file.notModified && 'redirectUrl' in file) {
+      return NextResponse.redirect(file.redirectUrl, {
+        status: 307,
+        headers: { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' },
+      })
+    }
+    return new Response(null, {
+      status: 304,
       headers: {
-        ...(file.notModified ? {} : { 'content-type': file.mimeType }),
         // The browser retains bytes but must re-check access and freshness on each reuse.
         'cache-control': 'private, no-cache, must-revalidate',
         'cdn-cache-control': 'no-store',
@@ -220,9 +202,6 @@ async function handlePortal(request: NextRequest, path: string[]) {
         'vary': 'Cookie',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
-        ...(kind === 'deliverable' && file.fileName
-          ? { 'content-disposition': `inline; filename="${safeDownloadName(file.fileName)}"` }
-          : {}),
       },
     })
   }
@@ -258,7 +237,7 @@ async function handle(request: NextRequest, path: string[]) {
       const policy = (path[0] === 'batches' && ['start-upload', 'upload-session', 'complete-file', 'finalize-client', 'finalize-upload'].includes(path[2] || '')) ||
         (path[0] === 'raw' && ['upload-session', 'complete-file'].includes(path[2] || ''))
         ? API_RATE_LIMITS.editorUpload
-        : API_RATE_LIMITS.driveOperation
+        : API_RATE_LIMITS.storageOperation
       const limited = await enforceApiRateLimit(request, policy, [user.id, workspaceId,
         path[0] === 'raw' && policy === API_RATE_LIMITS.editorUpload ? 'raw-upload' : path.join('/')])
       if (limited) return limited
@@ -297,12 +276,31 @@ async function handle(request: NextRequest, path: string[]) {
       return json(await getUploadReport(workspaceId, Number(request.nextUrl.searchParams.get('limit') || 30)))
     }
 
+    if (path[0] === 'files' && path[1] && method === 'GET') {
+      const denied = requireCapability('edit')
+      if (denied) return denied
+      const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.portalRead, [user.id, workspaceId, 'staff-file'])
+      if (limited) return limited
+      const variant = request.nextUrl.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'preview'
+      const redirectUrl = await getStaffGalleryFile(workspaceId, decodeURIComponent(path[1]), variant)
+      return NextResponse.redirect(redirectUrl, {
+        status: 307,
+        headers: { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' },
+      })
+    }
+
+    if (path[0] === 'selections' && path[1] && path[2] === 'files' && method === 'GET') {
+      const denied = requireCapability('edit')
+      if (denied) return denied
+      return json(await getStaffSelectionFiles(workspaceId, decodeURIComponent(path[1])))
+    }
+
     if (path[0] === 'folders' && path[1] && method === 'POST') {
       const denied = requireCapability('onsite')
       if (denied) return denied
       const body = (await request.json().catch(() => ({}))) as { repair?: boolean }
       return json(
-        await reconcileBookingFolders(
+        await reconcileBookingStorage(
           workspaceId,
           decodeURIComponent(path[1]),
           actorId,
@@ -392,7 +390,6 @@ async function handle(request: NextRequest, path: string[]) {
             mimeType: body.mimeType,
             fileSize: body.fileSize,
             checksum: body.checksum,
-            browserOrigin: request.headers.get('origin') || '',
           }),
         )
       }
@@ -403,13 +400,12 @@ async function handle(request: NextRequest, path: string[]) {
         if (!parsed.success) return json({ error: 'The upload could not be checked. Try: refresh the upload report.' }, 400)
         const body = parsed.data
         return json(
-          await completeDeliverableUpload(
-            workspaceId,
-            body.uploadJobId,
-            body.uploadFileId,
-            body.driveFileId,
-            body.mimeType,
-          ),
+          await completeDeliverableUpload(workspaceId, body.uploadJobId, body.uploadFileId, {
+            storageKey: body.storageKey,
+            mimeType: body.mimeType,
+            uploadId: body.uploadId,
+            parts: body.parts,
+          }),
         )
       }
       if (path[2] === 'fail-file' && method === 'POST') {
@@ -460,7 +456,9 @@ async function handle(request: NextRequest, path: string[]) {
         if (body.resetId !== undefined && (typeof body.resetId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.resetId))) return json({ error: 'Invalid reset reference.' }, 400)
         return json(body.resetId ? await continueOnsitePhotoReset(context, body.resetId) : await beginOnsitePhotoReset(context))
       }
-      if (path[2] === 'index') return json(await indexRawFolder(workspaceId, bookingId, actorId))
+      // Keep the existing route path for client compatibility; the operation now
+      // refreshes database metadata for verified R2 objects rather than listing a folder.
+      if (path[2] === 'index') return json(await refreshRawFiles(workspaceId, bookingId, actorId))
       if (path[2] === 'portal-email' && path.length === 3) {
         const [{ sendPortalAccessIfNeeded }, { getSupabaseAdmin }] = await Promise.all([
           import('@/lib/portal-email'), import('@/lib/supabase/admin'),
@@ -474,7 +472,7 @@ async function handle(request: NextRequest, path: string[]) {
       }
       if (path[2] === 'upload-session' || path[2] === 'complete-file') {
         if (path.length !== 3) return json({ error: 'Unknown upload action.' }, 404)
-        // Only metadata enters the application; image bytes go straight to Google Drive.
+        // Only metadata enters the application; image bytes go straight to private R2.
         const body = await request.text()
         if (Buffer.byteLength(body, 'utf8') > 8000) return json({ error: 'Upload instructions are too large.' }, 413)
         let value: unknown
@@ -483,11 +481,15 @@ async function handle(request: NextRequest, path: string[]) {
         if (path[2] === 'upload-session') {
           const parsed = rawUploadMetadataSchema.safeParse(value)
           if (!parsed.success) return json({ error: 'Choose a supported photo up to 100 MB with a filename of at most 120 characters. Try: check the file and select it again.' }, 400)
-          return json(await startRawUpload(context, parsed.data, request.headers.get('origin') || ''))
+          return json(await startRawUpload(context, parsed.data))
         }
         const parsed = rawUploadCompleteSchema.safeParse(value)
         if (!parsed.success) return json({ error: 'Upload confirmation is invalid. Try: select the file again.' }, 400)
-        return json(await completeRawUpload(context, parsed.data.grant, parsed.data.driveFileId))
+        return json(await completeRawUpload(context, parsed.data.grant, {
+          storageKey: parsed.data.storageKey,
+          uploadId: parsed.data.uploadId,
+          parts: parsed.data.parts,
+        }))
       }
       if (path.length !== 2) return json({ error: 'Unknown upload action.' }, 404)
       const form = await request.formData()

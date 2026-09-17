@@ -10,7 +10,6 @@ import {
   CalendarDays,
   CheckCircle,
   Clock,
-  ExternalLink,
   FolderOpen,
   FolderDown,
   Image as ImageIcon,
@@ -130,8 +129,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
           (b.bookingStatus === 'Confirmed' ||
             b.bookingStatus === 'Completed' ||
             hasRawPhotoSubmission(b) ||
-            Boolean(b.driveLink) ||
-            Boolean(b.editedPhotoLink)),
+            Boolean(b.editedPhotoDeliveredAt)),
       ),
     [bookings],
   )
@@ -252,7 +250,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
       )}
 
       {activeTab === 'editor' && (
-        <EditorQueue basePath="/editor" driveSettingsHref={null} />
+        <EditorQueue basePath="/editor" />
       )}
     </div>
   )
@@ -275,7 +273,7 @@ function OverviewTab({
     {
       label: 'Awaiting Gallery',
       value: counts.awaiting_gallery,
-      desc: 'Confirmed — needs Drive gallery link',
+      desc: 'Confirmed — gallery not prepared',
       accent: 'text-white/70 border-white/20 bg-white/5',
       icon: Upload,
       tab: 'calendar' as FilteringDashTab,
@@ -291,7 +289,7 @@ function OverviewTab({
     {
       label: 'Pending Review',
       value: pendingReview,
-      desc: '5-pick folders waiting for staff',
+      desc: 'Client selections waiting for staff',
       accent: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
       icon: Clock,
       tab: 'queue' as FilteringDashTab,
@@ -299,7 +297,7 @@ function OverviewTab({
     {
       label: 'Ready for Editor',
       value: counts.approved,
-      desc: 'Approved — waiting for edited Drive link',
+      desc: 'Approved — waiting for enhanced upload',
       accent: 'text-green-400 border-green-500/30 bg-green-500/10',
       icon: PenTool,
       tab: 'editor' as FilteringDashTab,
@@ -537,26 +535,8 @@ function FilteringDaySessions({
                     >
                       Selection
                     </Link>
-                    {b.driveLink && (
-                      <a
-                        href={b.driveLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-white/10 bg-white/5 hover:bg-white/10 text-caption font-semibold uppercase tracking-wider text-white/70"
-                      >
-                        Gallery <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
                     {hasRawPhotoSubmission(b) && (
                       <>
-                        <a
-                          href={b.rawPhotoLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-primary/30 bg-primary/10 hover:bg-primary/20 text-caption font-semibold uppercase tracking-wider text-primary"
-                        >
-                          5 picks <ExternalLink className="w-3 h-3" />
-                        </a>
                         {(b.rawPhotoStatus || 'Pending Review') === 'Pending Review' && (
                           <button
                             type="button"

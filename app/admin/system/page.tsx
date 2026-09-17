@@ -10,11 +10,10 @@ import EmailTestSettings from '@/components/email-test-settings'
 import ShootStorageCleanup from '@/components/shoot-storage-cleanup'
 import { adminBtnGhost, adminCard, adminPage, adminPanel } from '@/lib/admin-ui'
 
-type DriveHealth = {
-  connected: boolean
-  oauthAppConfigured: boolean
-  accountEmail: string | null
-  rootFolderName: string | null
+type StorageHealth = {
+  configured: boolean
+  provider: string
+  privateBucket: boolean
 }
 
 type EmailHealth = {
@@ -25,17 +24,17 @@ type EmailHealth = {
 
 export default function SystemPage() {
   const [health, setHealth, loading, setLoading, refreshing] = useCachedPageRead<{
-    drive: DriveHealth | null; email: EmailHealth | null
+    storage: StorageHealth | null; email: EmailHealth | null
   } | null>('admin:system-health', null)
-  const drive = health?.drive
+  const storage = health?.storage
   const email = health?.email
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [driveResult, emailResult] = await Promise.allSettled([
-      fetch('/api/integrations/google-drive', { cache: 'no-store', credentials: 'include' }).then(async (response) => {
-        const body = (await response.json().catch(() => ({}))) as DriveHealth & { error?: string }
-        if (!response.ok) throw new Error(body.error || 'Drive health check failed.')
+    const [storageResult, emailResult] = await Promise.allSettled([
+      fetch('/api/storage/settings', { cache: 'no-store', credentials: 'include' }).then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as StorageHealth & { error?: string }
+        if (!response.ok) throw new Error(body.error || 'Storage health check failed.')
         return body
       }),
       fetch('/api/emails/health', { cache: 'no-store', credentials: 'include' }).then(async (response) => {
@@ -45,7 +44,7 @@ export default function SystemPage() {
       }),
     ])
     setHealth({
-      drive: driveResult.status === 'fulfilled' ? driveResult.value : null,
+      storage: storageResult.status === 'fulfilled' ? storageResult.value : null,
       email: emailResult.status === 'fulfilled' ? emailResult.value : null,
     })
     setLoading(false)
@@ -59,7 +58,7 @@ export default function SystemPage() {
     <div className={adminPage}>
       <AdminPageHeader
         title="System"
-        subtitle="Manage Google Drive, email, and reminder settings."
+        subtitle="Manage private storage, email, and reminder settings."
         onRefresh={() => void load()}
         refreshing={refreshing}
       />
@@ -81,15 +80,13 @@ export default function SystemPage() {
         />
         <StatusCard
           icon={Cloud}
-          title="Google Drive"
-          value={loading ? 'Checking…' : drive?.connected ? 'Connected' : 'Action needed'}
-          tone={drive?.connected ? 'good' : 'warning'}
+          title="Private storage"
+          value={loading ? 'Checking…' : storage?.configured ? 'Configured' : 'Action needed'}
+          tone={storage?.configured ? 'good' : 'warning'}
           detail={
-            drive?.connected
-              ? `${drive.accountEmail || 'Drive account'} · ${drive.rootFolderName || 'FICOMANA SHOOTS'}`
-              : drive?.oauthAppConfigured
-                ? 'Connect your studio Google account before uploading or delivering photos.'
-                : 'Google Drive setup is incomplete. Ask your administrator to finish the connection.'
+            storage?.configured
+              ? `${storage.provider} · ${storage.privateBucket ? 'Private bucket' : 'Review bucket privacy'}`
+              : 'Cloudflare R2 credentials are incomplete. Ask your administrator to finish the server configuration.'
           }
         />
         <StatusCard
@@ -108,13 +105,13 @@ export default function SystemPage() {
       <section className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
         <div>
           <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Production storage</p>
-          <h2 className="mt-1 text-sm font-semibold">Google Drive folder and portal settings</h2>
-          <p className="mt-1 text-xs text-white/40">Connect the account, choose the root folder, and manage live client portals.</p>
+          <h2 className="mt-1 text-sm font-semibold">Private storage and portal settings</h2>
+          <p className="mt-1 text-xs text-white/40">Review storage readiness, retention controls, and live client portals.</p>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <ShootStorageCleanup />
           <Link href="/admin/provisioning" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
-            Manage Google Drive <ExternalLink className="size-3.5" />
+            Manage Storage <ExternalLink className="size-3.5" />
           </Link>
         </div>
       </section>

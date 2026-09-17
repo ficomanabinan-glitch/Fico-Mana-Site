@@ -11,12 +11,6 @@ export function requireTrustedHttpsUrl(value: string, allowedHosts: readonly str
   return url
 }
 
-export function googleThumbnailUrl(value: string) {
-  const host = new URL(value).hostname.toLowerCase()
-  const allowed = /^(lh[0-9]+|drive)\.googleusercontent\.com$/.test(host) || /^lh[0-9]+\.ggpht\.com$/.test(host)
-  return requireTrustedHttpsUrl(value, allowed ? [host] : [])
-}
-
 export async function readBoundedResponse(response: Response, maximumBytes: number) {
   if (!response.body || Number(response.headers.get('content-length') || 0) > maximumBytes) {
     await response.body?.cancel()

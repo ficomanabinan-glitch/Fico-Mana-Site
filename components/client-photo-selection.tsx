@@ -99,7 +99,7 @@ export function ClientPhotoSelection({
   paymentSummary: { packageAmount: number; amountPaid: number }
   sampleMode?: boolean
   onLoadMore: () => void
-  onSubmitted: (photos?: { url?: string; warning?: string }) => Promise<void>
+  onSubmitted: () => Promise<void>
   onPricingChange?: (summary: AddonPreview) => void
   onProgressChange?: (progress: ClientSelectionProgress) => void
   headerContent?: ReactNode
@@ -350,7 +350,7 @@ export function ClientPhotoSelection({
           acknowledgeNoRevision: acknowledged,
         }),
       })
-      const body = (await response.json().catch(() => ({}))) as { error?: string; code?: string; allPhotosUrl?: string; allPhotosWarning?: string }
+      const body = (await response.json().catch(() => ({}))) as { error?: string; code?: string }
       if (response.ok || body.code === 'SELECTION_SUBMITTED_REFRESH_FAILED') {
         clearPortalDraft(draftKey)
         setDraftFinished(true)
@@ -363,7 +363,7 @@ export function ClientPhotoSelection({
       }
       toast.success('Selection submitted', 'Your photographs and print choices are now with FICO MANA.')
       updateStep('review')
-      await onSubmitted({ url: body.allPhotosUrl, warning: body.allPhotosWarning })
+      await onSubmitted()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Selection submission failed.')
     } finally {

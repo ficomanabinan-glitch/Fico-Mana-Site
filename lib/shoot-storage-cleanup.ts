@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
+import { assertStorageKeyOwnership } from '@/lib/storage/storage-keys'
 
 export const cleanupCategories = ['RAW', 'SELECTED', 'EDITED', 'DELIVERABLES'] as const
 export const cleanupRangeSchema = z.enum(['7days', 'month', 'all'])
@@ -19,18 +20,19 @@ export function cleanupDateRange(range: CleanupRange, now = new Date()) {
   return { from: start.toISOString().slice(0, 10), to: today }
 }
 
-const driveId = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/)
-export const cleanupFileSchema = z.object({
-  id: driveId, name: z.string().max(1000), category: z.enum(cleanupCategories),
-  // Direct parent first, ending at the configured root. Never follow shortcuts.
-  parents: z.array(driveId).min(5).max(12),
-  fingerprint: z.string().max(500),
+const storageKey = z.string().trim().min(20).max(1_024)
+const cleanupFileSchema = z.object({
+  id: storageKey,
+  storageKey,
+  name: z.string().max(1_000),
+  category: z.enum(cleanupCategories),
+  fingerprint: z.string().max(1_000),
 }).strict()
 export type CleanupFile = z.infer<typeof cleanupFileSchema>
+
 const grantSchema = z.object({
-  version: z.literal(1), workspaceId: z.string().uuid(), actorId: z.string().uuid(),
-  bookingId: z.string().min(1).max(160), rootId: driveId,
-  shootDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  version: z.literal(2), workspaceId: z.string().uuid(), actorId: z.string().uuid(),
+  bookingId: z.string().min(1).max(160), shootDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   files: z.array(cleanupFileSchema).min(1).max(CLEANUP_CHUNK_SIZE), expiresAt: z.number().int(),
 }).strict()
 export type CleanupGrant = z.infer<typeof grantSchema>
@@ -42,56 +44,54 @@ function signingKey() {
 }
 
 export function signCleanupGrant(grant: CleanupGrant) {
-  const encoded = Buffer.from(JSON.stringify(grantSchema.parse(grant))).toString('base64url')
-  const signature = createHmac('sha256', signingKey()).update(`shoot-cleanup:v1:${encoded}`).digest('base64url')
+  const parsed = grantSchema.parse(grant)
+  for (const file of parsed.files) assertStorageKeyOwnership(file.storageKey, parsed.workspaceId, parsed.bookingId)
+  const encoded = Buffer.from(JSON.stringify(parsed)).toString('base64url')
+  const signature = createHmac('sha256', signingKey()).update(`shoot-cleanup:v2:${encoded}`).digest('base64url')
   return `${encoded}.${signature}`
 }
 
 export function verifyCleanupGrant(token: string, workspaceId: string, actorId: string, now = Date.now()) {
-  if (token.length > 40_000) throw new Error('Invalid cleanup review.')
+  if (token.length > 60_000) throw new Error('Invalid cleanup review.')
   const [encoded, signature, extra] = token.split('.')
   if (!encoded || !signature || extra) throw new Error('Invalid cleanup review.')
-  const expected = createHmac('sha256', signingKey()).update(`shoot-cleanup:v1:${encoded}`).digest('base64url')
+  const expected = createHmac('sha256', signingKey()).update(`shoot-cleanup:v2:${encoded}`).digest('base64url')
   const left = Buffer.from(signature), right = Buffer.from(expected)
   if (left.length !== right.length || !timingSafeEqual(left, right)) throw new Error('Invalid cleanup review.')
   const grant = grantSchema.parse(JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')))
   if (grant.workspaceId !== workspaceId || grant.actorId !== actorId || grant.expiresAt <= now) {
     throw new Error('This review expired or belongs to another session.')
   }
-  if (new Set(grant.files.map(file => file.id)).size !== grant.files.length
-    || grant.files.some(file => file.id === grant.rootId || file.parents.at(-1) !== grant.rootId)) {
-    throw new Error('Invalid cleanup targets.')
-  }
+  if (new Set(grant.files.map(file => file.storageKey)).size !== grant.files.length) throw new Error('Invalid cleanup targets.')
+  for (const file of grant.files) assertStorageKeyOwnership(file.storageKey, workspaceId, grant.bookingId)
   return grant
 }
 
-export function cleanupFingerprint(file: { mimeType: string; size?: string; md5Checksum?: string; modifiedTime?: string }) {
-  return [file.mimeType, file.size || '', file.md5Checksum || '', file.modifiedTime || ''].join('|')
+export function cleanupFingerprint(file: { contentType?: string; size?: number; etag?: string | null; lastModified?: Date | string | null }) {
+  const modified = file.lastModified instanceof Date ? file.lastModified.toISOString() : file.lastModified || ''
+  return [file.contentType || '', String(file.size ?? ''), file.etag || '', modified].join('|')
 }
 
 export function validateCleanupFile(file: CleanupFile, current: {
-  id: string; name: string; mimeType: string; parents?: string[]; trashed?: boolean;
-  size?: string; md5Checksum?: string; modifiedTime?: string;
-}): 'present' | 'trashed' {
-  if (current.id !== file.id || current.mimeType === 'application/vnd.google-apps.folder'
-    || current.mimeType === 'application/vnd.google-apps.shortcut' || current.parents?.length !== 1
-    || current.parents[0] !== file.parents[0]) throw new Error('File location changed. Review again.')
-  if (current.trashed) return 'trashed'
-  if (cleanupFingerprint(current) !== file.fingerprint || current.name !== file.name) throw new Error('File changed since review. Review again.')
+  key: string; contentType?: string; size?: number; etag?: string | null; lastModified?: Date | string | null
+} | null): 'present' | 'deleted' {
+  if (!current) return 'deleted'
+  if (current.key !== file.storageKey || cleanupFingerprint(current) !== file.fingerprint) {
+    throw new Error('File changed since review. Review again.')
+  }
   return 'present'
 }
 
-export type CleanupOutcome = { id: string; name: string; status: 'trashed' | 'already_trashed' | 'failed'; error?: string }
+export type CleanupOutcome = { id: string; name: string; status: 'deleted' | 'already_deleted' | 'failed'; error?: string }
 
-/** Dependency-injected runner: production and tests use the same fail-closed ordering. */
+/** Dependency-injected runner keeps the fail-closed review and mutation order testable. */
 export async function runCleanupChunk(grant: CleanupGrant, dependencies: {
-  validate: (file: CleanupFile) => Promise<'present' | 'trashed'>
+  validate: (file: CleanupFile) => Promise<'present' | 'deleted'>
   auditStart: () => Promise<void>
   disablePortal: () => Promise<void>
-  trash: (file: CleanupFile) => Promise<void>
+  remove: (file: CleanupFile) => Promise<void>
   auditResult: (results: CleanupOutcome[]) => Promise<void>
 }) {
-  // No writes until every target in this chunk passes current ownership/path/content checks.
   const states = []
   for (const file of grant.files) states.push(await dependencies.validate(file))
   await dependencies.auditStart()
@@ -99,11 +99,10 @@ export async function runCleanupChunk(grant: CleanupGrant, dependencies: {
   const results: CleanupOutcome[] = []
   for (const [index, file] of grant.files.entries()) {
     try {
-      if (states[index] !== 'trashed') await dependencies.trash(file)
-      results.push({ id: file.id, name: file.name, status: states[index] === 'trashed' ? 'already_trashed' : 'trashed' })
+      if (states[index] !== 'deleted') await dependencies.remove(file)
+      results.push({ id: file.id, name: file.name, status: states[index] === 'deleted' ? 'already_deleted' : 'deleted' })
     } catch {
-      results.push({ id: file.id, name: file.name, status: 'failed',
-        error: 'File was not confirmed in Trash. Try: check Drive access, then review again.' })
+      results.push({ id: file.id, name: file.name, status: 'failed', error: 'File deletion was not confirmed. Review the shoot again.' })
     }
   }
   await dependencies.auditResult(results)

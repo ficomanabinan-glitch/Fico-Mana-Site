@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { normalizeCustomerFacebookUrl } from '../customer-facebook.ts'
 
 export const bookingReferenceSchema = z
   .string()
@@ -9,16 +10,6 @@ export const bookingReferenceSchema = z
 
 export const customerEmailSchema = z.string().trim().toLowerCase().email().max(320)
 
-export const googleDriveFolderUrlSchema = z
-  .string()
-  .trim()
-  .max(2_000)
-  .url()
-  .refine((value) => {
-    const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname === 'drive.google.com' && url.pathname.startsWith('/drive/folders/')
-  }, 'A Google Drive folder URL is required.')
-
 export const portalSessionSchema = z
   .object({
     publicId: z.string().trim().min(8).max(200),
@@ -28,19 +19,6 @@ export const portalSessionSchema = z
 
 export const publicBookingLookupSchema = z
   .object({ id: bookingReferenceSchema, email: customerEmailSchema })
-  .strict()
-
-export const publicRawSubmissionSchema = z
-  .object({
-    name: z.string().trim().min(2).max(160),
-    email: customerEmailSchema,
-    rawPhotoLink: googleDriveFolderUrlSchema,
-    bookingId: bookingReferenceSchema.optional(),
-  })
-  .strict()
-
-export const publicRawLinkSubmitSchema = z
-  .object({ email: customerEmailSchema, rawPhotoLink: googleDriveFolderUrlSchema })
   .strict()
 
 export const publicReceiptResubmitSchema = z
@@ -59,8 +37,6 @@ const portalPrintCategorySchema = z.enum([
   'FRAME_8R',
   'WALLET_SIZE',
 ])
-
-export const portalDrivePhotosSchema = z.object({ pin: z.string().regex(/^[0-9]{4}$/) }).strict()
 
 export const portalSelectionSchema = z
   .object({
@@ -95,7 +71,15 @@ export const portalSelectionSchema = z
   .strict()
 
 const databaseIdSchema = z.string().uuid()
-const driveFileIdSchema = z.string().trim().min(10).max(200).regex(/^[A-Za-z0-9_-]+$/)
+const storageKeySchema = z
+  .string()
+  .trim()
+  .min(20)
+  .max(1_024)
+  .refine(
+    (value) => value.startsWith('workspaces/') && !value.includes('..') && !value.includes('\\') && !value.startsWith('/'),
+    'Invalid storage key.',
+  )
 const uploadMimeTypeSchema = z
   .string()
   .trim()
@@ -128,8 +112,15 @@ export const editorUploadCompleteSchema = z
   .object({
     uploadJobId: databaseIdSchema,
     uploadFileId: databaseIdSchema,
-    driveFileId: driveFileIdSchema,
+    storageKey: storageKeySchema,
     mimeType: uploadMimeTypeSchema,
+    uploadId: z.string().trim().min(8).max(1_024).optional(),
+    parts: z
+      .array(
+        z.object({ partNumber: z.number().int().min(1).max(10_000), etag: z.string().trim().min(1).max(512) }).strict(),
+      )
+      .max(10_000)
+      .optional(),
   })
   .strict()
 
@@ -179,14 +170,20 @@ export const clientSelectionStatusSchema = z
   .strict()
 
 const optionalText = (maximum: number) => z.string().trim().max(maximum).optional()
-const optionalHttpsUrl = z
-  .string()
-  .trim()
-  .max(2_000)
-  .refine((value) => value === '' || (() => {
-    try { return new URL(value).protocol === 'https:' } catch { return false }
-  })(), 'URL must use HTTPS.')
-  .optional()
+const optionalHttpsUrl = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string' || value.trim() === '') return value
+    return normalizeCustomerFacebookUrl(value) ?? value
+  },
+  z
+    .string()
+    .trim()
+    .max(2_000)
+    .refine((value) => value === '' || (() => {
+      try { return new URL(value).protocol === 'https:' } catch { return false }
+    })(), 'URL must use HTTPS.')
+    .optional(),
+)
 
 const paymentRecordSchema = z
   .object({
@@ -236,13 +233,10 @@ export const bookingMutationSchema = z
     createdAt: z.string().trim().min(8).max(40),
     receiptUrl: z.string().trim().regex(/^\/api\/receipts\/[0-9a-f-]{36}$/i).max(100).optional(),
     paymentHistory: z.array(paymentRecordSchema).max(100),
-    driveLink: optionalHttpsUrl,
-    rawPhotoLink: optionalHttpsUrl,
-    rawPhotoStatus: z.enum(['Pending Review', 'Approved', 'Rejected']).optional(),
+    rawPhotoStatus: z.enum(['Pending Review', 'Approved', 'Rejected', 'Reopened']).optional(),
     rawPhotoNotes: optionalText(5_000),
     rawPhotoSubmittedAt: optionalText(40),
     rawPhotoApprovedAt: optionalText(40),
-    editedPhotoLink: optionalHttpsUrl,
     editedPhotoDeliveredAt: optionalText(40),
   })
   .strict()

@@ -8,7 +8,7 @@ export function isNewAdminHost(host: string | null | undefined) {
 export function newAdminAlias(host: string | null, pathname: string) {
   if (!isNewAdminHost(host)) return null
   if (pathname === '/' || pathname === '/admin/dashboard') return '/newadmin'
-  if (pathname === '/admin' || pathname === '/admin/mfa' ||
+  if (pathname === '/admin' || pathname.startsWith('/admin/') ||
       /^\/(newadmin|api|auth|_next)(\/|$)/.test(pathname) || /\.[a-z0-9]{1,8}$/i.test(pathname)) return null
   return `/newadmin${pathname}`
 }
@@ -20,7 +20,7 @@ export const newAdminSections = {
   editor: { title: 'Editing queue', description: 'See which batches are waiting, downloaded or delivered.' },
   selections: { title: 'Photo selections', description: 'Review enhancement choices, free prints and add-ons.' },
   payments: { title: 'Payments', description: 'Track verified collections and outstanding balances.' },
-  drive: { title: 'Google Drive', description: 'Check client folders and the studio connection.' },
+  storage: { title: 'Private storage', description: 'Check project storage and portal readiness.' },
   reports: { title: 'Reports', description: 'Review sales and operating expenses for the month.' },
   settings: { title: 'Studio settings', description: 'View package rules and open the existing management tools.' },
 } as const

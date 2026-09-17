@@ -19,12 +19,11 @@ export async function POST(request: Request) {
 
     if (isSupabaseConfigured()) {
       const admin = getSupabaseAdmin()
-      if (admin) {
-        dismissed += await markBookingNotificationsReadInDb(admin, bookingId)
-      }
+      if (!admin) throw new Error('Notification storage unavailable')
+      dismissed = await markBookingNotificationsReadInDb(admin, bookingId)
+    } else {
+      dismissed = await markServerNotificationsReadForBooking(bookingId)
     }
-
-    dismissed += await markServerNotificationsReadForBooking(bookingId)
 
     return NextResponse.json({ ok: true, dismissed })
   } catch (error) {

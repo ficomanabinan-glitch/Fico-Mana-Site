@@ -68,8 +68,8 @@ async function handle(request: Request, execute: boolean) {
     return NextResponse.json(result, { headers })
   } catch {
     return NextResponse.json({ error: execute
-      ? 'Cleanup was not fully confirmed. The portal may be disabled and selected files or folders may already be in Trash. Try: check Google Drive Trash and review again; moved, changed, or expired targets need a new review.'
-      : 'The shoot storage could not be reviewed. Nothing was deleted. Try: check Drive access, finish any uploads, and check the folder settings in Client Portals. Already-trashed or changed folders need a fresh review.' }, { status: 409, headers })
+      ? 'Cleanup was not fully confirmed. The portal may be disabled and some private objects may already be deleted. Review the shoot again before retrying.'
+      : 'The shoot storage could not be reviewed. Nothing was deleted. Finish active uploads, confirm private storage is configured, and review again.' }, { status: 409, headers })
   }
 }
 

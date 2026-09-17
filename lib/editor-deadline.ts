@@ -116,7 +116,7 @@ export function workingDaysUntil(from: Date, to: Date): number {
 }
 
 export function getEditorDeadlineInfo(booking: {
-  editedPhotoLink?: string
+  editedPhotoDeliveredAt?: string
   bookingDate?: string
   rawPhotoApprovedAt?: string
   rawPhotoSubmittedAt?: string
@@ -128,7 +128,7 @@ export function getEditorDeadlineInfo(booking: {
   delivered: boolean
   label: string
 } {
-  const delivered = Boolean(booking.editedPhotoLink)
+  const delivered = Boolean(booking.editedPhotoDeliveredAt)
   const start = getEditorDeadlineStart(booking)
   const end = getEditorDeadlineEnd(booking)
   if (!end) {

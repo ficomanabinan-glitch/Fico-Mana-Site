@@ -43,7 +43,7 @@ test('cache enforces memory bounds, clears across portals and never prefetches e
   await cache.load(photo(1)); await cache.load(photo(2)); await cache.load(photo(3))
   assert.equal(cache.peek(photo(1)), null)
   assert.ok(cache.peek(photo(3)))
-  assert.equal(await cache.load('https://drive.google.com/private'), null)
+  assert.equal(await cache.load('https://account.r2.cloudflarestorage.com/private?X-Amz-Signature=synthetic'), null)
   assert.equal(await cache.load(photo(3).replace('gallery', 'deliverable')), null)
   assert.equal(calls, 3)
   cache.clear(); assert.equal(cache.peek(photo(3)), null)

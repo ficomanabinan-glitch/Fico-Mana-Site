@@ -24,8 +24,8 @@ const onsiteReact = { ...React, useState(value: unknown) {
     const index = stateIndex++
     const schedule = { shootDate: '2026-09-08', batch: { id: 'synthetic-batch', jobs: [{
       bookingId: 'FM-EXAMPLE', customerName: 'Sample Client With a Longer Name', packageName: 'MANA PACKAGE',
-      bookingTime: '1:30 PM - 3:00 PM · SLOT 1', galleryCount: 22, lastUploadAt: '2026-09-07T15:43:04Z', rawFolderDriveId: 'synthetic-folder',
-      lastError: 'The original photo BNI00372.JPG is no longer available. Try: ask the studio to restore or re-upload the original to your RAW folder and click Sync Drive, then submit your selection again.',
+      bookingTime: '1:30 PM - 3:00 PM · SLOT 1', galleryCount: 22, lastUploadAt: '2026-09-07T15:43:04Z', storageReady: true,
+      lastError: 'The original photo BNI00372.JPG is no longer available. Try: ask the studio to restore or re-upload it and refresh the gallery, then submit your selection again.',
     }] } }
     const progress = { 'FM-EXAMPLE': { uploaded: 2, total: 11, failed: [], bytesProcessed: 135 * 1024 * 1024, totalBytes: 550 * 1024 * 1024,
       activeFiles: [0,1,2].map(index => ({ index, name: `BNI0037${index}.JPG`, loaded: (index + 1) * 8 * 1024 * 1024, total: 50 * 1024 * 1024, verifying: false })), status: 'uploading', lastError: null } }
@@ -51,7 +51,7 @@ const { default: EditorQueue } = loadTs<{ default: React.ComponentType<{basePath
   '@/components/admin-toast-provider': {useAdminToast:()=>({})}, '@/components/editor-page-skeleton': {}, '@/lib/admin-ui': ui,
   '@/lib/editor-read-cache': {
     getRememberedEditorQueueUi: () => ({groupMode:'day',dateSortOrder:'asc',filter:'ALL',search:'',packageFilter:'ALL'}),
-    getCachedEditorBatches: () => [{id:'FM-BATCH-2026-09-08-MAIN',shootDate:'2026-09-08',totalClients:1,totalSelectedPhotos:0,driveDayFolderUrl:'#',
+    getCachedEditorBatches: () => [{id:'FM-BATCH-2026-09-08-MAIN',shootDate:'2026-09-08',totalClients:1,totalSelectedPhotos:0,storageReady:true,
       clients:[{clientName:'Sample Client',bookingId:'FM-EXAMPLE',clientId:'example',packageName:'MANA PACKAGE'}],
       counts:{waitingForSelection:1,readyForEditing:0,downloaded:0,editing:0,readyToUpload:0,uploading:0,delivered:0,failed:0}}],
   },

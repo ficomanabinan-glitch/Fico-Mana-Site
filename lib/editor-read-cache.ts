@@ -28,7 +28,7 @@ export type EditorBatchSummary = {
     failed: number
   }
   clients: EditorBatchClient[]
-  driveDayFolderUrl: string
+  storageReady: boolean
 }
 
 export type EditorQueueUiState = {

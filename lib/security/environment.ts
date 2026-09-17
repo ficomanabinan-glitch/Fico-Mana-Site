@@ -28,20 +28,17 @@ export function validateProductionSecurityEnvironment() {
   if (!portalSecret) issues.push({ name: 'PORTAL_SIGNING_SECRET', reason: 'is missing' })
   else if (portalSecret.length < 32) issues.push({ name: 'PORTAL_SIGNING_SECRET', reason: 'effective value must be at least 32 characters' })
   requireValue(issues, 'SECURITY_HASH_SECRET', 32)
-  requireValue(issues, 'GOOGLE_CLIENT_ID')
-  requireValue(issues, 'GOOGLE_CLIENT_SECRET')
-  const googleTokenKey = value('GOOGLE_TOKEN_ENCRYPTION_KEY')
-  if (!googleTokenKey) issues.push({ name: 'GOOGLE_TOKEN_ENCRYPTION_KEY', reason: 'is missing' })
-  else if (googleTokenKey.length < 32) issues.push({ name: 'GOOGLE_TOKEN_ENCRYPTION_KEY', reason: 'effective value must be at least 32 characters' })
-  requireValue(issues, 'GOOGLE_OAUTH_STATE_SECRET', 32)
-  requireValue(issues, 'GOOGLE_DRIVE_ALLOWED_EMAIL')
+  requireValue(issues, 'CLOUDFLARE_ACCOUNT_ID')
+  requireValue(issues, 'R2_ACCESS_KEY_ID')
+  requireValue(issues, 'R2_SECRET_ACCESS_KEY')
+  requireValue(issues, 'R2_BUCKET_NAME')
+  requireValue(issues, 'R2_ENDPOINT')
   requireValue(issues, 'RESEND_API_KEY')
 
   const independentKeys = [
     ['SUPABASE_SECRET_KEY', serviceSecret],
     ['PORTAL_SIGNING_SECRET', portalSecret],
-    ['GOOGLE_TOKEN_ENCRYPTION_KEY', googleTokenKey],
-    ['GOOGLE_OAUTH_STATE_SECRET', value('GOOGLE_OAUTH_STATE_SECRET')],
+    ['R2_SECRET_ACCESS_KEY', value('R2_SECRET_ACCESS_KEY')],
     ['SECURITY_HASH_SECRET', value('SECURITY_HASH_SECRET')],
   ]
   const seen = new Set<string>()

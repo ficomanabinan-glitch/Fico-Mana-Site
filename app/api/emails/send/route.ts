@@ -3,7 +3,7 @@ import type { Booking, PaymentRecord } from '@/lib/data-store'
 import type { EmailAction } from '@/lib/email-dispatch'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { loadBookingById } from '@/lib/booking-load'
-import { bookingReferenceSchema, googleDriveFolderUrlSchema } from '@/lib/security/schemas'
+import { bookingReferenceSchema } from '@/lib/security/schemas'
 import {
   sendBookingCreatedEmail,
   sendBookingSubmittedEmail,
@@ -17,7 +17,6 @@ import {
   sendBookingCancelledEmail,
   sendBookingRescheduledEmail,
   sendBookingReminderEmail,
-  sendGalleryLinkEmail,
 } from '@/lib/email'
 
 type Body = {
@@ -27,7 +26,6 @@ type Body = {
   reason?: string
   reasonId?: string
   rebookingFee?: number
-  driveLink?: string
 }
 
 export async function POST(request: Request) {
@@ -36,7 +34,7 @@ export async function POST(request: Request) {
     if (authError) return authError
 
     const body = (await request.json()) as Body
-    const { action, reason, reasonId, rebookingFee, driveLink } = body
+    const { action, reason, reasonId, rebookingFee } = body
 
     if (!bookingReferenceSchema.safeParse(body.booking?.id).success) {
       return NextResponse.json({ error: 'Invalid booking payload' }, { status: 400 })
@@ -47,8 +45,7 @@ export async function POST(request: Request) {
     if ((body.payment && !payment) ||
       (reason !== undefined && (typeof reason !== 'string' || reason.length > 1_000)) ||
       (reasonId !== undefined && (typeof reasonId !== 'string' || reasonId.length > 100)) ||
-      (rebookingFee !== undefined && (!Number.isFinite(rebookingFee) || rebookingFee < 0 || rebookingFee > 10_000_000)) ||
-      (driveLink !== undefined && !googleDriveFolderUrlSchema.safeParse(driveLink).success)) {
+      (rebookingFee !== undefined && (!Number.isFinite(rebookingFee) || rebookingFee < 0 || rebookingFee > 10_000_000))) {
       return NextResponse.json({ error: 'Invalid email request' }, { status: 400 })
     }
 
@@ -97,10 +94,6 @@ export async function POST(request: Request) {
         break
       case 'booking_reminder':
         result = await sendBookingReminderEmail(booking)
-        break
-      case 'gallery_link':
-        if (!driveLink) return NextResponse.json({ error: 'Drive link required' }, { status: 400 })
-        result = await sendGalleryLinkEmail(booking, driveLink)
         break
       default:
         return NextResponse.json({ error: 'Unknown email action' }, { status: 400 })

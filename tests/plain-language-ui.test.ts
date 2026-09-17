@@ -46,10 +46,8 @@ test('report and system labels describe business records and keep truthful email
   assert.match(email, /Check the inbox and spam folder to confirm delivery/)
   const reminders = await readFile('app/api/admin/shoot-reminders/route.ts', 'utf8')
   const booking = await readFile('app/api/bookings/[id]/route.ts', 'utf8')
-  const googleConnection = await readFile('lib/google-oauth.ts', 'utf8')
   assert.doesNotMatch(reminders, /complete the shoot-reminder database setup/)
   assert.doesNotMatch(booking, /(?:save|delete) booking (?:to|from) database/)
-  assert.doesNotMatch(googleConnection, /throw new Error\('(?:OAuth|Google did not return an offline refresh token)/)
 })
 
 test('admin pages no longer render the storage subscription Ops Note', async () => {

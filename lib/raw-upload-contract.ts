@@ -10,6 +10,11 @@ export const rawUploadMetadataSchema = z.object({
 }).strict()
 export const rawUploadCompleteSchema = z.object({
   grant: z.string().min(20).max(6000),
-  driveFileId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),
+  storageKey: z.string().min(20).max(1024),
+  uploadId: z.string().min(8).max(2048).optional(),
+  parts: z.array(z.object({
+    partNumber: z.number().int().min(1).max(10_000),
+    etag: z.string().min(8).max(180),
+  }).strict()).max(10_000).optional(),
 }).strict()
 export type RawUploadMetadata = z.infer<typeof rawUploadMetadataSchema>

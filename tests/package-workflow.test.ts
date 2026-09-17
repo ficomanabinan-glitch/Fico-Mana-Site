@@ -94,7 +94,7 @@ test('graduation package lookup paginates rather than dropping custom packages a
   assert.equal((await graduationPackageIds(admin)).length, 1005)
 })
 
-test('real self-portrait provisioning confirms payment without creating a portal, Drive folders, or provisioning state', async () => {
+test('real self-portrait provisioning confirms payment without creating a portal or photo-storage state', async () => {
   const booking = { id: 'SELF-TEST', workspace_id: 'studio', package_id: 'self-custom', package_name: 'Sample Self Portrait',
     customer_name: 'Synthetic client', booking_date: '2026-09-09', booking_status: 'Pending Payment', payment_status: 'Unpaid', price: 350, deposit_amount: 0 }
   const { admin, writes, reads } = mockAdmin({
@@ -104,8 +104,7 @@ test('real self-portrait provisioning confirms payment without creating a portal
   let externalWrites = 0
   const provisioning = loadTs<typeof import('../lib/booking-provisioning.ts')>('lib/booking-provisioning.ts', {
     '@/lib/booking-db': bookingDb,
-    '@/lib/drive-folder-mappings': {},
-    '@/lib/google-drive': { ensureShootHierarchy: async () => { externalWrites++; throw new Error('Unexpected Drive creation') } },
+    '@/lib/storage/storage-keys': { bookingStoragePrefix: () => { externalWrites++; throw new Error('Unexpected storage creation') } },
     '@/lib/client-portal': {}, '@/lib/portal-expiry': {},
     '@/lib/portal-email': { sendPortalAccessIfNeeded: async () => { externalWrites++; throw new Error('Unexpected portal email') } },
     '@/lib/supabase/admin': { getSupabaseAdmin: () => admin },
@@ -126,23 +125,21 @@ test('real self-portrait provisioning confirms payment without creating a portal
 
 test('all resource creation paths are guarded while ordinary payment confirmation remains before the skip', async () => {
   const provisioning = await readFile('lib/booking-provisioning.ts', 'utf8')
-  const drive = await readFile('lib/google-drive.ts', 'utf8')
   const editor = await readFile('lib/editor-workflow.ts', 'utf8')
   const overview = await readFile('app/api/provisioning/route.ts', 'utf8')
   const email = await readFile('lib/portal-email.ts', 'utf8')
   const provision = provisioning.slice(provisioning.indexOf('export async function provisionBookingResources'), provisioning.indexOf('export async function disableClientPortal'))
   const skip = provision.indexOf('if (!requiresPhotoWorkflow || !row) return null')
   assert.ok(skip > provision.indexOf(".update({ booking_status: 'Confirmed'"))
-  assert.ok(skip < provision.indexOf('const hierarchy = await ensureShootHierarchy'))
-  assert.ok(skip < provision.indexOf('const ensuredPortal = await ensurePortal'))
+  assert.ok(skip < provision.indexOf('storagePrefix = bookingStoragePrefix'))
+  assert.equal(provision.includes('const ensuredPortal = await ensurePortal'), false)
+  assert.match(provision, /first completed onsite upload activates the portal/i)
   assert.match(provision, /requiresPhotoWorkflow \? await getProvisioningRow\(admin, bookingId\) : null/)
   const snapshot = provisioning.slice(provisioning.indexOf('export async function getProvisioningSnapshot'), provisioning.indexOf('export async function provisionBookingResources'))
   assert.ok(snapshot.indexOf('packageUsesGraduationWorkflow') < snapshot.indexOf('getProvisioningRow('))
-  const hierarchy = drive.slice(drive.indexOf('export async function ensureShootHierarchy'))
-  assert.ok(hierarchy.indexOf('assertGraduationBooking') < hierarchy.indexOf('resolveDriveRootFolder'))
   assert.match(editor, /async function ensurePortal\([^]+?\{\s*await assertGraduationBooking\(admin, bookingId, workspaceId\)/)
-  assert.match(editor, /async function ensureBookingFolders\([^]+?\{\s*await assertGraduationBooking\(admin, bookingId, workspaceId\)/)
-  const repair = editor.slice(editor.indexOf('export async function reconcileBookingFolders'), editor.indexOf('export async function saveRawFile'))
+  assert.match(editor, /export async function ensureBookingStorage\([^]+?\{\s*await assertGraduationBooking\(admin, bookingId, workspaceId\)/)
+  const repair = editor.slice(editor.indexOf('export async function reconcileBookingStorage'), editor.indexOf('export async function saveRawFile'))
   assert.ok(repair.indexOf('assertGraduationBooking') < repair.indexOf('if (repair)'))
   assert.match(editor, /\.in\('package_id', eligiblePackageIds\)/)
   assert.match(editor, /bookingMap.has\(String\(job.booking_id\)\)/)

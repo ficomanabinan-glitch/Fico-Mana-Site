@@ -20,11 +20,11 @@ const child = spawn(process.execPath, [nextBin, 'start', '--hostname', '127.0.0.
     SUPABASE_SECRET_KEY: 'sb_secret_runtime_check',
     PORTAL_SIGNING_SECRET: 'runtime-check-portal-signing-secret-00000000',
     SECURITY_HASH_SECRET: 'runtime-check-security-hash-secret-000000000',
-    GOOGLE_CLIENT_ID: 'runtime-check.apps.googleusercontent.com',
-    GOOGLE_CLIENT_SECRET: 'runtime-check-client-secret',
-    GOOGLE_TOKEN_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000',
-    GOOGLE_OAUTH_STATE_SECRET: 'runtime-check-google-oauth-state-secret-000000',
-    GOOGLE_DRIVE_ALLOWED_EMAIL: 'runtime-check@example.com',
+    CLOUDFLARE_ACCOUNT_ID: 'runtime-check-account',
+    R2_ACCESS_KEY_ID: 'runtime-check-access-key',
+    R2_SECRET_ACCESS_KEY: 'runtime-check-secret-key',
+    R2_BUCKET_NAME: 'runtime-check-private-bucket',
+    R2_ENDPOINT: 'https://runtime-check-account.r2.cloudflarestorage.com',
     RESEND_API_KEY: 're_runtime_check_not_a_real_key',
     NEXT_PUBLIC_STAGING_ADMIN_EMAIL: '',
     NEXT_PUBLIC_STAGING_ADMIN_PASSWORD: '',
@@ -74,9 +74,10 @@ try {
   assert.equal(hostilePortalMutation.status, 403)
   assertPrivateResponse(hostilePortalMutation, 'hostile portal mutation')
 
-  const hostileAdminMutation = await fetch(`${baseUrl}/api/integrations/google-drive/disconnect`, {
-    method: 'POST',
-    headers: { origin: 'https://attacker.example' },
+  const hostileAdminMutation = await fetch(`${baseUrl}/api/storage/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', origin: 'https://attacker.example' },
+    body: JSON.stringify({ portalExpiryDays: 30 }),
   })
   assert.equal(hostileAdminMutation.status, 403)
   assertPrivateResponse(hostileAdminMutation, 'hostile admin mutation')
@@ -105,7 +106,7 @@ try {
     assert.equal(hostile.status, 403)
     assertPrivateResponse(hostile, `hostile raw ${action}`)
   }
-  assert.match(home.headers.get('content-security-policy') || '', /https:\/\/www\.googleapis\.com\/upload\/drive\/v3\//)
+  assert.match(home.headers.get('content-security-policy') || '', /connect-src[^;]*https:\/\/\*\.r2\.cloudflarestorage\.com/i)
 
   console.log('Production HTTP security checks passed.')
 } finally {

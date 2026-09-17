@@ -6,6 +6,10 @@ import { PGlite } from '@electric-sql/pglite'
 const ws = '00000000-0000-4000-8000-000000000001'
 const actor = '00000000-0000-4000-8000-000000000002'
 const submitted = '2026-09-08T01:00:00Z'
+const cleanup = readFileSync('supabase/migrations/20260914142027_remove_retired_storage_contract.sql','utf8')
+const matchedReviewFunction = cleanup.match(/create or replace function public\.review_portal_selection\([\s\S]*?grant execute on function public\.review_portal_selection\([\s\S]*?to service_role;/i)?.[0]
+if (!matchedReviewFunction) throw new Error('Current selection review function was not found.')
+const reviewFunction: string = matchedReviewFunction
 async function fixture() {
   const db = new PGlite()
   await db.exec(`
@@ -13,9 +17,9 @@ async function fixture() {
     create table workspace_members(workspace_id uuid,user_id uuid,role text);
     create table bookings(id varchar primary key,workspace_id uuid,raw_photo_status text,raw_photo_notes text,raw_photo_submitted_at timestamptz,raw_photo_approved_at timestamptz);
     create table editing_jobs(id uuid primary key default gen_random_uuid(),workspace_id uuid,booking_id varchar,status text,downloaded_at timestamptz,editing_started_at timestamptz,delivered_at timestamptz,download_lock_expires_at timestamptz,last_error text,updated_at timestamptz);
-    create table photo_selections(id uuid primary key default gen_random_uuid(),workspace_id uuid,booking_id varchar,status text,client_status text,raw_reset_id uuid,no_revision_acknowledged boolean default true,no_revision_acknowledged_at timestamptz,reopened_at timestamptz,version int default 1,updated_at timestamptz);
+    create table photo_selections(id uuid primary key default gen_random_uuid(),workspace_id uuid,booking_id varchar,status text,client_status text,raw_reset_id uuid,no_revision_acknowledged boolean default true,no_revision_acknowledged_at timestamptz,reopened_at timestamptz,version int default 1,required_count int default 5,updated_at timestamptz);
     create table workflow_audit_logs(workspace_id uuid,actor_type text,actor_id text,action text,booking_id varchar,metadata jsonb);
-    create table google_drive_settings(id integer,workspace_id uuid,portal_expiry_days integer);
+    create table storage_settings(id integer,workspace_id uuid,portal_expiry_days integer);
     create table client_portals(id uuid primary key default gen_random_uuid(),public_id uuid default gen_random_uuid(),workspace_id uuid,booking_id varchar,status text,expires_at timestamptz,first_download_at timestamptz,access_email_sent_at timestamptz,download_expiry_days integer,updated_at timestamptz);
     create table deliverable_files(workspace_id uuid,booking_id varchar);
     create table batch_upload_items(editing_job_id uuid,booking_id varchar);
@@ -23,12 +27,10 @@ async function fixture() {
     insert into bookings values('ONE','${ws}','Pending Review',null,'${submitted}',null);
     insert into editing_jobs(workspace_id,booking_id,status) values('${ws}','ONE','WAITING_FOR_SELECTION');
     insert into photo_selections(workspace_id,booking_id,status,client_status) values('${ws}','ONE','SUBMITTED','Submitted');
-    insert into google_drive_settings values(1,'${ws}',30);
+    insert into storage_settings values(1,'${ws}',30);
     insert into client_portals(workspace_id,booking_id,status,expires_at,access_email_sent_at,download_expiry_days,updated_at) values('${ws}','ONE','disabled',now()-interval '1 day',now()-interval '31 days',30,now());
   `)
-  await db.exec(readFileSync('supabase/migrations/20260908014747_manual_selection_review.sql','utf8'))
-  await db.exec(readFileSync('supabase/migrations/20260908185549_approved_selection_reopen.sql','utf8'))
-  await db.exec(readFileSync('supabase/migrations/20260908203450_fix_selection_review_upload_guard.sql','utf8'))
+  await db.exec(reviewFunction)
   const review = (action: string, workspace = ws, date = submitted) => db.query<{ result: {changed: boolean} }>(
     'select review_portal_selection($1,$2,$3,$4,$5,$6) result', [workspace,'ONE',actor,action,date,'Please choose a sharper photo.'])
   return { db, review }

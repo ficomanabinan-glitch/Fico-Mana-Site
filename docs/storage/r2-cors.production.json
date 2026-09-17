@@ -1,0 +1,26 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://ficomana.com",
+          "https://www.ficomana.com",
+          "https://admin.ficomana.com",
+          "https://editor.ficomana.com"
+        ],
+        "methods": ["GET", "HEAD", "PUT"],
+        "headers": [
+          "content-type",
+          "x-amz-meta-bookingid",
+          "x-amz-meta-uploadkey",
+          "x-amz-meta-generation",
+          "x-amz-meta-relativepath",
+          "x-amz-meta-filename",
+          "x-amz-meta-sha256"
+        ]
+      },
+      "exposeHeaders": ["etag", "content-length"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

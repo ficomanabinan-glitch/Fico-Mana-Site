@@ -45,7 +45,7 @@ test('provider failures give useful solutions and cannot become false successes'
   await assert.rejects(() => sendEmailHealthCheck(message, async () => { throw new Error('network down') }), /network down/)
 })
 
-test('test route keeps staff MFA, origin validation, rate limits and private responses without booking writes', async () => {
+test('test route keeps staff authentication, origin validation, rate limits and private responses without booking writes', async () => {
   const route = await readFile('app/api/emails/health/route.ts', 'utf8')
   assert.match(route, /requireStaffAuth\(request\)/)
   assert.match(route, /limit: 5, windowSeconds: 3600, failClosed: true/)

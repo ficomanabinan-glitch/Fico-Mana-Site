@@ -43,7 +43,9 @@ function fixture() {
   } }
   const code = readFileSync('lib/editor-workflow.ts', 'utf8')
   const reservation = code.slice(code.indexOf('async function reserveEnhancedUpload'), code.indexOf('export async function createDeliverableUploadSession'))
-  const { reserveEnhancedUpload } = loadTs<any>('lib/editor-workflow.ts', {}, `import { enhancedUploadName } from '@/lib/enhanced-upload-naming';
+  const hasSameFolderFilePath = (left: string, right: string) => left.replace(/\\/g, '/').toLowerCase() === right.replace(/\\/g, '/').toLowerCase()
+  const { reserveEnhancedUpload } = loadTs<any>('lib/editor-workflow.ts', { '@/lib/storage/file-name-policy': { hasSameFolderFilePath } }, `import { enhancedUploadName } from '@/lib/enhanced-upload-naming';
+    import { hasSameFolderFilePath } from '@/lib/storage/file-name-policy';
     const nowIso = () => new Date().toISOString(); export ${reservation}`)
   const reserve = (source = 'one.JPG', checksum = 'a'.repeat(64), item = 'item') => reserveEnhancedUpload(admin, 'studio', { id: item, editing_job_id: 'job' }, {
     bookingId: 'booking', relativePath: `EDITED/ENHANCED - ${source}`, fileName: `ENHANCED - ${source}`, mimeType: 'image/jpeg', fileSize: 12, checksum,
@@ -56,17 +58,19 @@ test('actual server reservation saves the new name before upload, reuses it acro
   assert.equal((await f.reserve()).fileName, 'ENHANCED 1 - ELRISH JOHN RULL.JPG')
   assert.equal(f.files[0].relative_path, 'EDITED/ENHANCED - one.JPG', 'Print matching retains the source name')
   assert.equal((await f.reserve('two.png')).fileName, 'ENHANCED 2 - ELRISH JOHN RULL.png')
-  assert.equal((await f.reserve('one.JPG', 'b'.repeat(64), 'retry-run')).fileName, 'ENHANCED 1 - ELRISH JOHN RULL.JPG')
+  f.deliveries.push({ workspace_id: 'studio', booking_id: 'booking', relative_path: 'EDITED/ENHANCED - one.JPG',
+    file_name: 'ENHANCED 1 - ELRISH JOHN RULL.JPG', storage_key: 'workspaces/studio/shoots/2026/09/14/booking/enhanced/existing.jpg', storage_status: 'available', checksum: 'a'.repeat(64) })
+  await assert.rejects(f.reserve('ONE.jpg', 'b'.repeat(64), 'retry-run'), /already (?:exists|uploaded or uploading) in this client folder/)
   assert.equal(f.job.download_lock_expires_at, null)
 })
 
-test('existing verified duplicates keep their filename and Drive ID; failed reads never reserve a name', async () => {
+test('existing verified duplicates keep their filename and R2 key; failed reads never reserve a name', async () => {
   const f = fixture()
   f.deliveries.push({ workspace_id: 'studio', booking_id: 'booking', relative_path: 'EDITED/ENHANCED - one.JPG',
-    file_name: 'ENHANCED - one.JPG', drive_file_id: 'existing-drive-file', checksum: 'a'.repeat(64) })
+    file_name: 'ENHANCED - one.JPG', storage_key: 'workspaces/studio/shoots/2026/09/14/booking/enhanced/existing.jpg', storage_status: 'available', checksum: 'a'.repeat(64) })
   const result = await f.reserve()
   assert.equal(result.duplicate, true); assert.equal(result.fileName, 'ENHANCED - one.JPG')
-  assert.equal(result.uploadFile.drive_file_id, 'existing-drive-file')
+  assert.equal(result.uploadFile.storage_key, 'workspaces/studio/shoots/2026/09/14/booking/enhanced/existing.jpg')
   const broken = fixture(); broken.failReads()
   await assert.rejects(broken.reserve(), /Could not verify/)
   assert.equal(broken.files.length, 0); assert.equal(broken.job.download_lock_expires_at, null)
@@ -78,6 +82,14 @@ test('competing reservations cannot allocate the same number', async () => {
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
   assert.equal(results.filter(result => result.status === 'rejected').length, 1)
   assert.equal((await f.reserve('two.JPG', 'b'.repeat(64), 'second-run')).fileName, 'ENHANCED 2 - ELRISH JOHN RULL.JPG')
+})
+
+test('a second upload run cannot reserve the same client-folder path with different casing', async () => {
+  const f = fixture()
+  await f.reserve('one.JPG', 'a'.repeat(64), 'first-run')
+  await assert.rejects(f.reserve('ONE.jpg', 'b'.repeat(64), 'second-run'), /already uploaded or uploading/)
+  assert.equal(f.files.length, 1)
+  assert.equal(f.job.download_lock_expires_at, null)
 })
 
 test('number allocation includes reservations beyond the database default result limit', async () => {

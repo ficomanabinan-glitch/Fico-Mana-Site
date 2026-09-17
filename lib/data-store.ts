@@ -50,15 +50,12 @@ export interface Booking extends Record<string, unknown> {
   createdAt: string
   receiptUrl?: string
   paymentHistory: PaymentRecord[]
-  driveLink?: string
-  rawPhotoLink?: string
   rawPhotoStatus?: 'Pending Review' | 'Approved' | 'Rejected' | 'Reopened'
   rawPhotoNotes?: string
   rawPhotoSubmittedAt?: string
   /** When editors approved the 5-pick — starts the 12-day edit window. */
   rawPhotoApprovedAt?: string
-  /** Final edited photos Drive folder — sent to client by editor. */
-  editedPhotoLink?: string
+  /** When the enhanced deliverables were published to the private client portal. */
   editedPhotoDeliveredAt?: string
 }
 
@@ -97,6 +94,22 @@ const BOOKINGS_KEY = 'ficomana_bookings'
 const BOOKINGS_AT_KEY = 'ficomana_bookings_cached_at'
 const NOTIFS_KEY = 'ficomana_notifications'
 const NOTIFS_AT_KEY = 'ficomana_notifications_cached_at'
+const ADMIN_CACHE_EPOCH_KEY = 'ficomana_admin_cache_epoch'
+const ADMIN_CACHE_EPOCH = '2026-09-15-r2-clean-start'
+const ADMIN_PERSISTED_READ_KEYS = [BOOKINGS_KEY, BOOKINGS_AT_KEY, NOTIFS_KEY, NOTIFS_AT_KEY] as const
+
+/**
+ * A production data reset must invalidate saved staff reads on every browser,
+ * including sessions that remain signed in across the deployment.
+ */
+function ensureAdminCacheEpoch() {
+  if (typeof window === 'undefined') return
+  try {
+    if (localStorage.getItem(ADMIN_CACHE_EPOCH_KEY) === ADMIN_CACHE_EPOCH) return
+    for (const key of ADMIN_PERSISTED_READ_KEYS) localStorage.removeItem(key)
+    localStorage.setItem(ADMIN_CACHE_EPOCH_KEY, ADMIN_CACHE_EPOCH)
+  } catch { /* Storage can be disabled; fresh API reads remain authoritative. */ }
+}
 
 let bookingsInFlight: Promise<Booking[]> | null = null
 let bookingsGeneration = 0
@@ -123,7 +136,7 @@ export function clearAdminReadCaches() {
   emailLogsInFlight = null
   if (typeof window !== 'undefined') {
     try {
-      for (const key of [BOOKINGS_KEY, BOOKINGS_AT_KEY, NOTIFS_KEY, NOTIFS_AT_KEY]) localStorage.removeItem(key)
+      for (const key of ADMIN_PERSISTED_READ_KEYS) localStorage.removeItem(key)
     } catch { /* Storage can be disabled; the in-memory caches are still cleared. */ }
   }
 }
@@ -132,6 +145,7 @@ export function clearAdminReadCaches() {
 export function peekBookings(): Booking[] | undefined {
   if (typeof window === 'undefined') return undefined
   try {
+    ensureAdminCacheEpoch()
     const raw = localStorage.getItem(BOOKINGS_KEY)
     if (!raw) return undefined
     const data = JSON.parse(raw)
@@ -149,6 +163,7 @@ function cacheIsFresh(at: number | null | undefined) {
 
 function cachedAt(key: string) {
   if (typeof window === 'undefined') return 0
+  ensureAdminCacheEpoch()
   return Number(localStorage.getItem(key) || 0)
 }
 
@@ -194,6 +209,7 @@ function cacheNotifications(notifs: Notification[]) {
 function getCachedBookings(): Booking[] {
   if (typeof window === 'undefined') return []
   try {
+    ensureAdminCacheEpoch()
     const data = localStorage.getItem(BOOKINGS_KEY)
     return data ? (JSON.parse(data) as Booking[]) : []
   } catch {
@@ -204,6 +220,7 @@ function getCachedBookings(): Booking[] {
 function getCachedNotifications(): Notification[] {
   if (typeof window === 'undefined') return []
   try {
+    ensureAdminCacheEpoch()
     const raw = localStorage.getItem(NOTIFS_KEY)
     return raw ? (JSON.parse(raw) as Notification[]) : []
   } catch {
@@ -278,6 +295,7 @@ export async function getBookings(options: { force?: boolean } = {}): Promise<Bo
 export function peekNotifications(): Notification[] | undefined {
   if (typeof window === 'undefined') return undefined
   try {
+    ensureAdminCacheEpoch()
     const raw = localStorage.getItem(NOTIFS_KEY)
     if (!raw) return undefined
     const data = JSON.parse(raw)

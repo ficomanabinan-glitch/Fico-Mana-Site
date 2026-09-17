@@ -34,7 +34,7 @@ The customer journey is booking → payment verification → shoot → RAW uploa
 
 The Client Portal bridges customers and production. After booking and payment verification, a portal is created or activated for the booking and the customer receives a secure link. Photographs, instructions, selections, progress, and deliverables are centralized there instead of requiring the client to assemble their project from Messenger conversations, emails, and separate Drive links.
 
-Google Drive is part of the file workflow. Client selections feed the editor queue; staff should not need to manually transcribe filenames from messages. Finished files return to the correct client's project and portal.
+Cloudflare R2 private object storage is the file workflow. Client selections feed the editor queue; staff should not need to manually transcribe filenames from messages. Finished files return to the correct client's project and secure portal through temporary signed access.
 
 The business operates in the Philippines. Existing pricing and payment displays use Philippine pesos, and scheduling must respect the studio's local timezone. Exact package prices, quantities, and availability come from configured business records.
 

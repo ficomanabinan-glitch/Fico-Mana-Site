@@ -1,0 +1,24 @@
+# Local design prototypes, browser profiles, and generated QA evidence are not
+# application runtime inputs and must never be uploaded with a deployment.
+/ficomana-proposal-newui
+/ficomana-proposal-newui/**
+.next/
+.vercel/output/
+artifacts/
+.audit/
+.agents/
+.codex/
+.staging-data/
+.pnpm-store/
+previews/
+skills-lock.json
+package-lock.json
+tsconfig.tsbuildinfo
+
+# Local verification and database operator files remain in source control but
+# are not required by the Vercel build or runtime bundle.
+tests/
+docs/
+/supabase/
+scripts/preview-onsite-ui.ts
+scripts/preview-portal-expiry.ts

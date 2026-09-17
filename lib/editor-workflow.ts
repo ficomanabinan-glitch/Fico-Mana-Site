@@ -1,17 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  copyDriveFile,
-  createDriveResumableUpload,
-  downloadDriveFile,
-  downloadDriveThumbnail,
-  ensureShootHierarchy,
-  findOrCreateFolder,
-  getDriveFile,
-  hashDriveFileSha256,
-  upsertDriveFile,
-} from '@/lib/google-drive'
-import { hasRequiredGoogleDriveScopes } from '@/lib/google-drive-scopes'
+import sharp from 'sharp'
 import { portalUrl } from '@/lib/client-portal'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { sendEditedPhotosEmail } from '@/lib/email'
@@ -21,14 +10,35 @@ import { safeMetadata } from '@/lib/security/audit-metadata'
 import { assertGraduationBooking, graduationBookingIds, graduationPackageIds } from '@/lib/package-workflow-server'
 import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { buildPrintManifest, type PrintManifest } from '@/lib/print-manifest'
-import { fulfillBookingPrints, savePrintManifest } from '@/lib/print-workflow'
-import { saveShootFolderMappings } from '@/lib/drive-folder-mappings'
+import { fulfillBookingPrints } from '@/lib/print-workflow'
 import { PortalSelectionError, resolvePortalSelectionSources } from '@/lib/portal-selection-source'
 export { PortalSelectionError } from '@/lib/portal-selection-source'
 import { rawUploadGeneration } from '@/lib/raw-upload-generation'
 import { addonPhotoError } from '@/lib/addon-photo-rules'
-import { readOnsiteDrivePhotos } from '@/lib/onsite-drive-sync'
 import { enhancedUploadName } from '@/lib/enhanced-upload-naming'
+import { prepareBookingStorage } from '@/lib/storage/booking-storage'
+import {
+  getObjectMetadata,
+  hashObjectSha256,
+  objectExists,
+  readObject,
+  uploadObject,
+} from '@/lib/storage/storage-service'
+import {
+  assertStorageKeyOwnership,
+  createDerivativeKey,
+  createStorageKey,
+  createStorageObjectId,
+} from '@/lib/storage/storage-keys'
+import { createDownloadUrl, createUploadUrl } from '@/lib/storage/presigned-urls'
+import { hasSameFolderFilePath } from '@/lib/storage/file-name-policy'
+import {
+  MULTIPART_PART_BYTES,
+  MULTIPART_THRESHOLD_BYTES,
+  completeMultipartUpload,
+  createMultipartPartUrl,
+  createMultipartUpload,
+} from '@/lib/storage/multipart-upload'
 
 export type EditingJobStatus =
   | 'WAITING_FOR_SELECTION'
@@ -120,10 +130,6 @@ function safeRelativePath(value: string) {
   return result
 }
 
-function driveFolderUrl(id: string | null | undefined) {
-  return id ? `https://drive.google.com/drive/folders/${encodeURIComponent(id)}` : ''
-}
-
 function batchCounts(jobs: Array<{ status: EditingJobStatus }>) {
   return {
     waitingForSelection: jobs.filter((job) => job.status === 'WAITING_FOR_SELECTION').length,
@@ -174,7 +180,7 @@ async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
     const { data, error } = await admin
       .from('bookings')
       .select(
-        'id,workspace_id,client_id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,booking_status,payment_status,price,deposit_amount,selection_limit,raw_photo_status,raw_photo_link,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_link,edited_photo_delivered_at',
+        'id,workspace_id,client_id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,booking_status,payment_status,price,deposit_amount,selection_limit,raw_photo_status,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_delivered_at',
       )
       .eq('workspace_id', workspaceId)
       .in('package_id', eligiblePackageIds)
@@ -218,14 +224,19 @@ export async function syncEditorWorkflow(workspaceId: string) {
     .eq('workspace_id', workspaceId)
   if (batchesError) throw new Error(batchesError.message)
   const liveBatchByDate = new Map((batches || []).map((batch) => [String(batch.shoot_date), String(batch.id)]))
-  const [{ data: selections }, { data: jobs }] = await Promise.all([
+  const [{ data: selections }, { data: jobs }, { data: uploadedFiles, error: uploadedFilesError }] = await Promise.all([
     admin.from('photo_selections').select('booking_id').eq('workspace_id', workspaceId),
     admin.from('editing_jobs').select('booking_id').eq('workspace_id', workspaceId),
+    admin.from('gallery_files').select('booking_id').eq('workspace_id', workspaceId).eq('storage_status', 'available'),
   ])
+  if (uploadedFilesError) throw new Error(uploadedFilesError.message)
   const selectionBookings = new Set((selections || []).map((row) => String(row.booking_id)))
   const jobBookings = new Set((jobs || []).map((row) => String(row.booking_id)))
+  const uploadedBookingIds = new Set((uploadedFiles || []).map((row) => String(row.booking_id)))
 
-  const missingSelections = bookings.filter((booking) => !selectionBookings.has(String(booking.id)))
+  const missingSelections = bookings.filter((booking) =>
+    uploadedBookingIds.has(String(booking.id)) && !selectionBookings.has(String(booking.id)),
+  )
   if (missingSelections.length) {
     const { error } = await admin.from('photo_selections').insert(
       missingSelections.map((booking) => ({
@@ -271,24 +282,29 @@ export async function getBatchList(
   { synchronize = true }: { synchronize?: boolean } = {},
 ) {
   const admin = adminClient()
-  const [bookings, { data: batches, error: batchError }, { data: jobs, error: jobsError }] = await Promise.all([
+  const [bookings, { data: batches, error: batchError }, { data: jobs, error: jobsError }, { data: uploadedFiles, error: uploadedFilesError }] = await Promise.all([
     synchronize ? syncEditorWorkflow(workspaceId) : loadActiveBookings(admin, workspaceId),
     admin
       .from('editing_batches')
-      .select('id,display_id,shoot_date,location_key,drive_day_folder_id,drive_day_folder_url')
+      .select('id,display_id,shoot_date,location_key,storage_prefix')
       .eq('workspace_id', workspaceId)
       .order('shoot_date', { ascending: false }),
     admin
       .from('editing_jobs')
       .select('batch_id,booking_id,client_id,status,selected_count,assigned_editor_id,assigned_editor_name,photographer_name')
       .eq('workspace_id', workspaceId),
+    admin.from('gallery_files').select('booking_id').eq('workspace_id', workspaceId).eq('storage_status', 'available'),
   ])
   if (batchError) throw new Error(batchError.message)
   if (jobsError) throw new Error(jobsError.message)
+  if (uploadedFilesError) throw new Error(uploadedFilesError.message)
   const bookingMap = new Map(bookings.map((booking) => [String(booking.id), booking]))
+  const uploadedBookingIds = new Set((uploadedFiles || []).map((file) => String(file.booking_id)))
 
   return (batches || []).map((batch) => {
-    const batchJobs = (jobs || []).filter((job) => job.batch_id === batch.id && bookingMap.has(String(job.booking_id))) as Array<Record<string, unknown> & { status: EditingJobStatus }>
+    const batchJobs = (jobs || []).filter((job) =>
+      job.batch_id === batch.id && bookingMap.has(String(job.booking_id)) && uploadedBookingIds.has(String(job.booking_id)),
+    ) as Array<Record<string, unknown> & { status: EditingJobStatus }>
     const counts = batchCounts(batchJobs)
     return {
       id: String(batch.display_id),
@@ -314,7 +330,7 @@ export async function getBatchList(
           photographerName: job.photographer_name ? String(job.photographer_name) : null,
         }
       }),
-      driveDayFolderUrl: String(batch.drive_day_folder_url || driveFolderUrl(batch.drive_day_folder_id)),
+      storageReady: Boolean(batch.storage_prefix),
     }
   }).filter(batch => batch.totalClients > 0)
 }
@@ -358,7 +374,7 @@ export async function getOnsiteBatchSummary(
     return { id: String(batches[0].display_id), shootDate, jobs: [] }
   }
 
-  const [bookingsResult, galleryResult, foldersResult, resetResult, emailResult] = await Promise.all([
+  const [bookingsResult, galleryResult, storageResult, resetResult, emailResult] = await Promise.all([
     admin
       .from('bookings')
       .select('id,customer_name,customer_email,package_name,booking_time,booking_status')
@@ -370,10 +386,9 @@ export async function getOnsiteBatchSummary(
       .select('booking_id,created_at')
       .in('booking_id', bookingIds),
     admin
-      .from('drive_folders')
-      .select('booking_id,drive_folder_id')
-      .in('booking_id', bookingIds)
-      .eq('folder_type', 'RAW'),
+      .from('booking_provisioning')
+      .select('booking_id,storage_status')
+      .in('booking_id', bookingIds),
     admin.from('photo_selections').select('booking_id,raw_reset_id,status')
       .eq('workspace_id', workspaceId).in('booking_id', bookingIds),
     admin.from('email_logs').select('booking_id,recipient_email,subject,status')
@@ -383,8 +398,8 @@ export async function getOnsiteBatchSummary(
   if (galleryResult.error) {
     console.error('Onsite summary gallery read failed:', galleryResult.error.message)
   }
-  if (foldersResult.error) {
-    console.error('Onsite summary Drive folder read failed:', foldersResult.error.message)
+  if (storageResult.error) {
+    console.error('Onsite summary storage state read failed:', storageResult.error.message)
   }
 
   const bookingMap = new Map(
@@ -401,10 +416,10 @@ export async function getOnsiteBatchSummary(
     }
     galleryByBooking.set(bookingId, current)
   }
-  const rawFolderByBooking = new Map(
-    (foldersResult.error ? [] : foldersResult.data || []).map((folder) => [
-      String(folder.booking_id),
-      String(folder.drive_folder_id),
+  const storageByBooking = new Map(
+    (storageResult.error ? [] : storageResult.data || []).map((state) => [
+      String(state.booking_id),
+      String(state.storage_status),
     ]),
   )
 
@@ -425,7 +440,7 @@ export async function getOnsiteBatchSummary(
         galleryCount: gallery?.count || 0,
         lastUploadAt: gallery?.lastUploadAt || null,
         portalEmailStatus: emailAttempts.some(row => row.status === 'SENT') ? 'SENT' : emailAttempts.some(row => row.status === 'FAILED') ? 'FAILED' : null,
-        rawFolderDriveId: rawFolderByBooking.get(bookingId) || null,
+        storageReady: storageByBooking.get(bookingId) === 'ready',
         lastError: job.last_error ? String(job.last_error) : null,
         resetId: resetResult.data?.find(row => row.booking_id === bookingId)?.raw_reset_id || null,
       }
@@ -482,12 +497,12 @@ export async function getBatchDetail(
   const bookingIds = eligibleJobs.map((job) => String(job.booking_id))
   if (!bookingIds.length) return { ...listEntry, jobs: [], auditLogs: [] }
 
-  const [bookingsResult, selectionsResult, galleryResult, deliveryResult, foldersResult, auditsResult, reviewsResult] = await Promise.all([
+  const [bookingsResult, selectionsResult, galleryResult, deliveryResult, storageResult, auditsResult, reviewsResult] = await Promise.all([
     admin.from('bookings').select('*').in('id', bookingIds),
     admin.from('photo_selections').select('*').in('booking_id', bookingIds),
     admin.from('gallery_files').select('id,booking_id,file_name,created_at').in('booking_id', bookingIds),
     admin.from('deliverable_files').select('booking_id').in('booking_id', bookingIds),
-    admin.from('drive_folders').select('*').in('booking_id', bookingIds),
+    admin.from('booking_provisioning').select('booking_id,storage_prefix,storage_status').in('booking_id', bookingIds),
     admin
       .from('workflow_audit_logs')
       .select('*')
@@ -508,7 +523,7 @@ export async function getBatchDetail(
     ['photo selections', selectionsResult],
     ['gallery files', galleryResult],
     ['deliverables', deliveryResult],
-    ['Drive folders', foldersResult],
+    ['storage state', storageResult],
     ['audit history', auditsResult],
     ['match reviews', reviewsResult],
   ] as const) {
@@ -532,8 +547,7 @@ export async function getBatchDetail(
   const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
   const selectionMap = new Map((selectionsResult.data || []).map((selection) => [String(selection.booking_id), selection]))
   const galleryNameMap = new Map((galleryResult.data || []).map((file) => [String(file.id), String(file.file_name)]))
-  const folderMap = new Map<string, Record<string, unknown>>()
-  for (const folder of foldersResult.data || []) folderMap.set(`${folder.booking_id}:${folder.folder_type}`, folder)
+  const storageMap = new Map((storageResult.data || []).map((state) => [String(state.booking_id), state]))
 
   return {
     ...listEntry,
@@ -542,7 +556,7 @@ export async function getBatchDetail(
       const booking = bookingMap.get(bookingId)
       const selection = selectionMap.get(bookingId)
       const selectionId = String(selection?.id || '')
-      const folder = (type: string) => folderMap.get(`${bookingId}:${type}`)?.drive_folder_id || null
+      const storage = storageMap.get(bookingId)
       return {
         id: String(job.id),
         bookingId,
@@ -585,10 +599,8 @@ export async function getBatchDetail(
           total: Number(row.total_amount || 0),
         })),
         totalAddonAmount: Number(selection?.total_addon_amount || 0),
-        rawFolderDriveId: folder('RAW'),
-        selectedFolderDriveId: folder('SELECTED'),
-        editedFolderDriveId: folder('EDITED'),
-        deliverablesFolderDriveId: folder('DELIVERABLES'),
+        storageReady: storage?.storage_status === 'ready',
+        storagePrefix: storage?.storage_prefix || null,
         deliverableCount: (deliveryResult.data || []).filter((row) => row.booking_id === bookingId).length,
         lastUploadAt:
           (galleryResult.data || [])
@@ -653,21 +665,18 @@ export async function getUploadReport(workspaceId: string, requestedLimit = 30) 
   const bookingsResult = bookingIds.length
     ? await admin.from('bookings').select('id,customer_name,package_name').in('id', bookingIds)
     : { data: [], error: null }
-  const foldersResult = bookingIds.length
+  const storageResult = bookingIds.length
     ? await admin
-        .from('drive_folders')
-        .select('booking_id,folder_type,drive_folder_id,web_view_url')
+        .from('booking_provisioning')
+        .select('booking_id,storage_status')
         .in('booking_id', bookingIds)
-        .eq('folder_type', 'EDITED')
     : { data: [], error: null }
   if (bookingsResult.error) throw new Error(bookingsResult.error.message)
-  if (foldersResult.error) throw new Error(foldersResult.error.message)
+  if (storageResult.error) throw new Error(storageResult.error.message)
 
   const batchMap = new Map((batches || []).map((batch) => [String(batch.id), batch]))
   const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
-  const folderMap = new Map(
-    (foldersResult.data || []).map((folder) => [`${folder.booking_id}:${folder.folder_type}`, folder]),
-  )
+  const storageMap = new Map((storageResult.data || []).map((state) => [String(state.booking_id), state]))
 
   return runs.map((run) => {
     const batch = batchMap.get(String(run.batch_id))
@@ -687,7 +696,7 @@ export async function getUploadReport(workspaceId: string, requestedLimit = 30) 
         .map((item) => {
           const bookingId = String(item.booking_id)
           const booking = bookingMap.get(bookingId)
-          const edited = folderMap.get(`${bookingId}:EDITED`)
+          const storage = storageMap.get(bookingId)
           return {
             bookingId,
             customerName: String(booking?.customer_name || bookingId),
@@ -697,9 +706,7 @@ export async function getUploadReport(workspaceId: string, requestedLimit = 30) 
             uploadedFiles: Number(item.uploaded_files || 0),
             lastError: item.last_error ? String(item.last_error) : null,
             updatedAt: String(item.updated_at),
-            editedFolderUrl: String(
-              edited?.web_view_url || driveFolderUrl(edited?.drive_folder_id),
-            ),
+            storageReady: storage?.storage_status === 'ready',
           }
         }),
     }
@@ -797,79 +804,67 @@ async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingI
   return data
 }
 
-export async function ensureBookingFolders(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+export async function ensureBookingStorage(admin: SupabaseClient, workspaceId: string, bookingId: string) {
   await assertGraduationBooking(admin, bookingId, workspaceId)
-  let { data: booking, error } = await admin
-    .from('bookings')
-    .select('id,workspace_id,client_id,customer_name,booking_date,selection_limit')
-    .eq('id', bookingId)
-    .eq('workspace_id', workspaceId)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  if (!booking) throw new Error('Booking not found in this workspace.')
-  let batchResult = await admin
-    .from('editing_batches')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .eq('display_id', `FM-BATCH-${booking.booking_date}-MAIN`)
-    .maybeSingle()
-  if (batchResult.error) throw new Error(batchResult.error.message)
-  if (!booking.client_id || !batchResult.data) {
+  try {
+    return await prepareBookingStorage(admin, workspaceId, bookingId)
+  } catch (error) {
+    if (!/workflow must be synchronized/i.test(error instanceof Error ? error.message : '')) throw error
     await syncEditorWorkflow(workspaceId)
-    const bookingResult = await admin
-      .from('bookings')
-      .select('id,workspace_id,client_id,customer_name,booking_date,selection_limit')
-      .eq('id', bookingId)
-      .eq('workspace_id', workspaceId)
-      .single()
-    if (bookingResult.error) throw new Error(bookingResult.error.message)
-    booking = bookingResult.data
-    batchResult = await admin
-      .from('editing_batches')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('display_id', `FM-BATCH-${booking.booking_date}-MAIN`)
-      .single()
-    if (batchResult.error) throw new Error(batchResult.error.message)
+    return prepareBookingStorage(admin, workspaceId, bookingId)
   }
-  const batch = batchResult.data
-  if (!batch) throw new Error('Editing batch could not be prepared for this booking.')
-  const { data: provisioning, error: provisioningReadError } = await admin
-    .from('booking_provisioning')
-    .select('*')
-    .eq('booking_id', bookingId)
-    .maybeSingle()
-  if (provisioningReadError) throw new Error('The saved client folder could not be loaded. Try: refresh and retry.')
-  const hierarchy = await ensureShootHierarchy({
-    admin,
-    bookingId,
-    shootDate: String(booking.booking_date),
-    clientName: String(booking.customer_name),
-    selectionLimit: Number(booking.selection_limit || 5),
-    existingClientFolderId: provisioning?.drive_client_folder_id || null,
-    existingRootFolderId: provisioning?.drive_root_folder_id || null,
-  })
-  await saveShootFolderMappings(admin, workspaceId, bookingId, hierarchy, String(batch.id))
+}
+
+export async function activateClientPortalAfterOnsiteUpload(
+  admin: SupabaseClient,
+  workspaceId: string,
+  bookingId: string,
+) {
+  await assertGraduationBooking(admin, bookingId, workspaceId)
+  const { data: uploaded, error: uploadedError } = await admin.from('gallery_files').select('id')
+    .eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+    .eq('storage_status', 'available').limit(1)
+  if (uploadedError) throw new Error(uploadedError.message)
+  if (!uploaded?.length) throw new Error('A verified onsite photo is required before the client portal can be created.')
+
+  const { data: booking, error: bookingError } = await admin.from('bookings')
+    .select('selection_limit').eq('workspace_id', workspaceId).eq('id', bookingId).single()
+  if (bookingError || !booking) throw new Error(bookingError?.message || 'Booking not found.')
+
   const portal = await ensurePortal(admin, workspaceId, bookingId)
+  const { data: selection, error: selectionError } = await admin.from('photo_selections').select('id')
+    .eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle()
+  if (selectionError) throw new Error(selectionError.message)
+  if (!selection) {
+    const requiredCount = Math.max(0, Number(booking.selection_limit || 5))
+    const { error: createSelectionError } = await admin.from('photo_selections').insert({
+      workspace_id: workspaceId,
+      booking_id: bookingId,
+      status: 'OPEN',
+      client_status: 'Not Started',
+      required_count: requiredCount,
+      included_limit: Math.min(5, requiredCount),
+    })
+    if (createSelectionError && createSelectionError.code !== '23505') throw new Error(createSelectionError.message)
+  }
+
+  const timestamp = nowIso()
   const { error: provisioningError } = await admin.from('booking_provisioning').upsert({
     booking_id: bookingId,
     workspace_id: workspaceId,
-    status: provisioning?.status || 'ACTIVE',
-    drive_root_folder_id: hierarchy.root.id,
-    drive_month_folder_id: hierarchy.month.id,
-    drive_day_folder_id: hierarchy.day.id,
-    drive_client_folder_id: hierarchy.client.id,
-    drive_client_folder_url: hierarchy.clientUrl,
+    status: 'ACTIVE',
+    storage_provider: 'r2',
+    storage_status: 'ready',
     client_portal_id: portal.id,
-    provisioned_at: provisioning?.provisioned_at || nowIso(),
+    provisioned_at: timestamp,
     last_error: null,
-    updated_at: nowIso(),
+    updated_at: timestamp,
   })
   if (provisioningError) throw new Error(provisioningError.message)
-  return { hierarchy, batch, portal, booking }
+  return portal
 }
 
-export async function reconcileBookingFolders(
+export async function reconcileBookingStorage(
   workspaceId: string,
   bookingId: string,
   actorId: string,
@@ -878,48 +873,30 @@ export async function reconcileBookingFolders(
   const admin = adminClient()
   await assertGraduationBooking(admin, bookingId, workspaceId)
   if (repair) {
-    const [provisioningReset, folderReset] = await Promise.all([
-      admin
-        .from('booking_provisioning')
-        .update({ drive_client_folder_id: null, drive_client_folder_url: null, updated_at: nowIso() })
-        .eq('workspace_id', workspaceId)
-        .eq('booking_id', bookingId),
-      admin
-        .from('drive_folders')
-        .delete()
-        .eq('workspace_id', workspaceId)
-        .eq('booking_id', bookingId),
-    ])
+    const provisioningReset = await admin
+      .from('booking_provisioning')
+      .update({ storage_status: 'ready', last_error: null, updated_at: nowIso() })
+      .eq('workspace_id', workspaceId)
+      .eq('booking_id', bookingId)
     if (provisioningReset.error) throw new Error(provisioningReset.error.message)
-    if (folderReset.error) throw new Error(folderReset.error.message)
   }
-  const prepared = await ensureBookingFolders(admin, workspaceId, bookingId)
+  const prepared = await ensureBookingStorage(admin, workspaceId, bookingId)
   await audit(
     admin,
     workspaceId,
     { type: 'staff', id: actorId },
-    repair ? 'DRIVE_FOLDERS_REPAIRED' : 'DRIVE_FOLDERS_REFRESHED',
+    repair ? 'STORAGE_REPAIRED' : 'STORAGE_REFRESHED',
     {
       bookingId,
       batchId: prepared.batch.id,
-      metadata: {
-        clientFolderId: prepared.hierarchy.client.id,
-        rawFolderId: prepared.hierarchy.raw.id,
-        selectedFolderId: prepared.hierarchy.selected.id,
-        editedFolderId: prepared.hierarchy.edited.id,
-        deliverablesFolderId: prepared.hierarchy.deliverables?.id || null,
-      },
+      metadata: { storageProvider: 'r2', storagePrefix: prepared.namespace.prefix },
     },
   )
   return {
     status: 'READY',
     bookingId,
-    clientFolderId: prepared.hierarchy.client.id,
-    clientFolderUrl: prepared.hierarchy.clientUrl,
-    rawFolderId: prepared.hierarchy.raw.id,
-    selectedFolderId: prepared.hierarchy.selected.id,
-    editedFolderId: prepared.hierarchy.edited.id,
-    deliverablesFolderId: prepared.hierarchy.deliverables?.id || null,
+    storageProvider: 'r2',
+    storagePrefix: prepared.namespace.prefix,
   }
 }
 
@@ -933,28 +910,55 @@ export async function saveRawFile(input: {
   thumbnail?: Buffer | null
 }) {
   const admin = adminClient()
-  const { hierarchy, batch, booking } = await ensureBookingFolders(admin, input.workspaceId, input.bookingId)
+  const { namespace, batch, booking } = await ensureBookingStorage(admin, input.workspaceId, input.bookingId)
   const generation = await rawUploadGeneration(admin, input.workspaceId, input.bookingId)
   const checksum = sha256(input.data)
-  const relativePath = `RAW/${safeSegment(input.fileName) || `photo-${checksum.slice(0, 8)}`}`
-  const uploaded = await upsertDriveFile({
-    destinationFolderId: hierarchy.raw.id,
+  const safeName = safeSegment(input.fileName) || `photo-${checksum.slice(0, 8)}`
+  const { data: duplicate } = await admin.from('gallery_files').select('*')
+    .eq('workspace_id', input.workspaceId).eq('booking_id', input.bookingId)
+    .eq('checksum', checksum).eq('file_size', input.data.length).eq('storage_status', 'available').maybeSingle()
+  if (duplicate && await objectExists(String(duplicate.storage_key))) return duplicate
+
+  const objectId = createStorageObjectId()
+  const storageKey = createStorageKey({
+    workspaceId: input.workspaceId,
     bookingId: input.bookingId,
-    relativePath,
-    fileName: input.fileName,
-    mimeType: input.mimeType,
-    checksum,
-    data: input.data,
-    purpose: 'raw',
-    rawGeneration: generation,
+    shootDate: String(booking.booking_date),
+    category: 'raw',
+    objectId,
+    fileName: safeName,
   })
-  let thumbnailReference: string | null = uploaded.file.thumbnailLink || null
-  if (input.thumbnail?.length) {
-    const objectPath = `${input.workspaceId}/${input.bookingId}/${uploaded.file.id}.jpg`
-    const { error: storageError } = await admin.storage
-      .from('fico-mana-thumbnails')
-      .upload(objectPath, input.thumbnail, { contentType: 'image/jpeg', upsert: true })
-    if (!storageError) thumbnailReference = objectPath
+  await uploadObject({
+    key: storageKey,
+    body: input.data,
+    contentType: input.mimeType,
+    contentLength: input.data.length,
+    checksum,
+    metadata: { bookingid: input.bookingId, generation: String(generation), filename: safeName },
+  })
+
+  let thumbnailReference: string | null = null
+  let previewReference: string | null = null
+  if (/^image\/(?:jpeg|png|webp|tiff)$/i.test(input.mimeType)) {
+    try {
+      const source = sharp(input.data, { failOn: 'error', limitInputPixels: 80_000_000 }).rotate()
+      const [preview, thumbnail] = await Promise.all([
+        source.clone().resize(2048, 2048, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 84 }).toBuffer(),
+        input.thumbnail?.length
+          ? Promise.resolve(input.thumbnail)
+          : source.clone().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 76 }).toBuffer(),
+      ])
+      previewReference = createDerivativeKey(storageKey, 'preview')
+      thumbnailReference = createDerivativeKey(storageKey, 'thumbnail')
+      await Promise.all([
+        uploadObject({ key: previewReference, body: preview, contentType: 'image/webp', contentLength: preview.length,
+          checksum: sha256(preview), cacheControl: 'private, max-age=31536000, immutable' }),
+        uploadObject({ key: thumbnailReference, body: thumbnail, contentType: input.thumbnail?.length ? 'image/jpeg' : 'image/webp',
+          contentLength: thumbnail.length, checksum: sha256(thumbnail), cacheControl: 'private, max-age=31536000, immutable' }),
+      ])
+    } catch (error) {
+      console.error('Photo derivative generation failed:', error)
+    }
   }
   const { data: gallery, error } = await admin
     .from('gallery_files')
@@ -963,81 +967,47 @@ export async function saveRawFile(input: {
         workspace_id: input.workspaceId,
         booking_id: input.bookingId,
         client_id: booking.client_id,
-        drive_file_id: uploaded.file.id,
+        storage_provider: 'r2',
+        storage_key: storageKey,
+        storage_status: 'available',
         upload_generation: generation,
-        file_name: uploaded.file.name,
-        mime_type: uploaded.file.mimeType || input.mimeType,
-        file_size: Number(uploaded.file.size || input.data.length),
+        file_name: safeName,
+        mime_type: input.mimeType,
+        file_size: input.data.length,
         checksum,
         thumbnail_reference: thumbnailReference,
-        preview_reference: uploaded.file.thumbnailLink || null,
+        preview_reference: previewReference,
       },
-      { onConflict: 'workspace_id,drive_file_id' },
+      { onConflict: 'workspace_id,storage_key' },
     )
     .select('*')
     .single()
   if (error || !gallery) throw new Error(error?.message || 'Could not index the RAW photo.')
+  await activateClientPortalAfterOnsiteUpload(admin, input.workspaceId, input.bookingId)
   await audit(admin, input.workspaceId, { type: 'staff', id: input.actorId }, 'RAW_UPLOADED', {
     bookingId: input.bookingId,
     batchId: batch.id,
-    metadata: { galleryFileId: gallery.id, driveFileId: uploaded.file.id, duplicate: uploaded.duplicate },
+    metadata: { galleryFileId: gallery.id, storageKey, duplicate: false, storagePrefix: namespace.prefix },
   })
   return gallery
 }
 
-export async function indexRawFolder(workspaceId: string, bookingId: string, actorId: string) {
+export async function refreshRawFiles(workspaceId: string, bookingId: string, actorId: string) {
   const admin = adminClient()
+  const prepared = await ensureBookingStorage(admin, workspaceId, bookingId)
   const generation = await rawUploadGeneration(admin, workspaceId, bookingId)
-  const scopes = await admin.from('google_drive_settings').select('granted_scopes').eq('workspace_id', workspaceId).eq('id', 1).single()
-  if (scopes.error || !hasRequiredGoogleDriveScopes(scopes.data?.granted_scopes)) throw new PortalSelectionError('Drive cannot read the complete folder. Try: ask the administrator to reconnect Google Drive, then click Sync Drive again.', 'DRIVE_SCOPE_REQUIRED', 409)
-  // Capture the index before reading Drive; the database rejects concurrent uploads/resets.
-  const snapshot = await admin.from('gallery_files').select('id').eq('workspace_id', workspaceId).eq('booking_id', bookingId).limit(5001)
-  if (snapshot.error || (snapshot.data?.length || 0) > 5000) throw new PortalSelectionError('The photo index could not be checked. Try: retry Sync Drive or ask the administrator to review this client.', 'PHOTO_SYNC_UNAVAILABLE', 503)
-  const source = await readOnsiteDrivePhotos(admin, workspaceId, bookingId, async () => {
-    const prepared = await ensureBookingFolders(admin, workspaceId, bookingId)
-    return { rawFolderId: prepared.hierarchy.raw.id, clientId: String(prepared.booking.client_id), batchId: String(prepared.batch.id) }
-  })
-  const files = source.files.filter(file => !file.trashed && !file.mimeType.startsWith('application/vnd.google-apps.') &&
-    /\.(jpe?g|png|gif|webp|tiff?|heic|heif|dng|cr2|cr3|nef|arw|orf|rw2|raf)$/i.test(file.name) &&
-    (!file.appProperties?.bookingId || file.appProperties.bookingId === bookingId) && file.appProperties?.rawVerification !== 'pending'
-    // Directly placed Drive photos have no upload key. Old in-flight app uploads must not reappear after a reset.
-    && (!(file.appProperties?.rawUploadKey || file.appProperties?.rawGeneration != null) || Number(file.appProperties.rawGeneration || 0) === generation))
-  if (!files.length) {
-    const { data: settings } = await admin
-      .from('google_drive_settings')
-      .select('granted_scopes')
-      .eq('workspace_id', workspaceId)
-      .maybeSingle()
-    if (!hasRequiredGoogleDriveScopes(settings?.granted_scopes)) {
-      throw new Error(
-        'Reconnect Google Drive from Client Portals to let Fico Mana read photos uploaded directly inside RAW folders.',
-      )
-    }
+  const { data: files, error } = await admin.from('gallery_files').select('id,storage_key')
+    .eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+    .eq('upload_generation', generation).eq('storage_status', 'available').limit(5001)
+  if (error || (files?.length || 0) > 5000) {
+    throw new PortalSelectionError('The photo index could not be checked. Try: finish active uploads, then refresh the files.', 'PHOTO_SYNC_UNAVAILABLE', 503)
   }
-  const rows = files.map((file) => ({
-    upload_generation: generation,
-    workspace_id: workspaceId,
-    booking_id: bookingId,
-    client_id: source.clientId,
-    drive_file_id: file.id,
-    file_name: file.name,
-    mime_type: file.mimeType || 'application/octet-stream',
-    file_size: file.size ? Number(file.size) : null,
-    checksum: file.md5Checksum || null,
-    thumbnail_reference: file.thumbnailLink || null,
-    preview_reference: file.thumbnailLink || null,
-  }))
-  const { data: reconciled, error: syncError } = await admin.rpc('sync_onsite_photo_index', {
-    p_workspace: workspaceId, p_booking: bookingId, p_actor: actorId, p_generation: generation,
-    p_gallery_ids: (snapshot.data || []).map(row => row.id), p_rows: rows,
-  })
-  if (syncError) throw new PortalSelectionError('The photo index changed or could not be saved. Try: finish any uploads, then click Sync Drive again. If it continues, ask the administrator to check the photo-reset setup.', 'PHOTO_SYNC_UNAVAILABLE', 409)
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'GALLERY_INDEXED', {
     bookingId,
-    batchId: source.batchId,
-    metadata: { rawFolderDriveId: source.rawFolderId, indexedFiles: rows.length, removed: Number(reconciled?.removed || 0), recovered: source.recovered },
+    batchId: prepared.batch.id,
+    metadata: { storagePrefix: prepared.namespace.rawPrefix, indexedFiles: files?.length || 0, generation },
   })
-  return { indexed: rows.length, removed: Number(reconciled?.removed || 0), recovered: source.recovered, warning: reconciled?.warning || null }
+  return { indexed: files?.length || 0, removed: 0, recovered: false, warning: null }
 }
 
 async function portalRecord(publicId: string, allowReset = false) {
@@ -1056,6 +1026,11 @@ async function portalRecord(publicId: string, allowReset = false) {
   if (hasPortalExpired(data.expires_at)) throw new Error('Portal expired.')
   if (data.status === 'expired') throw new Error('Portal expired.')
   if (data.status !== 'active') throw new Error('Portal disabled.')
+  const available = await admin.from('gallery_files').select('id')
+    .eq('workspace_id', data.workspace_id).eq('booking_id', data.booking_id)
+    .eq('storage_status', 'available').limit(1)
+  if (available.error) throw new Error('Photo availability could not be checked.')
+  if (!available.data?.length) throw new Error('Portal not found.')
   const state = await admin.from('photo_selections').select('raw_reset_id,raw_upload_generation,reopened_at')
     .eq('workspace_id', data.workspace_id).eq('booking_id', data.booking_id).maybeSingle()
   if (state.error) throw new Error('Photo status could not be checked.')
@@ -1092,12 +1067,13 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       admin.from('photo_selections').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
       admin
         .from('gallery_files')
-        .select('id,file_name,mime_type,drive_file_id,created_at', { count: 'exact' })
+        .select('id,file_name,mime_type,storage_key,created_at', { count: 'exact' })
         .eq('workspace_id', workspaceId)
         .eq('booking_id', bookingId)
+        .eq('storage_status', 'available')
         .order('created_at', { ascending: true })
         .range(Math.max(0, offset), Math.max(0, offset) + pageSize - 1),
-      admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).order('published_at', { ascending: false }),
+      admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).eq('storage_status', 'available').order('published_at', { ascending: false }),
       admin.from('editing_jobs').select('status').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
       admin.from('payments').select('amount').eq('booking_id', bookingId).eq('status', 'confirmed'),
       admin
@@ -1113,7 +1089,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .eq('status', 'active')
         .order('display_order', { ascending: true })
         .order('name', { ascending: true }),
-      admin.from('google_drive_settings').select('portal_expiry_days').eq('workspace_id', workspaceId).eq('id', 1).maybeSingle(),
+      admin.from('storage_settings').select('portal_expiry_days').eq('workspace_id', workspaceId).eq('id', 1).maybeSingle(),
     ])
   if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
   const warnings: string[] = []
@@ -1249,7 +1225,13 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   }
 }
 
-export async function getPortalFile(publicId: string, fileId: string, kind: 'gallery' | 'deliverable', ifNoneMatch?: string | null) {
+export async function getPortalFile(
+  publicId: string,
+  fileId: string,
+  kind: 'gallery' | 'deliverable',
+  ifNoneMatch?: string | null,
+  variant: 'thumbnail' | 'preview' = 'preview',
+) {
   const { admin, portal } = await portalRecord(publicId)
   const table = kind === 'deliverable' ? 'deliverable_files' : 'gallery_files'
   const { data, error } = await admin
@@ -1261,51 +1243,110 @@ export async function getPortalFile(publicId: string, fileId: string, kind: 'gal
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Photo not found.')
+  if (data.storage_status !== 'available' || data.storage_provider !== 'r2') {
+    throw new PortalSelectionError('This file is currently unavailable. Try: ask the studio to finish migrating or re-uploading it.', 'FILE_UNAVAILABLE', 404)
+  }
   // Authorize the live portal and the exact workspace/booking file BEFORE accepting a validator.
   // Weak validators describe the managed preview version; no private provider IDs leave this endpoint.
   const etag = `W/"${createHash('sha256').update(JSON.stringify([
     'portal-photo-v1', publicId, portal.workspace_id, portal.booking_id, kind, data.id,
-    data.drive_file_id, data.checksum, data.updated_at, data.created_at, data.published_at,
+    data.storage_key, data.checksum, data.updated_at, data.created_at, data.published_at,
     data.file_size, data.mime_type, data.file_name, data.thumbnail_reference, data.preview_reference,
   ])).digest('hex')}"`
-  const cached = { etag, mimeType: kind === 'gallery' ? 'image/jpeg' : String(data.mime_type || 'application/octet-stream'), fileName: String(data.file_name || 'photo') }
+  const cached = { etag, mimeType: kind === 'gallery' ? 'image/webp' : String(data.mime_type || 'application/octet-stream'), fileName: String(data.file_name || 'photo') }
   if (ifNoneMatch?.split(',').some(value => value.trim() === '*' || value.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
     return { ...cached, notModified: true, data: null }
   }
-  if (kind === 'gallery') {
-    const reference = String(data.thumbnail_reference || data.preview_reference || '')
-    if (reference && !reference.startsWith('http')) {
-      const { data: object, error: storageError } = await admin.storage.from('fico-mana-thumbnails').download(reference)
-      if (!storageError && object) return { ...cached, notModified: false, data: Buffer.from(await object.arrayBuffer()), mimeType: 'image/jpeg' }
-    }
-    if (reference.startsWith('http')) {
-      try {
-        return { ...cached, notModified: false, data: await downloadDriveThumbnail(reference), mimeType: 'image/jpeg' }
-      } catch {
-        // Google thumbnail URLs are short-lived. Refresh the file metadata and
-        // persist the replacement so future portal views use the current URL.
-        const freshFile = await getDriveFile(String(data.drive_file_id))
-        if (freshFile.thumbnailLink) {
-          const thumbnail = await downloadDriveThumbnail(freshFile.thumbnailLink)
-          await admin
-            .from('gallery_files')
-            .update({
-              thumbnail_reference: freshFile.thumbnailLink,
-              preview_reference: freshFile.thumbnailLink,
-            })
-            .eq('id', data.id)
-          return { ...cached, notModified: false, data: thumbnail, mimeType: 'image/jpeg' }
-        }
-      }
-    }
-  }
+  const storageKey = kind === 'gallery'
+    ? String(variant === 'thumbnail' ? data.thumbnail_reference || data.preview_reference || '' : data.preview_reference || data.thumbnail_reference || '')
+    : String(data.storage_key || '')
+  if (!storageKey) throw new PortalSelectionError('This photo preview is still processing. Try: refresh the gallery in a moment.', 'FILE_PROCESSING', 409)
+  assertStorageKeyOwnership(storageKey, String(portal.workspace_id), String(portal.booking_id))
   return {
     ...cached,
     notModified: false,
-    data: await downloadDriveFile(String(data.drive_file_id)),
-    mimeType: String(data.mime_type || 'application/octet-stream'),
-    fileName: String(data.file_name || 'photo'),
+    data: null,
+    redirectUrl: await createDownloadUrl({ key: storageKey, expiresIn: 10 * 60, inline: true, downloadName: String(data.file_name || 'photo') }),
   }
+}
+
+export async function getStaffSelectionFiles(workspaceId: string, bookingId: string) {
+  const admin = adminClient()
+  await assertGraduationBooking(admin, bookingId, workspaceId)
+  const { data: selection, error: selectionError } = await admin
+    .from('photo_selections')
+    .select('id,status,submitted_at')
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .maybeSingle()
+  if (selectionError) throw new Error(selectionError.message)
+  if (!selection) throw new Error('Photo selection not found.')
+  const { data: items, error: itemsError } = await admin
+    .from('photo_selection_items')
+    .select('gallery_file_id,enhancement_preference,is_extra_edit')
+    .eq('selection_id', selection.id)
+  if (itemsError) throw new Error(itemsError.message)
+  const fileIds = (items || []).map((item) => String(item.gallery_file_id))
+  if (!fileIds.length) {
+    return { status: String(selection.status), submittedAt: selection.submitted_at, files: [] }
+  }
+  const { data: files, error: filesError } = await admin
+    .from('gallery_files')
+    .select('id,file_name,mime_type,file_size,storage_provider,storage_status')
+    .eq('workspace_id', workspaceId)
+    .eq('booking_id', bookingId)
+    .in('id', fileIds)
+  if (filesError) throw new Error(filesError.message)
+  const fileMap = new Map((files || []).map((file) => [String(file.id), file]))
+  return {
+    status: String(selection.status),
+    submittedAt: selection.submitted_at,
+    files: (items || []).flatMap((item) => {
+      const file = fileMap.get(String(item.gallery_file_id))
+      if (!file) return []
+      return [{
+        id: String(file.id),
+        fileName: String(file.file_name || 'Photo'),
+        mimeType: String(file.mime_type || 'application/octet-stream'),
+        fileSize: Number(file.file_size || 0),
+        available: file.storage_provider === 'r2' && file.storage_status === 'available',
+        preference: String(item.enhancement_preference || 'standard'),
+        extraEdit: Boolean(item.is_extra_edit),
+      }]
+    }),
+  }
+}
+
+export async function getStaffGalleryFile(
+  workspaceId: string,
+  fileId: string,
+  variant: 'thumbnail' | 'preview' = 'preview',
+) {
+  const admin = adminClient()
+  const { data, error } = await admin
+    .from('gallery_files')
+    .select('id,workspace_id,booking_id,file_name,storage_provider,storage_status,thumbnail_reference,preview_reference')
+    .eq('id', fileId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Photo not found in this workspace.')
+  if (data.storage_provider !== 'r2' || data.storage_status !== 'available') {
+    throw new Error('This photo is currently unavailable. Try: finish migrating or re-uploading it.')
+  }
+  const storageKey = String(
+    variant === 'thumbnail'
+      ? data.thumbnail_reference || data.preview_reference || ''
+      : data.preview_reference || data.thumbnail_reference || '',
+  )
+  if (!storageKey) throw new Error('This photo preview is still processing. Try: refresh in a moment.')
+  assertStorageKeyOwnership(storageKey, workspaceId, String(data.booking_id))
+  return createDownloadUrl({
+    key: storageKey,
+    expiresIn: 10 * 60,
+    inline: true,
+    downloadName: String(data.file_name || 'photo'),
+  })
 }
 
 async function verifiedPortalPin(publicId: string, input: { pin: string }) {
@@ -1313,7 +1354,7 @@ async function verifiedPortalPin(publicId: string, input: { pin: string }) {
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
   // Verify against the saved booking, never a client-supplied phone number.
-  // This must precede the selection lock, billing, manifest and Drive writes.
+  // This must precede the selection lock, billing, manifest and storage writes.
   const { data: contact, error: contactError } = await admin.from('bookings')
     .select('customer_phone').eq('workspace_id', workspaceId).eq('id', bookingId).single()
   if (contactError || !contact) throw new PortalSelectionError('Your booking could not be checked. Try: wait a moment and submit again.', 'SELECTION_PIN_UNAVAILABLE', 503)
@@ -1325,37 +1366,6 @@ async function verifiedPortalPin(publicId: string, input: { pin: string }) {
     throw new PortalSelectionError('Incorrect PIN. Try: enter the last 4 digits of the phone number used for this booking.', 'SELECTION_PIN_INVALID', 403)
   }
   return { admin, portal, bookingId, workspaceId }
-}
-
-/** Reveal only this booking's current RAW folder after checking its saved-phone PIN. */
-export async function getPortalDrivePhotos(publicId: string, pin: string) {
-  const { admin, bookingId, workspaceId } = await verifiedPortalPin(publicId, { pin })
-  const unavailable = () => new PortalSelectionError('Your photo folder is not available yet. Try: ask FICO MANA to repair this booking’s folders in Client Portals, then try again.', 'PORTAL_DRIVE_UNAVAILABLE', 409)
-  const [mapping, provisioning, settings] = await Promise.all([
-    admin.from('drive_folders').select('folder_type,drive_folder_id')
-      .eq('workspace_id', workspaceId).eq('booking_id', bookingId).in('folder_type', ['CLIENT', 'RAW']),
-    admin.from('booking_provisioning').select('drive_client_folder_id,drive_root_folder_id').eq('booking_id', bookingId).maybeSingle(),
-    admin.from('google_drive_settings').select('root_folder_id').eq('workspace_id', workspaceId).eq('id', 1).maybeSingle(),
-  ])
-  if (mapping.error || provisioning.error || settings.error) throw unavailable()
-  const raw = mapping.data?.filter(row => row.folder_type === 'RAW') || []
-  const client = mapping.data?.filter(row => row.folder_type === 'CLIENT') || []
-  const rawId = String(raw[0]?.drive_folder_id || '')
-  const clientId = String(client[0]?.drive_folder_id || '')
-  if (raw.length !== 1 || client.length !== 1 || !/^[A-Za-z0-9_-]+$/.test(rawId) || !/^[A-Za-z0-9_-]+$/.test(clientId) || rawId === clientId ||
-      provisioning.data?.drive_client_folder_id !== clientId || !settings.data?.root_folder_id ||
-      provisioning.data?.drive_root_folder_id !== settings.data.root_folder_id) throw unavailable()
-  try {
-    const [rawFolder, clientFolder] = await Promise.all([getDriveFile(rawId), getDriveFile(clientId)])
-    if ([rawFolder, clientFolder].some(folder => folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') ||
-        rawFolder.id !== rawId || clientFolder.id !== clientId || rawFolder.parents?.length !== 1 || !rawFolder.parents.includes(clientId) ||
-        [rawFolder, clientFolder].some(folder => folder.appProperties?.bookingId && folder.appProperties.bookingId !== bookingId)) throw unavailable()
-  } catch {
-    throw unavailable()
-  }
-  // Never trust a stored/returned webViewLink and never broaden Drive sharing here.
-  // No original bytes, archive, folder creation or permission changes are needed.
-  return { url: `https://drive.google.com/drive/folders/${encodeURIComponent(rawId)}` }
 }
 
 export async function submitPhotoSelection(publicId: string, input: PortalSelectionInput) {
@@ -1482,29 +1492,15 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       }
     })
     const totalAddonAmount = addonOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
-    const { hierarchy, batch } = await ensureBookingFolders(admin, workspaceId, bookingId)
-    // Preflight every original before making any selected copies or changing saved choices.
-    const sources = await resolvePortalSelectionSources(admin, workspaceId, bookingId, hierarchy.raw.id, gallery)
-    const extraFolder = extras.length ? await findOrCreateFolder(hierarchy.selected.id, 'EXTRA EDITS') : null
-    const items: Record<string, unknown>[] = []
-    for (const file of gallery) {
-      const extraEdit = extras.includes(String(file.id))
-      const copy = await copyDriveFile({
-        fileId: sources.get(String(file.id))!,
-        destinationFolderId: extraEdit && extraFolder ? extraFolder.id : hierarchy.selected.id,
-        bookingId,
-        galleryFileId: String(file.id),
-        purpose: extraEdit ? 'extra-edit' : 'selected-enhanced',
-      })
-      items.push({
-        selection_id: selection.id,
-        gallery_file_id: file.id,
-        selected_drive_file_id: copy.id,
-        copied_at: nowIso(),
-        enhancement_preference: preferenceMap.get(String(file.id)) || 'standard',
-        is_extra_edit: extraEdit,
-      })
-    }
+    const { namespace, batch } = await ensureBookingStorage(admin, workspaceId, bookingId)
+    // Selection is relational. Verify every original, but never duplicate photo bytes.
+    await resolvePortalSelectionSources(admin, workspaceId, bookingId, gallery)
+    const items: Record<string, unknown>[] = gallery.map((file) => ({
+      selection_id: selection.id,
+      gallery_file_id: file.id,
+      enhancement_preference: preferenceMap.get(String(file.id)) || 'standard',
+      is_extra_edit: extras.includes(String(file.id)),
+    }))
     const allocationRows: Record<string, unknown>[] = []
     for (const allocation of printAllocations) {
       const file = gallery.find((item) => String(item.id) === allocation.fileId)
@@ -1517,7 +1513,8 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         category: allocation.category,
         quantity: allocation.quantity,
         label_snapshot: PRINT_CATEGORY_LABELS[allocation.category],
-        drive_file_id: null,
+        storage_provider: 'r2',
+        storage_status: 'unavailable',
       })
     }
     for (const table of ['photo_selection_items', 'print_allocations', 'client_addon_orders']) {
@@ -1530,16 +1527,6 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       const { error: allocationError } = await admin.from('print_allocations').insert(allocationRows)
       if (allocationError) throw new Error(allocationError.message)
     }
-    // PRINTS remains empty until enhanced uploads are verified. JSON is outside PRINTS.
-    await findOrCreateFolder(hierarchy.selected.id, 'PRINTS')
-    await savePrintManifest(hierarchy.selected.id, buildPrintManifest({
-      bookingId,
-      selectionId: String(selection.id),
-      allocations: printAllocations.map(allocation => ({
-        category: allocation.category, gallery_file_id: allocation.fileId, quantity: allocation.quantity,
-      })),
-      gallery: gallery.map(file => ({ id: String(file.id), file_name: String(file.file_name) })),
-    }))
     if (addonOrders.length) {
       const { error: addonOrderError } = await admin.from('client_addon_orders').insert(addonOrders)
       if (addonOrderError) throw new Error(addonOrderError.message)
@@ -1554,7 +1541,6 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         .from('bookings')
         .update({
           raw_photo_status: 'Pending Review',
-          raw_photo_link: driveFolderUrl(hierarchy.selected.id),
           raw_photo_submitted_at: submittedAt,
           raw_photo_approved_at: null,
           raw_photo_notes: null,
@@ -1562,7 +1548,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         .eq('id', bookingId),
     ])
     for (const result of updates) if (result.error) throw new Error(result.error.message)
-    // Only lock the selection once copies, print instructions and associated saves succeeded.
+    // Only lock the selection once validation, print instructions and associated saves succeeded.
     const { data: finalized, error: finalizeError } = await admin.from('photo_selections').update({
       status: 'SUBMITTED',
       client_status: 'Submitted',
@@ -1580,31 +1566,31 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       batchId: batch.id,
       metadata: { galleryFileIds: unique, includedFileIds: included, extraEditFileIds: extras, printAllocations, totalAddonAmount },
     })
-    await audit(admin, workspaceId, { type: 'system' }, 'SELECTED_FILES_COPIED', {
+    await audit(admin, workspaceId, { type: 'system' }, 'SELECTED_FILES_VALIDATED', {
       bookingId,
       batchId: batch.id,
-        metadata: { destinationFolderDriveId: hierarchy.selected.id, copiedFiles: items.length, printsAwaitingEnhancedUpload: true, destructive: false },
+      metadata: { storagePrefix: namespace.rawPrefix, selectedFiles: items.length, printsAwaitingEnhancedUpload: true, destructive: false },
     })
     return await getPortalData(publicId)
-  } catch (copyError) {
+  } catch (selectionError) {
     if (submitted) {
-      console.error('Submitted selection refresh failed:', copyError)
+      console.error('Submitted selection refresh failed:', selectionError)
       throw new PortalSelectionError('Your selection was submitted, but the updated portal could not be loaded. Try: refresh the portal to see your submitted selection.', 'SELECTION_SUBMITTED_REFRESH_FAILED')
     }
-    const message = copyError instanceof Error ? copyError.message : 'Selected photo copy failed.'
+    const message = selectionError instanceof Error ? selectionError.message : 'Selected photo validation failed.'
     const { error: resetError } = await admin.from('photo_selections').update({
-      status: copyError instanceof PortalSelectionError && copyError.code === 'SELECTION_INVALID' ? 'OPEN' : 'COPY_FAILED',
+      status: selectionError instanceof PortalSelectionError && selectionError.code === 'SELECTION_INVALID' ? 'OPEN' : 'COPY_FAILED',
       updated_at: nowIso(),
     }).eq('id', selection.id).eq('status', 'SUBMITTING')
     if (resetError) console.error('Selection retry state could not be saved:', resetError.message)
     await admin.from('editing_jobs').update({ last_error: message, updated_at: nowIso() }).eq('booking_id', bookingId)
-    await audit(admin, workspaceId, { type: 'system' }, 'SELECTION_COPY_FAILED', {
+    await audit(admin, workspaceId, { type: 'system' }, 'SELECTION_VALIDATION_FAILED', {
       bookingId,
       metadata: { error: message },
     })
-    if (copyError instanceof PortalSelectionError) throw copyError
-    console.error('Portal selection submission failed:', copyError)
-    throw new PortalSelectionError('Your selection could not be completed. Try: submit again in a moment. If it still fails, ask the studio to check your RAW photos and Drive connection in Client Portals.', 'SELECTION_SUBMISSION_FAILED', 503)
+    if (selectionError instanceof PortalSelectionError) throw selectionError
+    console.error('Portal selection submission failed:', selectionError)
+    throw new PortalSelectionError('Your selection could not be completed. Try: submit again in a moment. If it still fails, ask the studio to check your photos in Client Portals.', 'SELECTION_SUBMISSION_FAILED', 503)
   }
 }
 
@@ -1842,19 +1828,21 @@ export async function prepareBatchDownload(
   const selectionIds = (selections || []).map((selection) => selection.id)
   const { data: items, error: itemsError } = await admin
     .from('photo_selection_items')
-    .select('selection_id,gallery_file_id,selected_drive_file_id')
+    .select('selection_id,gallery_file_id')
     .in('selection_id', selectionIds)
   if (itemsError) throw new Error(itemsError.message)
   const galleryIds = (items || []).map((item) => item.gallery_file_id)
   const { data: gallery, error: galleryError } = galleryIds.length
-    ? await admin.from('gallery_files').select('id,file_name,drive_file_id').in('id', galleryIds)
+    ? await admin.from('gallery_files').select('id,file_name,storage_key').in('id', galleryIds).eq('storage_status', 'available')
     : { data: [], error: null }
   if (galleryError) throw new Error(galleryError.message)
   const galleryMap = new Map((gallery || []).map((file) => [String(file.id), file]))
   const selectionMap = new Map((selections || []).map((selection) => [String(selection.booking_id), String(selection.id)]))
   const portalMap = new Map((portals || []).map((portal) => [String(portal.booking_id), String(portal.public_id)]))
-  const foldersResult = await admin.from('drive_folders').select('*').in('booking_id', bookingIds)
-  const folderMap = new Map((foldersResult.data || []).map((folder) => [`${folder.booking_id}:${folder.folder_type}`, folder]))
+  const { data: storageRows, error: storageError } = await admin.from('booking_provisioning')
+    .select('booking_id,storage_prefix,storage_status').in('booking_id', bookingIds)
+  if (storageError) throw new Error('The booking storage state could not be loaded.')
+  const storageMap = new Map((storageRows || []).map((state) => [String(state.booking_id), state]))
   // One scoped query for the batch, including week/month collections; no per-client read loop.
   const { data: savedPrints, error: printsError } = await admin.from('print_allocations')
     .select('selection_id,category,gallery_file_id,quantity').eq('workspace_id', workspaceId)
@@ -1884,16 +1872,14 @@ export async function prepareBatchDownload(
         folder_name: names.get(String(job.booking_id)) || String(job.booking_id),
         selected_count: Number(job.selected_count),
         expected_output_count: Number(job.expected_output_count),
-        selected_folder_drive_id: folderMap.get(`${job.booking_id}:SELECTED`)?.drive_folder_id || null,
-        edited_folder_drive_id: folderMap.get(`${job.booking_id}:EDITED`)?.drive_folder_id || null,
-        deliverables_folder_drive_id: folderMap.get(`${job.booking_id}:DELIVERABLES`)?.drive_folder_id || null,
+        storage_prefix: storageMap.get(String(job.booking_id))?.storage_prefix || null,
         portal_id: portalMap.get(String(job.booking_id)) || null,
         customer_name: String(booking?.customer_name || job.booking_id),
         print_manifest: printManifests.get(String(job.booking_id)),
       }
     }),
   }
-  const entries: Array<{ name: string; data?: Buffer; driveFileId?: string }> = [
+  const entries: Array<{ name: string; data?: Buffer; storageKey?: string }> = [
     { name: `${batch.shoot_date}/manifest.json`, data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') },
   ]
   for (const job of jobs) {
@@ -1915,7 +1901,7 @@ export async function prepareBatchDownload(
       if (!file) continue
       entries.push({
         name: `${batch.shoot_date}/${folderName}/SELECTED/${safeSegment(String(file.file_name)) || file.id}`,
-        driveFileId: String(item.selected_drive_file_id || file.drive_file_id),
+        storageKey: String(file.storage_key),
       })
     }
   }
@@ -2067,14 +2053,24 @@ async function reserveEnhancedUpload(admin: SupabaseClient, workspaceId: string,
     }
     const [booking, deliveries, reservations] = await Promise.all([
       admin.from('bookings').select('customer_name').eq('workspace_id', workspaceId).eq('id', input.bookingId).single(),
-      readPages((from, to) => admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', input.bookingId).order('id').range(from, to)),
-      readPages((from, to) => admin.from('batch_upload_files').select('relative_path,file_name,batch_upload_items!inner(booking_id,editing_job_id)')
+      readPages((from, to) => admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', input.bookingId).eq('storage_status', 'available').order('id').range(from, to)),
+      readPages((from, to) => admin.from('batch_upload_files').select('upload_item_id,relative_path,file_name,checksum,status,batch_upload_items!inner(booking_id,editing_job_id)')
         .eq('batch_upload_items.booking_id', input.bookingId).eq('batch_upload_items.editing_job_id', item.editing_job_id).order('id').range(from, to)),
     ])
     if (booking.error || !booking.data || deliveries.error || reservations.error) {
       throw new Error('Could not verify the enhanced-photo filenames. Try: retry this client upload.')
     }
-    const prior = (deliveries.data || []).find(file => file.relative_path === input.relativePath)
+    const activeReservation = (reservations.data || []).find(file =>
+      String(file.upload_item_id || '') !== item.id && String(file.status || '') !== 'FAILED' &&
+      hasSameFolderFilePath(String(file.relative_path || ''), input.relativePath),
+    )
+    if (activeReservation) {
+      throw new Error(`A file named ${input.fileName} is already uploaded or uploading in this client folder. Rename the new file before uploading.`)
+    }
+    const prior = (deliveries.data || []).find(file => hasSameFolderFilePath(String(file.relative_path || ''), input.relativePath))
+    if (prior && prior.checksum !== input.checksum) {
+      throw new Error(`A file named ${input.fileName} already exists in this client folder. Rename the new file before uploading.`)
+    }
     const duplicate = prior?.checksum === input.checksum
     const fileName = duplicate ? String(prior.file_name) : enhancedUploadName(
       String(booking.data.customer_name || ''), input.fileName, input.relativePath,
@@ -2083,7 +2079,8 @@ async function reserveEnhancedUpload(admin: SupabaseClient, workspaceId: string,
     if (Date.now() >= Date.parse(lockUntil)) throw new Error('Filename verification took too long. Try: retry this client upload.')
     const { data: uploadFile, error } = await admin.from('batch_upload_files').upsert({
       upload_item_id: item.id, relative_path: input.relativePath, file_name: fileName,
-      file_size: input.fileSize, checksum: input.checksum, drive_file_id: prior?.drive_file_id || null,
+      file_size: input.fileSize, checksum: input.checksum, storage_key: prior?.storage_key || null,
+      storage_provider: 'r2',
       status: duplicate ? 'SKIPPED_DUPLICATE' : 'UPLOADING', attempt_count: 1,
       last_error: null, updated_at: nowIso(),
     }, { onConflict: 'upload_item_id,relative_path' }).select('*').single()
@@ -2099,7 +2096,7 @@ export async function createDeliverableUploadSession(
   workspaceId: string,
   displayId: string,
   uploadJobId: string,
-  input: UploadFileInput & { browserOrigin?: string },
+  input: UploadFileInput,
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
@@ -2153,24 +2150,69 @@ export async function createDeliverableUploadSession(
     .eq('id', item.id)
   await admin.from('editing_jobs').update({ status: 'UPLOADING', last_error: null, updated_at: nowIso() }).eq('id', item.editing_job_id)
   if (duplicate) {
-    return { uploadFileId: String(uploadFile.id), fileName, duplicate: true, driveFileId: String(prior!.drive_file_id) }
+    return { uploadFileId: String(uploadFile.id), fileName, duplicate: true, storageKey: String(prior!.storage_key) }
   }
   try {
-    const { hierarchy } = await ensureBookingFolders(admin, workspaceId, input.bookingId)
-    const uploadUrl = await createDriveResumableUpload({
-      destinationFolderId: hierarchy.edited.id,
-      existingDriveFileId: prior?.drive_file_id || null,
+    const { booking } = await ensureBookingStorage(admin, workspaceId, input.bookingId)
+    const storageKey = createStorageKey({
+      workspaceId,
       bookingId: input.bookingId,
-      relativePath,
+      shootDate: String(booking.booking_date),
+      category: 'enhanced',
+      objectId: String(uploadFile.id),
       fileName,
-      mimeType: input.mimeType || 'application/octet-stream',
-      fileSize: input.fileSize,
-      checksum,
-      browserOrigin: input.browserOrigin,
     })
-    return { uploadFileId: String(uploadFile.id), fileName, uploadUrl, duplicate: false }
+    const metadata = {
+      bookingid: input.bookingId,
+      relativepath: relativePath,
+      filename: fileName,
+      sha256: checksum,
+    }
+    const { error: keyError } = await admin.from('batch_upload_files')
+      .update({ storage_key: storageKey, storage_provider: 'r2', updated_at: nowIso() })
+      .eq('id', uploadFile.id).eq('upload_item_id', item.id)
+    if (keyError) throw new Error(keyError.message)
+
+    if (input.fileSize >= MULTIPART_THRESHOLD_BYTES) {
+      const multipart = await createMultipartUpload({
+        key: storageKey,
+        contentType: input.mimeType || 'application/octet-stream',
+        checksum,
+        metadata,
+      })
+      const partCount = Math.ceil(input.fileSize / MULTIPART_PART_BYTES)
+      const parts = await Promise.all(Array.from({ length: partCount }, async (_, index) => ({
+        partNumber: index + 1,
+        url: await createMultipartPartUrl({ key: storageKey, uploadId: multipart.uploadId, partNumber: index + 1 }),
+      })))
+      const { error: sessionError } = await admin.from('storage_multipart_uploads').insert({
+        workspace_id: workspaceId,
+        booking_id: input.bookingId,
+        storage_key: storageKey,
+        upload_id: multipart.uploadId,
+        category: 'enhanced',
+        expected_size: input.fileSize,
+        expected_checksum: checksum,
+        mime_type: input.mimeType || 'application/octet-stream',
+        original_filename: fileName,
+        status: 'uploading',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      if (sessionError) throw new Error(sessionError.message)
+      return { uploadFileId: String(uploadFile.id), fileName, storageKey, duplicate: false,
+        upload: { mode: 'multipart' as const, uploadId: multipart.uploadId, partSize: MULTIPART_PART_BYTES, parts } }
+    }
+
+    const upload = await createUploadUrl({
+      key: storageKey,
+      contentType: input.mimeType || 'application/octet-stream',
+      checksum,
+      metadata,
+    })
+    return { uploadFileId: String(uploadFile.id), fileName, storageKey, duplicate: false,
+      upload: { mode: 'single' as const, url: upload.url, headers: upload.headers } }
   } catch (uploadError) {
-    const message = uploadError instanceof Error ? uploadError.message : 'Could not initialize the Drive upload.'
+    const message = uploadError instanceof Error ? uploadError.message : 'Could not initialize the private file upload.'
     await Promise.all([
       admin.from('batch_upload_files').update({ status: 'FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() }).eq('id', uploadFile.id),
       admin.from('batch_upload_items').update({ status: 'FAILED', last_error: message.slice(0, 1000), updated_at: nowIso() }).eq('id', item.id),
@@ -2184,8 +2226,12 @@ export async function completeDeliverableUpload(
   workspaceId: string,
   uploadJobId: string,
   uploadFileId: string,
-  driveFileId: string,
-  mimeType: string,
+  completion: {
+    storageKey: string
+    mimeType: string
+    uploadId?: string
+    parts?: Array<{ partNumber: number; etag: string }>
+  },
 ) {
   const admin = adminClient()
   const { data: uploadFile, error } = await admin
@@ -2195,7 +2241,7 @@ export async function completeDeliverableUpload(
     .eq('batch_upload_items.upload_job_id', uploadJobId)
     .single()
   if (error || !uploadFile) throw new Error(error?.message || 'Upload file state not found.')
-  // Authorize before any lookup or hash of a caller-supplied Drive file ID.
+  // Authorize before any lookup of a caller-supplied storage key.
   const { data: job } = await admin
     .from('editing_jobs')
     .select('id,workspace_id')
@@ -2204,34 +2250,45 @@ export async function completeDeliverableUpload(
     .eq('booking_id', uploadFile.batch_upload_items.booking_id)
     .single()
   if (!job) throw new Error('Upload job is outside this workspace.')
-  const driveFile = await getDriveFile(driveFileId)
   const bookingId = String(uploadFile.batch_upload_items.booking_id)
-  if (
-    driveFile.appProperties?.bookingId !== bookingId ||
-    driveFile.appProperties?.relativePath !== uploadFile.relative_path ||
-    driveFile.appProperties?.checksum !== uploadFile.checksum
-  ) {
-    throw new Error('The uploaded file does not match the selected batch. Try: select the correct folder.')
+  if (completion.storageKey !== uploadFile.storage_key) {
+    throw new Error('The uploaded file does not match the selected batch.')
   }
-  const { hierarchy } = await ensureBookingFolders(admin, workspaceId, bookingId)
-  if (!driveFile.parents?.includes(hierarchy.edited.id)) {
-    throw new Error('Google Drive uploaded the file outside the authorized client destination.')
+  const parsedKey = assertStorageKeyOwnership(completion.storageKey, workspaceId, bookingId)
+  if (parsedKey.category !== 'enhanced') throw new Error('The upload destination is invalid.')
+
+  if (completion.uploadId) {
+    const { data: session, error: sessionError } = await admin.from('storage_multipart_uploads')
+      .select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+      .eq('storage_key', completion.storageKey).eq('upload_id', completion.uploadId)
+      .eq('status', 'uploading').gt('expires_at', nowIso()).maybeSingle()
+    if (sessionError || !session) throw new Error('The multipart upload session expired. Try: upload this file again.')
+    await completeMultipartUpload({
+      key: completion.storageKey,
+      uploadId: completion.uploadId,
+      parts: completion.parts || [],
+    })
+    await admin.from('storage_multipart_uploads').update({ status: 'completed', completed_at: nowIso() }).eq('id', session.id)
   }
-  if (safeSegment(driveFile.name) !== uploadFile.file_name) {
-    throw new Error('Google Drive uploaded a file with an unexpected name.')
+
+  const object = await getObjectMetadata(completion.storageKey)
+  if (object.metadata.bookingid !== bookingId || object.metadata.relativepath !== uploadFile.relative_path ||
+      object.metadata.sha256 !== uploadFile.checksum || object.metadata.filename !== uploadFile.file_name) {
+    throw new Error('The uploaded file metadata does not match the selected batch.')
   }
-  validateEditedPhotoMetadata(driveFile.name, driveFile.mimeType || mimeType)
+  validateEditedPhotoMetadata(uploadFile.file_name, object.contentType || completion.mimeType)
   const expectedBytes = Number(uploadFile.file_size || 0)
-  const driveBytes = Number(driveFile.size || 0)
-  if (!expectedBytes || !Number.isSafeInteger(driveBytes) || driveBytes !== expectedBytes) {
+  if (!expectedBytes || !Number.isSafeInteger(object.contentLength) || object.contentLength !== expectedBytes) {
     await audit(admin, workspaceId, { type: 'system' }, 'UPLOAD_CHECKSUM_FAILED', {
       bookingId,
       metadata: { uploadFileId: uploadFile.id, reason: 'size_mismatch' },
     })
     throw new Error('The uploaded file size is incorrect. Try: upload the original edited file again.')
   }
-  const verified = await hashDriveFileSha256(driveFile.id, 500 * 1024 * 1024)
-  if (verified.bytes !== expectedBytes || verified.checksum !== uploadFile.checksum) {
+  const verified = object.checksum === uploadFile.checksum
+    ? { size: object.contentLength, sha256: object.checksum }
+    : await hashObjectSha256(completion.storageKey, 500 * 1024 * 1024)
+  if (verified.size !== expectedBytes || verified.sha256 !== uploadFile.checksum) {
     await audit(admin, workspaceId, { type: 'system' }, 'UPLOAD_CHECKSUM_FAILED', {
       bookingId,
       metadata: { uploadFileId: uploadFile.id, reason: 'sha256_mismatch' },
@@ -2243,11 +2300,14 @@ export async function completeDeliverableUpload(
       workspace_id: workspaceId,
       booking_id: bookingId,
       editing_job_id: job.id,
-      drive_file_id: driveFile.id,
+      storage_provider: 'r2',
+      storage_key: completion.storageKey,
+      storage_status: 'available',
+      etag: object.etag,
       relative_path: uploadFile.relative_path,
-      file_name: driveFile.name,
-      mime_type: driveFile.mimeType || mimeType || 'application/octet-stream',
-      file_size: Number(driveFile.size || 0),
+      file_name: uploadFile.file_name,
+      mime_type: object.contentType || completion.mimeType || 'application/octet-stream',
+      file_size: object.contentLength,
       checksum: uploadFile.checksum,
       published_at: nowIso(),
     },
@@ -2256,7 +2316,7 @@ export async function completeDeliverableUpload(
   if (deliveryError) throw new Error(deliveryError.message)
   await admin
     .from('batch_upload_files')
-    .update({ drive_file_id: driveFile.id, status: 'UPLOADED', last_error: null, updated_at: nowIso() })
+    .update({ storage_key: completion.storageKey, storage_provider: 'r2', status: 'UPLOADED', last_error: null, updated_at: nowIso() })
     .eq('id', uploadFileId)
   return { success: true }
 }
@@ -2340,14 +2400,12 @@ export async function finalizeClientUpload(
     throw new Error('This client is already being processed. Try: wait for the current upload or download to finish, then retry. An interrupted print run unlocks after 10 minutes.')
   }
   try {
-    const { hierarchy } = await ensureBookingFolders(admin, workspaceId, bookingId)
     await fulfillBookingPrints({
       admin, workspaceId, bookingId, editingJobId: String(item.editing_job_id), uploadItemId: String(item.id),
-      selectedFolderId: hierarchy.selected.id, editedFolderId: hierarchy.edited.id,
     })
   } catch (printError) {
     const detail = printError instanceof Error ? printError.message : 'The print copies could not be prepared.'
-    const message = `Enhanced photos uploaded, but prints are not ready. ${detail}${/Try:/i.test(detail) ? '' : ' Try: check the Drive connection, then retry this client upload.'}`
+    const message = `Enhanced photos uploaded, but prints are not ready. ${detail}${/Try:/i.test(detail) ? '' : ' Try: check private storage, then retry this client upload.'}`
     await Promise.all([
       admin.from('batch_upload_items').update({ status: 'FAILED', uploaded_files: uploaded, last_error: message, updated_at: timestamp }).eq('id', item.id),
       admin.from('editing_jobs').update({ status: 'UPLOAD_FAILED', last_error: message, updated_at: timestamp }).eq('id', item.editing_job_id),
@@ -2361,7 +2419,7 @@ export async function finalizeClientUpload(
       .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('download_lock_expires_at', printLockUntil)
   }
   const portal = await ensurePortal(admin, workspaceId, bookingId)
-  const url = portalUrl(String(portal.public_id))
+  const clientPortalUrl = portalUrl(String(portal.public_id))
   await Promise.all([
     admin
       .from('batch_upload_items')
@@ -2378,7 +2436,7 @@ export async function finalizeClientUpload(
       .eq('booking_id', bookingId),
     admin
       .from('bookings')
-      .update({ edited_photo_link: url, edited_photo_delivered_at: timestamp })
+      .update({ edited_photo_delivered_at: timestamp })
       .eq('id', bookingId),
   ])
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'DELIVERY_COMPLETED', {
@@ -2396,7 +2454,7 @@ export async function finalizeClientUpload(
       bookingDate: booking.booking_date,
     }
     try {
-      await sendEditedPhotosEmail(emailBooking, url)
+      await sendEditedPhotosEmail(emailBooking, clientPortalUrl)
     } catch (emailError) {
       console.error('Delivery notification email failed:', emailError)
     }
@@ -2467,17 +2525,18 @@ export async function preparePortalDeliverables(publicId: string) {
   const { admin, portal } = await portalRecord(publicId)
   const { data, error } = await admin
     .from('deliverable_files')
-    .select('drive_file_id,file_name')
+    .select('storage_key,file_name')
     .eq('workspace_id', portal.workspace_id)
     .eq('booking_id', portal.booking_id)
+    .eq('storage_status', 'available')
     .order('published_at', { ascending: true })
   if (error) throw new Error(error.message)
   return (data || []).map((file) => ({
-    name: safeSegment(String(file.file_name)) || String(file.drive_file_id),
-    driveFileId: String(file.drive_file_id),
+    name: safeSegment(String(file.file_name)) || String(file.storage_key),
+    storageKey: String(file.storage_key),
   }))
 }
 
-export function driveDownloadBuffer(fileId: string) {
-  return downloadDriveFile(fileId)
+export function storageDownloadBuffer(storageKey: string) {
+  return readObject(storageKey)
 }
