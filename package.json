@@ -16,6 +16,8 @@
     "qa:e2e": "playwright test",
     "qa:endurance": "node scripts/qa-endurance.mjs",
     "qa:stress": "node scripts/qa-local-read-stress.mjs",
+    "qa:turnover-load": "node scripts/qa-turnover-load.mjs",
+    "qa:start-production": "node scripts/qa-start-production.mjs",
     "social:export": "node scripts/export-social-preview.mjs",
     "social:check": "node scripts/check-social-preview.mjs",
     "security:audit": "pnpm audit --prod --audit-level high",

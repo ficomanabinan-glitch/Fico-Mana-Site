@@ -21,8 +21,8 @@ test('editor file management is lazy, previews opened files, and protects mutati
   const middleware = await readFile('lib/supabase/middleware.ts', 'utf8')
 
   assert.match(route, /if \(openId && \(openSource === 'gallery' \|\| openSource === 'deliverable'\)\)/)
-  assert.match(route, /createDownloadUrl/)
-  assert.doesNotMatch(route, /listObjects|listAllObjectKeys|readObject|getObject\(/)
+  assert.match(route, /await getObject\(previewKey\)/)
+  assert.doesNotMatch(route, /createDownloadUrl|NextResponse\.redirect|listObjects|listAllObjectKeys|readObject/)
   assert.match(page, /Open a folder to load its contents\. Photos stay private until you open one\./)
   assert.match(page, /useEffect\(\(\) =>/)
   assert.match(page, /Add photos/)

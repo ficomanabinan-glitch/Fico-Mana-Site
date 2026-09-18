@@ -374,7 +374,7 @@ export async function getOnsiteBatchSummary(
     return { id: String(batches[0].display_id), shootDate, jobs: [] }
   }
 
-  const [bookingsResult, galleryResult, storageResult, resetResult, emailResult] = await Promise.all([
+  const [bookingsResult, galleryResult, storageResult, resetResult, emailResult, portalResult] = await Promise.all([
     admin
       .from('bookings')
       .select('id,customer_name,customer_email,package_name,booking_time,booking_status')
@@ -393,6 +393,8 @@ export async function getOnsiteBatchSummary(
       .eq('workspace_id', workspaceId).in('booking_id', bookingIds),
     admin.from('email_logs').select('booking_id,recipient_email,subject,status')
       .in('booking_id', bookingIds).like('subject', 'Your photos are ready to select — FICO MANA %'),
+    admin.from('client_portals').select('booking_id,public_id,status,expires_at')
+      .eq('workspace_id', workspaceId).in('booking_id', bookingIds),
   ])
   if (bookingsResult.error) throw new Error(bookingsResult.error.message)
   if (galleryResult.error) {
@@ -422,6 +424,9 @@ export async function getOnsiteBatchSummary(
       String(state.storage_status),
     ]),
   )
+  const portalByBooking = new Map(
+    (portalResult.error ? [] : portalResult.data || []).map((portal) => [String(portal.booking_id), portal]),
+  )
 
   const onsiteJobs = (jobs || [])
     .map((job) => {
@@ -429,6 +434,8 @@ export async function getOnsiteBatchSummary(
       const booking = bookingMap.get(bookingId)
       if (!booking || ACTIVE_BOOKING_EXCLUSIONS.has(String(booking.booking_status || ''))) return null
       const gallery = galleryByBooking.get(bookingId)
+      const portal = portalByBooking.get(bookingId)
+      const portalReady = portal?.status === 'active' && !hasPortalExpired(portal.expires_at)
       const emailAttempts = (emailResult.data || []).filter(row => row.booking_id === bookingId &&
         row.recipient_email === String(booking.customer_email || '').trim() &&
         row.subject === `Your photos are ready to select — FICO MANA ${bookingId}`)
@@ -440,6 +447,7 @@ export async function getOnsiteBatchSummary(
         galleryCount: gallery?.count || 0,
         lastUploadAt: gallery?.lastUploadAt || null,
         portalEmailStatus: emailAttempts.some(row => row.status === 'SENT') ? 'SENT' : emailAttempts.some(row => row.status === 'FAILED') ? 'FAILED' : null,
+        portalUrl: portalReady && portal?.public_id ? portalUrl(String(portal.public_id)) : null,
         storageReady: storageByBooking.get(bookingId) === 'ready',
         lastError: job.last_error ? String(job.last_error) : null,
         resetId: resetResult.data?.find(row => row.booking_id === bookingId)?.raw_reset_id || null,
@@ -1266,7 +1274,7 @@ export async function getPortalFile(
     ...cached,
     notModified: false,
     data: null,
-    redirectUrl: await createDownloadUrl({ key: storageKey, expiresIn: 10 * 60, inline: true, downloadName: String(data.file_name || 'photo') }),
+    storageKey,
   }
 }
 
@@ -2535,6 +2543,28 @@ export async function preparePortalDeliverables(publicId: string) {
     name: safeSegment(String(file.file_name)) || String(file.storage_key),
     storageKey: String(file.storage_key),
   }))
+}
+
+export async function preparePortalRawPhotos(publicId: string) {
+  const { admin, portal } = await portalRecord(publicId)
+  const selection = await admin.from('photo_selections').select('status')
+    .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id).maybeSingle()
+  if (selection.error) throw new Error(selection.error.message)
+  if (!selection.data || selection.data.status !== 'SUBMITTED') {
+    throw new PortalSelectionError('Submit your photo selection before downloading all original photos.', 'SELECTION_REQUIRED', 409)
+  }
+  const { data, error } = await admin.from('gallery_files').select('storage_key,file_name')
+    .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id)
+    .eq('storage_provider', 'r2').eq('storage_status', 'available').order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  const usedNames = new Map<string, number>()
+  return (data || []).map((file) => {
+    const baseName = safeSegment(String(file.file_name)) || String(file.storage_key)
+    const count = (usedNames.get(baseName.toLowerCase()) || 0) + 1
+    usedNames.set(baseName.toLowerCase(), count)
+    const duplicateSafeName = count === 1 ? baseName : baseName.replace(/(\.[^.]+)?$/, `-${count}$1`)
+    return { name: duplicateSafeName, storageKey: String(file.storage_key) }
+  })
 }
 
 export function storageDownloadBuffer(storageKey: string) {

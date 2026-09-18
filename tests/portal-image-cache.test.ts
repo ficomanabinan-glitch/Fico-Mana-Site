@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { Readable } from 'node:stream'
 import { loadTs } from './helpers/load-ts.ts'
 import { memoryDb } from './helpers/memory-db.ts'
 import * as packageWorkflow from '../lib/package-workflow.ts'
@@ -68,7 +69,7 @@ function fixture() {
     '@/lib/addon-photo-rules': {},
     '@/lib/enhanced-upload-naming': {},
     '@/lib/storage/booking-storage': {},
-    '@/lib/storage/storage-service': {},
+    '@/lib/storage/storage-service': { getObject: async () => ({ Body: Readable.from([Buffer.from('private image bytes')]) }) },
     '@/lib/storage/storage-keys': storageKeys,
     '@/lib/storage/presigned-urls': {
       createDownloadUrl: async ({ key }: { key: string }) => {
@@ -93,7 +94,7 @@ function fixture() {
     '@/lib/auth-api': {},
     '@/lib/auth/workflow': {},
     '@/lib/editor-workflow': workflow,
-    '@/lib/storage/storage-service': {},
+    '@/lib/storage/storage-service': { getObject: async () => ({ Body: Readable.from([Buffer.from('private image bytes')]) }) },
     '@/lib/portal-download-stream': {},
     '@/lib/security/api-rate-limit': {
       API_RATE_LIMITS: { portalRead: {} },
@@ -126,14 +127,15 @@ function fixture() {
   }
 }
 
-test('authorized portal images redirect to short-lived R2 URLs and reuse private validators without re-signing', async () => {
+test('authorized portal images are privately proxied and reuse private validators without exposing R2 URLs', async () => {
   const f = fixture()
   const first = await f.request()
-  assert.equal(first.status, 307)
-  assert.match(first.headers.get('location') || '', /^https:\/\/signed\.invalid\//)
-  assert.equal(first.headers.get('cache-control'), 'private, no-store')
+  assert.equal(first.status, 200)
+  assert.equal(first.headers.get('location'), null)
+  assert.equal(await first.text(), 'private image bytes')
+  assert.match(first.headers.get('cache-control') || '', /private.*must-revalidate/)
   assert.equal(first.headers.get('referrer-policy'), 'no-referrer')
-  assert.equal(f.signings, 1)
+  assert.equal(f.signings, 0)
 
   const direct = await f.workflow.getPortalFile(publicId, 'own', 'gallery')
   assert.equal(direct.notModified, false)
@@ -145,23 +147,23 @@ test('authorized portal images redirect to short-lived R2 URLs and reuse private
     assert.equal((await cached.arrayBuffer()).byteLength, 0)
     assert.equal(cached.headers.get('etag'), etag)
   }
-  assert.equal(f.signings, 2, 'Only the first route request and direct uncached lookup sign an R2 URL')
+  assert.equal(f.signings, 0, 'Portal reads never expose an R2 signed URL')
   f.db.tables.gallery_files[0].checksum = 'version-2'
   const changed = await f.request('own', etag)
-  assert.equal(changed.status, 307)
-  assert.equal(f.signings, 3)
+  assert.equal(changed.status, 200)
+  assert.equal(f.signings, 0)
 })
 
-test('thumbnail and deliverable requests sign only the owned R2 object', async () => {
+test('thumbnail and deliverable requests expose only the owned server-side storage key', async () => {
   const f = fixture()
   const thumbnail = await f.workflow.getPortalFile(publicId, 'own', 'gallery', null, 'thumbnail')
   assert.equal(thumbnail.notModified, false)
-  assert.ok('redirectUrl' in thumbnail)
-  assert.match(String(thumbnail.redirectUrl), /thumbnail%2Fown\.webp/)
+  assert.ok('storageKey' in thumbnail)
+  assert.match(String(thumbnail.storageKey), /thumbnail\/own\.webp/)
   const edited = await f.workflow.getPortalFile(publicId, 'edited', 'deliverable')
   assert.equal(edited.notModified, false)
-  assert.ok('redirectUrl' in edited)
-  assert.match(String(edited.redirectUrl), /enhanced%2Fedited\.jpg/)
+  assert.ok('storageKey' in edited)
+  assert.match(String(edited.storageKey), /enhanced\/edited\.jpg/)
   assert.equal(edited.mimeType, 'image/jpeg')
   assert.equal(edited.fileName, 'edited.JPG')
 })

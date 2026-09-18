@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   FolderSync,
   ImagePlus,
+  ArrowUpRight,
   RefreshCw,
   Search,
   Trash2,
@@ -35,6 +36,7 @@ type Job = {
   lastError?: string | null
   resetId?: string | null
   portalEmailStatus?: 'SENT' | 'FAILED' | null
+  portalUrl?: string | null
 }
 
 type OnsiteResponse = {
@@ -394,6 +396,17 @@ export default function OnsiteUpload({
                       <FolderSync className="size-3.5" />
                       Refresh Gallery
                     </button>
+                    {job.galleryCount > 0 && job.portalUrl ? (
+                      <a
+                        href={job.portalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 text-[#C4CEFF] hover:border-[#8EA0FF]/45 hover:bg-[#8EA0FF]/10`}
+                      >
+                        <ArrowUpRight className="size-3.5" />
+                        Open Client Portal
+                      </a>
+                    ) : null}
                     <button type="button" disabled={isBusy} onClick={() => { setDeleteJob(job); setDeleteError(''); setDeleteProgress('') }}
                       className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2 text-red-300 hover:border-red-400/40 hover:bg-red-500/10`}>
                       <Trash2 className="size-3.5" />{job.resetId ? 'Resume Delete Files' : 'Delete Files'}
@@ -515,6 +528,11 @@ export default function OnsiteUpload({
                             <p>Failed: {state.failed.map((file) => file.name).join(', ')}</p>
                             {state.lastError ? <p className="mt-1">{state.lastError}</p> : null}
                           </div>
+                        ) : null}
+                        {state.status === 'complete' && !state.failed.length ? (
+                          <p className="mt-3 rounded-control border border-[#8EA0FF]/20 bg-[#8EA0FF]/[0.07] px-3 py-2 text-caption leading-relaxed text-white/65">
+                            Upload finished. Open the client portal from this client’s card to confirm the right photos are visible.
+                          </p>
                         ) : null}
                       </div>
                     ) : null}

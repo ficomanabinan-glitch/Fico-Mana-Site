@@ -9,6 +9,8 @@ test('onsite dashboard uses a lightweight summary instead of full batch detail',
   assert.match(route, /getOnsiteBatchSummary\(workspaceId, shootDate, \{ synchronize \}\)/)
   assert.match(workflow, /export async function getOnsiteBatchSummary/)
   assert.match(workflow, /select\('id,customer_name,customer_email,package_name,booking_time,booking_status'\)/)
+  assert.match(workflow, /client_portals'\)\.select\('booking_id,public_id,status,expires_at'\)/)
+  assert.match(workflow, /portalUrl: portalReady/)
   assert.doesNotMatch(
     route,
     /path\[0\] === 'onsite'[\s\S]{0,600}getBatchDetail/,

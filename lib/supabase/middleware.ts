@@ -173,6 +173,11 @@ async function enforceInquiryRateLimit(deviceId: string) {
 }
 
 export async function updateSession(request: NextRequest) {
+  // Performance tests may exercise an optimized production build, but only on
+  // a loopback host. This can never bypass authentication on a deployed host.
+  if (process.env.QA_ISOLATED_LOCAL === 'true' && ['127.0.0.1', 'localhost'].includes(request.nextUrl.hostname)) {
+    return NextResponse.next({ request })
+  }
   const clientPortalRedirect = legacyClientPortalRedirect(request)
   if (clientPortalRedirect) return clientPortalRedirect
 

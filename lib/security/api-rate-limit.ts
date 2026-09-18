@@ -12,7 +12,7 @@ export type ApiRateLimitPolicy = {
 }
 
 export const API_RATE_LIMITS = {
-  bookingCreate: { name: 'booking-create', limit: 10, windowSeconds: 60 * 60, failClosed: true },
+  bookingCreate: { name: 'booking-create', limit: 10, aggregateLimit: 30, windowSeconds: 60 * 60, failClosed: true },
   bookingLookup: { name: 'booking-lookup', limit: 12, aggregateLimit: 60, windowSeconds: 15 * 60, failClosed: true },
   receiptUpload: { name: 'receipt-upload', limit: 10, windowSeconds: 60 * 60, failClosed: true },
   receiptAccess: { name: 'receipt-access', limit: 120, windowSeconds: 15 * 60, failClosed: true },
@@ -23,6 +23,7 @@ export const API_RATE_LIMITS = {
   portalSelection: { name: 'portal-selection', limit: 10, windowSeconds: 10 * 60, failClosed: true },
   portalSubmissionPin: { name: 'portal-submission-pin', limit: 5, windowSeconds: 15 * 60, failClosed: true },
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
+  portalRawDownload: { name: 'portal-raw-download', limit: 3, windowSeconds: 60 * 60, failClosed: true },
   editorUpload: { name: 'editor-upload', limit: 1_000, windowSeconds: 60 * 60, failClosed: true },
   websiteMediaUpload: { name: 'website-media-upload', limit: 60, windowSeconds: 60 * 60, failClosed: true },
   storageOperation: { name: 'storage-operation', limit: 120, windowSeconds: 15 * 60, failClosed: true },

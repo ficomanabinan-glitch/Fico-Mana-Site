@@ -32,6 +32,7 @@ export default function SamplePortalPage() {
     deliverables: [],
     resources: [],
     downloadAllUrl: '#',
+    rawDownloadAllUrl: null,
     warnings: [],
   }
 

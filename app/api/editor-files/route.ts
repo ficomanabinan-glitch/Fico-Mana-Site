@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkflowAuth } from '@/lib/auth-api'
 import { canUseWorkflow } from '@/lib/auth/workflow'
-import { createDownloadUrl } from '@/lib/storage/presigned-urls'
+import { Readable } from 'node:stream'
 import { assertStorageKeyOwnership, parseStorageKey } from '@/lib/storage/storage-keys'
-import { deleteObjects } from '@/lib/storage/storage-service'
+import { deleteObjects, getObject } from '@/lib/storage/storage-service'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { readDatabasePages } from '@/lib/database/read-pages'
 
@@ -73,9 +73,17 @@ export async function GET(request: NextRequest) {
       ? String(('thumbnail_reference' in result.data && result.data.thumbnail_reference) || ('preview_reference' in result.data && result.data.preview_reference) || result.data.storage_key)
       : String(result.data.storage_key)
     assertStorageKeyOwnership(previewKey, access.workspaceId, String(result.data.booking_id))
-    const url = await createDownloadUrl({ key: previewKey, expiresIn: 5 * 60,
-      inline: true, downloadName: String(result.data.file_name || ('relative_path' in result.data ? result.data.relative_path : '') || 'studio-file') })
-    return NextResponse.redirect(url, { status: 307, headers: { ...headers, 'referrer-policy': 'no-referrer' } })
+    const stored = await getObject(previewKey)
+    if (!stored.Body) return json({ error: 'This file is currently unavailable.' }, 404)
+    const fileName = String(result.data.file_name || ('relative_path' in result.data ? result.data.relative_path : '') || 'studio-file').replace(/["\r\n]/g, '')
+    return new Response(Readable.toWeb(Readable.from(stored.Body as AsyncIterable<Uint8Array>)) as ReadableStream, {
+      headers: {
+        ...headers,
+        'content-type': stored.ContentType || 'application/octet-stream',
+        'content-disposition': `inline; filename="${fileName}"`,
+        'referrer-policy': 'no-referrer',
+      },
+    })
   }
 
   const fileRows = async (ids?: string[]) => {

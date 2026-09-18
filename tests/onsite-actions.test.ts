@@ -7,7 +7,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve))
 test('completed onsite upload sends portal email; Retry resends only email and partial uploads do not send', async t => {
   const savedFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = savedFetch })
-  const dataset = { batch: { jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, storageReady: true }] } }
+  const dataset = { batch: { jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, storageReady: true, portalUrl: 'https://ficomana.com/portal/test?sig=private' }] } }
   let uploadCalls = 0, emailCalls = 0, emailFails = true, partial = false
   globalThis.fetch = async url => {
     if (String(url).endsWith('/portal-email')) {
@@ -44,6 +44,10 @@ test('completed onsite upload sends portal email; Retry resends only email and p
   assert.equal(uploadCalls, 1); assert.equal(emailCalls, 1)
   const panel = elements(render(), el => el.type === 'aside' && el.props['aria-label'] === 'Upload activity')[0]
   assert.ok(panel)
+  const portalLink = elements(render(), el => el.type === 'a' && content(el) === 'Open Client Portal')[0]
+  assert.equal(portalLink.props.href, dataset.batch.jobs[0].portalUrl)
+  assert.equal(portalLink.props.target, '_blank')
+  assert.match(content(panel), /confirm the right photos are visible/i)
   assert.match(panel.props.className, /fixed bottom-4 left-4 right-4.*sm:left-auto sm:w-96/)
   assert.equal(elements(render(), el => el.type === 'article').some(card => elements(card, el => el.props.role === 'progressbar').length > 0), false, 'Progress is not placed inside client cards')
   const panelButton = (label: string) => elements(render(), el => el.type === 'button' && el.props['aria-label'] === label)[0]

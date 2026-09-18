@@ -28,6 +28,7 @@ import {
   prepareBatchDownload,
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
+  preparePortalRawPhotos,
   recordPortalFirstDownload,
   reconcileBookingStorage,
   recordMatchReviews,
@@ -150,7 +151,9 @@ async function handlePortal(request: NextRequest, path: string[]) {
   }
   const policy = path[2] === 'selection'
     ? API_RATE_LIMITS.portalSelection
-    : path[2] === 'deliverables.zip'
+    : path[2] === 'raw-photos.zip'
+      ? API_RATE_LIMITS.portalRawDownload
+      : path[2] === 'deliverables.zip'
       ? API_RATE_LIMITS.portalDownload
       : API_RATE_LIMITS.portalRead
   const limited = await enforceApiRateLimit(request, policy, [publicId, path[2]])
@@ -185,10 +188,21 @@ async function handlePortal(request: NextRequest, path: string[]) {
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'gallery'
     const variant = request.nextUrl.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'preview'
     const file = await getPortalFile(publicId, decodeURIComponent(path[3]), kind, request.headers.get('if-none-match'), variant)
-    if (!file.notModified && 'redirectUrl' in file) {
-      return NextResponse.redirect(file.redirectUrl, {
-        status: 307,
-        headers: { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' },
+    if (!file.notModified && 'storageKey' in file) {
+      const stored = await getObject(file.storageKey)
+      if (!stored.Body) return json({ error: 'This photo is currently unavailable.' }, 404)
+      return new Response(Readable.toWeb(Readable.from(stored.Body as AsyncIterable<Uint8Array>)) as ReadableStream, {
+        headers: {
+          'content-type': file.mimeType,
+          'content-disposition': `inline; filename="${safeDownloadName(file.fileName)}"`,
+          'cache-control': 'private, no-cache, must-revalidate',
+          'cdn-cache-control': 'no-store',
+          'vercel-cdn-cache-control': 'no-store',
+          'etag': file.etag,
+          'vary': 'Cookie',
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer',
+        },
       })
     }
     return new Response(null, {
@@ -209,6 +223,11 @@ async function handlePortal(request: NextRequest, path: string[]) {
     const files = await preparePortalDeliverables(publicId)
     if (!files.length) return json({ error: 'No delivered photos are available yet.' }, 404)
     return zipResponse(files, `${publicId}-FICO-MANA-PHOTOS.zip`, undefined, () => recordPortalFirstDownload(publicId))
+  }
+  if (path[2] === 'raw-photos.zip' && method === 'GET') {
+    const files = await preparePortalRawPhotos(publicId)
+    if (!files.length) return json({ error: 'No original photos are available.' }, 404)
+    return zipResponse(files, `${publicId}-FICO-MANA-ORIGINALS.zip`)
   }
   return json({ error: 'Unknown client portal workflow endpoint.' }, 404)
 }
