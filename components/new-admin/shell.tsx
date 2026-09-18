@@ -30,7 +30,7 @@ function Nav({ close }: { close?: () => void }) {
 export function NewAdminAccessDenied() {
   const [error, setError] = useState('')
   const router = useRouter()
-  async function reset() { const { error } = await createSupabaseBrowserClient().auth.signOut(); if (error) setError('Could not sign out. Try: refresh the page.'); else { router.replace('/admin'); router.refresh() } }
+  async function reset() { const { error } = await createSupabaseBrowserClient().auth.signOut({ scope: 'local' }); if (error) setError('Could not sign out. Try: refresh the page.'); else { router.replace('/admin'); router.refresh() } }
   return <div className={styles.access}><ShieldCheck size={40} className="mx-auto" aria-hidden="true" /><h1>Administrator access required</h1><p>This preview uses the same secure staff access as the existing console.</p><div className={styles.actions}><Link href="/admin" className={styles.action}>Sign in</Link><Button onClick={() => void reset()}>Use another account</Button></div>{error && <p role="alert">{error}</p>}</div>
 }
 export function NewAdminShell({ userId, email, children }: { userId: string; email: string; children: React.ReactNode }) {
@@ -44,7 +44,7 @@ export function NewAdminShell({ userId, email, children }: { userId: string; ema
   const title = newAdminSections[section]?.title ?? 'Dashboard'
   async function signOut() {
     setSigningOut(true); setError('')
-    const { error } = await createSupabaseBrowserClient().auth.signOut()
+    const { error } = await createSupabaseBrowserClient().auth.signOut({ scope: 'local' })
     if (error) { setError('Could not sign out. Try: refresh and try again.'); setSigningOut(false) }
     else { router.replace('/admin'); router.refresh() }
   }

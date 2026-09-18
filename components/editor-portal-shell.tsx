@@ -80,7 +80,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
           bindStaffReadCache(null)
           invalidateEditorBatchCache(true)
           const { createSupabaseBrowserClient } = await import('@/lib/supabase/browser')
-          await createSupabaseBrowserClient().auth.signOut()
+          await createSupabaseBrowserClient().auth.signOut({ scope: 'local' })
           router.replace('/editor/login')
           return
         }
@@ -197,7 +197,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
     bindStaffReadCache(null)
     invalidateEditorBatchCache(true)
     const { createSupabaseBrowserClient } = await import('@/lib/supabase/browser')
-    await createSupabaseBrowserClient().auth.signOut()
+    await createSupabaseBrowserClient().auth.signOut({ scope: 'local' })
     router.push('/editor/login')
     router.refresh()
   }

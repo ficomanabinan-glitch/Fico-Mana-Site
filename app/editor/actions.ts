@@ -48,7 +48,7 @@ export async function loginEditor(
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     const access = data.user ? await getWorkflowAccess(data.user) : null
     if (error || !data.user || !access) {
-      if (data.user) await supabase.auth.signOut()
+      if (data.user) await supabase.auth.signOut({ scope: 'local' })
       if (loginRateLimitEnabled) await recordFailedLogin(ip)
       await recordAdminLoginEvent({ userId: data.user?.id, ip, userAgent, success: false, failureReason: data.user ? 'unauthorized_editor_role' : 'invalid_credentials' })
       return { success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid login or this account has no editor workspace access.' }

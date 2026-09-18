@@ -246,7 +246,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const handleLogout = async () => {
     bindStaffReadCache(null)
     const client = createSupabaseBrowserClient()
-    await client.auth.signOut()
+    await client.auth.signOut({ scope: 'local' })
     clearSalesReadCache()
     clearManagedPackageCache()
     setIsLoggedIn(false)

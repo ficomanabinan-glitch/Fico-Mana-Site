@@ -64,7 +64,7 @@ export async function loginAdmin(
     const supabase = await createSupabaseServerClient()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.user || !isAdminUser(data.user)) {
-      if (data.user) await supabase.auth.signOut()
+      if (data.user) await supabase.auth.signOut({ scope: 'local' })
       if (loginRateLimitEnabled) await recordFailedLogin(ip)
       await recordAdminLoginEvent({ userId: data.user?.id, ip, userAgent, success: false, failureReason: data.user ? 'unauthorized_role' : 'invalid_credentials' })
       return invalidCredentials()
