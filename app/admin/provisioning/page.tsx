@@ -91,8 +91,8 @@ export default function ProvisioningPage() {
   }
   const openPortal = (bookingId: string) => {
     setPortalAction({ bookingId, kind: 'open' })
-    const portalTab = window.open(`/admin/portal/${encodeURIComponent(bookingId)}`, '_blank', 'noopener,noreferrer')
-    if (!portalTab) toast.error('Portal tab blocked', 'Allow pop-ups for admin.ficomana.com, then try again.')
+    const portalTab = window.open(`/api/bookings/${encodeURIComponent(bookingId)}/portal`, '_blank', 'noopener,noreferrer')
+    if (!portalTab) toast.error('Portal tab blocked', 'Allow pop-ups for editor.ficomana.com, then try again.')
     window.setTimeout(() => setPortalAction(null), 350)
   }
   const showPortalQr = async (item: Item, portal: Portal) => {

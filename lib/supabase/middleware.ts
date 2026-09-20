@@ -74,7 +74,7 @@ function maybeEnforceEditorSubdomain(request: NextRequest) {
 function isEditorHostPassThrough(pathname: string) {
   const isClientPortalApi =
     pathname === '/api/provisioning' ||
-    /^\/api\/bookings\/[^/]+\/(?:provisioning(?:\/audit)?|portal-resources)$/.test(pathname)
+    /^\/api\/bookings\/[^/]+\/(?:portal|provisioning(?:\/audit)?|portal-resources)$/.test(pathname)
   return (
     pathname.startsWith('/editor') ||
     isClientPortalApi ||
