@@ -61,3 +61,16 @@ test('admin pages no longer render the storage subscription Ops Note', async () 
   assert.match(dashboard, /h-11 w-full/)
   assert.match(dashboard, /length: 6/)
 })
+
+test('obsolete email-storage operations reminders cannot be generated or returned', async () => {
+  const [notificationRoute, middleware, dataStore] = await Promise.all([
+    readFile('app/api/notifications/route.ts', 'utf8'),
+    readFile('lib/supabase/middleware.ts', 'utf8'),
+    readFile('lib/data-store.ts', 'utf8'),
+  ])
+  assert.doesNotMatch(notificationRoute, /ops-subscriptions|getActiveEmailStorageReminder|ensureOpsReminders/)
+  assert.match(notificationRoute, /n\.type !== 'OPS_REMINDER'/)
+  assert.match(notificationRoute, /n\.type !== 'OPS_PAID'/)
+  assert.doesNotMatch(middleware, /api\/ops-subscriptions/)
+  assert.doesNotMatch(dataStore, /getOpsSubscriptionStatus|markOpsSubscriptionPaid/)
+})

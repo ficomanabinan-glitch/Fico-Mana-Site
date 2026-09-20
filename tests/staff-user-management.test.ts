@@ -4,6 +4,7 @@ import {
   canManageStaffRole,
   changeOwnPasswordSchema,
   createStaffAccountSchema,
+  updateStaffAccountSchema,
   staffAppMetadata,
 } from '../lib/auth/staff-user-management.ts'
 
@@ -25,6 +26,8 @@ test('staff account validation requires a strong password and normalized email',
   })
   assert.equal(valid.email, 'editor@ficomana.com')
   assert.equal(createStaffAccountSchema.safeParse({ ...valid, password: 'short' }).success, false)
+  assert.equal(createStaffAccountSchema.safeParse({ ...valid, role: 'onsite' }).success, false)
+  assert.equal(updateStaffAccountSchema.safeParse({ userId: '00000000-0000-4000-8000-000000000001', displayName: 'Studio Editor', role: 'onsite' }).success, false)
 })
 
 test('password change rejects reuse and weak replacements', () => {

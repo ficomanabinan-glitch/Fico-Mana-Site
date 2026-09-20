@@ -40,6 +40,14 @@ import {
   PortalSelectionError,
   type EditingJobStatus,
 } from '@/lib/editor-workflow'
+import {
+  beginPortalRawDownload,
+  finishPortalRawDownload,
+  getPortalRawDownloadAccess,
+  grantPortalRawDownload,
+  listPortalRawDownloadRequests,
+  requestPortalRawDownload,
+} from '@/lib/portal-raw-downloads'
 import { getObject } from '@/lib/storage/storage-service'
 import { trackCompletedPortalDownload } from '@/lib/portal-download-stream'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
@@ -54,6 +62,7 @@ import {
   editorUploadFailureSchema,
   editorUploadSessionSchema,
   portalSelectionSchema,
+  portalRawDownloadRequestSchema,
 } from '@/lib/security/schemas'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { scanUpload } from '@/lib/security/upload-scanner'
@@ -106,6 +115,7 @@ function zipResponse(
   fileName: string,
   onComplete?: () => Promise<void>,
   beforeDownloadEnd?: () => Promise<void>,
+  onInterrupted?: () => Promise<void>,
 ) {
   const output = new PassThrough()
   const archive = archiver('zip', { zlib: { level: 0 } })
@@ -121,7 +131,13 @@ function zipResponse(
     }
     else archive.append(entry.data || Buffer.alloc(0), { name: entry.name })
   }
-  output.once('close', () => { if (!output.readableEnded) { archive.abort(); sources.forEach(source => source.destroy()) } })
+  output.once('close', () => {
+    if (!output.readableEnded) {
+      archive.abort()
+      sources.forEach(source => source.destroy())
+      if (onInterrupted) void onInterrupted().catch((error) => console.error('ZIP interruption update failed:', error))
+    }
+  })
   void archive.finalize().catch((error) => output.destroy(error))
   if (onComplete) {
     output.once('end', () => void onComplete().catch((error) => console.error('ZIP completion update failed:', error)))
@@ -151,6 +167,8 @@ async function handlePortal(request: NextRequest, path: string[]) {
   }
   const policy = path[2] === 'selection'
     ? API_RATE_LIMITS.portalSelection
+    : path[2] === 'raw-download-request'
+      ? API_RATE_LIMITS.portalRawDownloadRequest
     : path[2] === 'raw-photos.zip'
       ? API_RATE_LIMITS.portalRawDownload
       : path[2] === 'deliverables.zip'
@@ -160,6 +178,9 @@ async function handlePortal(request: NextRequest, path: string[]) {
   if (limited) return limited
   if (path.length === 3 && path[2] === 'photo-revision' && method === 'GET') {
     return json(await getPortalPhotoRevision(publicId))
+  }
+  if (path.length === 3 && path[2] === 'raw-download-state' && method === 'GET') {
+    return json(await getPortalRawDownloadAccess(publicId))
   }
   if (path.length === 2 && method === 'GET') {
     const offset = Number(request.nextUrl.searchParams.get('offset') || 0)
@@ -224,10 +245,35 @@ async function handlePortal(request: NextRequest, path: string[]) {
     if (!files.length) return json({ error: 'No delivered photos are available yet.' }, 404)
     return zipResponse(files, `${publicId}-FICO-MANA-PHOTOS.zip`, undefined, () => recordPortalFirstDownload(publicId))
   }
+  if (path.length === 3 && path[2] === 'raw-download-request' && method === 'POST') {
+    const parsed = portalRawDownloadRequestSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return json({ error: 'Add a reason between 5 and 500 characters.' }, 400)
+    try {
+      return json({ success: true, request: await requestPortalRawDownload(publicId, parsed.data.reason) })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The request could not be sent.'
+      return json({ error: message }, /already waiting|still available/i.test(message) ? 409 : 400)
+    }
+  }
   if (path[2] === 'raw-photos.zip' && method === 'GET') {
     const files = await preparePortalRawPhotos(publicId)
     if (!files.length) return json({ error: 'No original photos are available.' }, 404)
-    return zipResponse(files, `${publicId}-FICO-MANA-ORIGINALS.zip`)
+    let attemptId = ''
+    try {
+      attemptId = (await beginPortalRawDownload(publicId)).attemptId
+    } catch (error) {
+      if (error instanceof Error && error.message === 'DOWNLOAD_LIMIT_REACHED') {
+        return json({ error: 'You have used both downloads for this seven-day period. Request another download access from the studio.' }, 429)
+      }
+      throw error
+    }
+    return zipResponse(
+      files,
+      `${publicId}-FICO-MANA-ORIGINALS.zip`,
+      undefined,
+      () => finishPortalRawDownload(attemptId, true),
+      () => finishPortalRawDownload(attemptId, false),
+    )
   }
   return json({ error: 'Unknown client portal workflow endpoint.' }, 404)
 }
@@ -279,6 +325,24 @@ async function handle(request: NextRequest, path: string[]) {
       const denied = requireCapability('admin')
       if (denied) return denied
       return json({ members: await getWorkflowMembers(workspaceId) })
+    }
+
+    if (path[0] === 'download-requests' && method === 'GET') {
+      const denied = requireCapability('edit')
+      if (denied) return denied
+      return json({ requests: await listPortalRawDownloadRequests(workspaceId) })
+    }
+    if (path[0] === 'download-requests' && path[1] && path[2] === 'grant' && method === 'POST') {
+      const denied = requireCapability('edit')
+      if (denied) return denied
+      const originError = rejectUntrustedMutation(request)
+      if (originError) return originError
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(path[1])) {
+        return json({ error: 'Invalid download request.' }, 400)
+      }
+      const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.adminMutation, [user.id, workspaceId, 'grant-download'])
+      if (limited) return limited
+      return json({ success: true, request: await grantPortalRawDownload(workspaceId, decodeURIComponent(path[1]), actorId) })
     }
 
     if (path[0] === 'onsite' && method === 'GET') {

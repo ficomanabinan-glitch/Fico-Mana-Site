@@ -209,7 +209,6 @@ export async function updateSession(request: NextRequest) {
   const isSensitiveApi =
     isBookingApi ||
     pathname.startsWith('/api/notifications') ||
-    pathname.startsWith('/api/ops-subscriptions') ||
     pathname.startsWith('/api/emails') ||
     pathname.startsWith('/api/sales') ||
     pathname.startsWith('/api/provisioning') ||

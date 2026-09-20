@@ -119,7 +119,7 @@ test('reset route requires onsite capability, trusted origin, rate budget and ex
   const access={workspaceId:'workspace',role:'onsite'}
   class RawUploadError extends Error{}
   const route=loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts',{
-    'next/server':{NextResponse:{json:Response.json}},archiver:{},'@/lib/editor-workflow':{},'@/lib/package-workflow':{},
+    'next/server':{NextResponse:{json:Response.json}},archiver:{},'@/lib/editor-workflow':{},'@/lib/portal-raw-downloads':{},'@/lib/package-workflow':{},
     '@/lib/selection-review':{SelectionReviewError:class SelectionReviewError extends Error{},reviewSelection:async()=>({success:true})},
     '@/lib/auth-api':{requireWorkflowAuth:async(_capability:unknown,request:Request)=>{assert.equal(request.method,'POST');return trusted?{user:{id:'staff'},access,error:null}:{error:Response.json({},{status:403})}}},
     '@/lib/auth/workflow':{canUseWorkflow:()=>allowed},'@/lib/storage/storage-service':{},

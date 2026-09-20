@@ -6,6 +6,8 @@ import { assertStorageKeyOwnership, parseStorageKey } from '@/lib/storage/storag
 import { deleteObjects, getObject } from '@/lib/storage/storage-service'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { readDatabasePages } from '@/lib/database/read-pages'
+import { STORAGE_CATEGORIES } from '@/lib/storage/storage-keys'
+import { isFolderDeleteConfirmation, type FileManagementFolderScope } from '@/lib/file-management-delete'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,6 +24,7 @@ type IndexedFile = {
   size: number
   updatedAt: string | null
   storageKey: string
+  storageKeys: string[]
   previewAvailable: boolean
 }
 
@@ -34,9 +37,169 @@ function indexedFile(row: Record<string, any>, source: IndexedFile['source']): I
       id: String(row.id), source, bookingId: String(row.booking_id), category: parsed.category,
       fileName: String(row.file_name || row.relative_path || `${parsed.objectId}.${parsed.extension}`),
       size: Number(row.file_size || 0), updatedAt: row.updated_at || row.published_at || row.created_at || null,
-      storageKey, previewAvailable: Boolean(row.thumbnail_reference || row.preview_reference),
+      storageKey,
+      storageKeys: [storageKey, String(row.thumbnail_reference || ''), String(row.preview_reference || '')].filter(Boolean),
+      previewAvailable: Boolean(row.thumbnail_reference || row.preview_reference),
     }
   } catch { return null }
+}
+
+type AdminClient = NonNullable<ReturnType<typeof getSupabaseAdmin>>
+
+async function folderFiles(admin: AdminClient, workspaceId: string, bookingIds: string[], category?: string) {
+  const files: IndexedFile[] = []
+  for (let start = 0; start < bookingIds.length; start += 100) {
+    const ids = bookingIds.slice(start, start + 100)
+    const galleryQuery = () => {
+      const query = admin.from('gallery_files')
+        .select('id,booking_id,storage_key,file_name,file_size,thumbnail_reference,preview_reference,created_at,updated_at')
+        .eq('workspace_id', workspaceId).eq('storage_status', 'available').in('booking_id', ids)
+      if (category) query.like('storage_key', `%/${category}/%`)
+      return query
+    }
+    const deliverableQuery = () => {
+      const query = admin.from('deliverable_files')
+        .select('id,booking_id,storage_key,file_name,relative_path,file_size,published_at,updated_at')
+        .eq('workspace_id', workspaceId).eq('storage_status', 'available').in('booking_id', ids)
+      if (category) query.like('storage_key', `%/${category}/%`)
+      return query
+    }
+    const [gallery, deliverables] = await Promise.all([
+      readDatabasePages<Record<string, any>>(galleryQuery),
+      readDatabasePages<Record<string, any>>(deliverableQuery),
+    ])
+    files.push(
+      ...gallery.map((row) => indexedFile(row, 'gallery')).filter((row): row is IndexedFile => Boolean(row)),
+      ...deliverables.map((row) => indexedFile(row, 'deliverable')).filter((row): row is IndexedFile => Boolean(row)),
+    )
+  }
+  return files
+}
+
+async function folderHasAssignedFiles(admin: AdminClient, files: IndexedFile[]) {
+  const galleryIds = files.filter((file) => file.source === 'gallery').map((file) => file.id)
+  const deliverableKeys = files.filter((file) => file.source === 'deliverable').map((file) => file.storageKey)
+  for (let start = 0; start < galleryIds.length; start += 100) {
+    const ids = galleryIds.slice(start, start + 100)
+    const [selectionUse, printUse] = await Promise.all([
+      admin.from('photo_selection_items').select('gallery_file_id', { count: 'exact', head: true }).in('gallery_file_id', ids),
+      admin.from('print_allocations').select('gallery_file_id', { count: 'exact', head: true }).in('gallery_file_id', ids),
+    ])
+    if (selectionUse.error || printUse.error) throw new Error('File assignments could not be checked.')
+    if ((selectionUse.count || 0) > 0 || (printUse.count || 0) > 0) return true
+  }
+  for (let start = 0; start < deliverableKeys.length; start += 100) {
+    const keys = deliverableKeys.slice(start, start + 100)
+    const [enhancedUse, printUse] = await Promise.all([
+      admin.from('print_allocations').select('id', { count: 'exact', head: true }).in('enhanced_storage_key', keys),
+      admin.from('print_allocations').select('id', { count: 'exact', head: true }).in('print_storage_key', keys),
+    ])
+    if (enhancedUse.error || printUse.error) throw new Error('File assignments could not be checked.')
+    if ((enhancedUse.count || 0) > 0 || (printUse.count || 0) > 0) return true
+  }
+  return false
+}
+
+async function setFileRowsStatus(admin: AdminClient, files: IndexedFile[], from: 'available' | 'deleted', to: 'available' | 'deleted') {
+  const timestamp = new Date().toISOString()
+  for (const source of ['gallery', 'deliverable'] as const) {
+    const ids = files.filter((file) => file.source === source).map((file) => file.id)
+    const table = source === 'gallery' ? 'gallery_files' : 'deliverable_files'
+    for (let start = 0; start < ids.length; start += 100) {
+      const chunk = ids.slice(start, start + 100)
+      const changed = await admin.from(table).update({ storage_status: to, updated_at: timestamp })
+        .in('id', chunk).eq('storage_status', from).select('id')
+      if (changed.error || (changed.data || []).length !== chunk.length) {
+        throw new Error('The folder changed before deletion could finish.')
+      }
+    }
+  }
+}
+
+async function deleteFolder(request: NextRequest, admin: AdminClient, workspaceId: string, userId: string) {
+  const body = await request.json().catch(() => null) as null | {
+    confirmation?: unknown
+    scope?: unknown
+    date?: unknown
+    booking?: unknown
+    category?: unknown
+  }
+  if (!body || !isFolderDeleteConfirmation(body.confirmation)) {
+    return json({ error: 'Type CONFIRM DELETE exactly to delete this folder.' }, 400)
+  }
+  const scope = String(body.scope || '') as FileManagementFolderScope
+  if (!['date', 'booking', 'category'].includes(scope)) return json({ error: 'Choose a valid folder to delete.' }, 400)
+
+  const shootDate = String(body.date || '').trim()
+  const bookingId = String(body.booking || '').trim()
+  const category = String(body.category || '').trim()
+  let bookingIds: string[] = []
+  if (scope === 'date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(shootDate)) return json({ error: 'Choose a valid shoot-date folder.' }, 400)
+    const bookings = await readDatabasePages<Record<string, any>>(() => admin.from('bookings').select('id')
+      .eq('workspace_id', workspaceId).eq('booking_date', shootDate))
+    bookingIds = bookings.map((row) => String(row.id))
+  } else {
+    if (!bookingId) return json({ error: 'Choose a valid client folder.' }, 400)
+    const booking = await admin.from('bookings').select('id').eq('workspace_id', workspaceId).eq('id', bookingId).maybeSingle()
+    if (booking.error || !booking.data) return json({ error: 'Client folder not found.' }, 404)
+    bookingIds = [bookingId]
+  }
+  if (scope === 'category' && !STORAGE_CATEGORIES.includes(category as (typeof STORAGE_CATEGORIES)[number])) {
+    return json({ error: 'Choose a valid photo folder.' }, 400)
+  }
+  if (!bookingIds.length) return json({ error: 'This folder is already empty. Refresh File Management.' }, 404)
+
+  let files: IndexedFile[]
+  try {
+    files = await folderFiles(admin, workspaceId, bookingIds, scope === 'category' ? category : undefined)
+    if (!files.length) return json({ error: 'This folder is already empty. Refresh File Management.' }, 404)
+    if (await folderHasAssignedFiles(admin, files)) {
+      return json({ error: 'This folder contains photos used in a client selection or print. Remove those assignments before deleting the folder.' }, 409)
+    }
+  } catch (cause) {
+    console.error('Editor folder deletion validation failed:', cause)
+    return json({ error: 'The folder could not be checked safely. Nothing was removed; try again.' }, 503)
+  }
+
+  const objectKeys = [...new Set(files.flatMap((file) => file.storageKeys))]
+  const bookingSet = new Set(bookingIds)
+  try {
+    for (const storageKey of objectKeys) {
+      const parsed = assertStorageKeyOwnership(storageKey, workspaceId)
+      if (!bookingSet.has(parsed.bookingId) || (scope === 'category' && parsed.category !== category)) {
+        throw new Error('The folder includes a file outside the selected scope.')
+      }
+    }
+  } catch {
+    return json({ error: 'The folder scope could not be verified. Nothing was removed.' }, 409)
+  }
+
+  const audit = await admin.from('workflow_audit_logs').insert({
+    workspace_id: workspaceId, actor_type: 'staff', actor_id: userId,
+    action: 'EDITOR_FOLDER_DELETE_STARTED', booking_id: scope === 'date' ? null : bookingId,
+    metadata: { scope, shootDate: shootDate || null, bookingId: bookingId || null, category: category || null, fileCount: files.length, objectCount: objectKeys.length },
+  })
+  if (audit.error) return json({ error: 'The deletion could not be recorded. Nothing was removed.' }, 503)
+
+  try {
+    await setFileRowsStatus(admin, files, 'available', 'deleted')
+    await deleteObjects(objectKeys)
+  } catch (cause) {
+    await setFileRowsStatus(admin, files, 'deleted', 'available').catch((rollbackError) => {
+      console.error('Editor folder deletion rollback failed:', rollbackError)
+    })
+    console.error('Editor folder deletion failed:', cause)
+    return json({ error: 'The folder could not be removed from storage. Remaining files stay visible; refresh and try again.' }, 503)
+  }
+
+  const completed = await admin.from('workflow_audit_logs').insert({
+    workspace_id: workspaceId, actor_type: 'staff', actor_id: userId,
+    action: 'EDITOR_FOLDER_DELETE_COMPLETED', booking_id: scope === 'date' ? null : bookingId,
+    metadata: { scope, shootDate: shootDate || null, bookingId: bookingId || null, category: category || null, fileCount: files.length, objectCount: objectKeys.length },
+  })
+  if (completed.error) console.error('Editor folder deletion completion audit failed:', completed.error)
+  return json({ success: true, deletedFiles: files.length, deletedObjects: objectKeys.length })
 }
 
 function publicIndexedFile(file: IndexedFile) {
@@ -170,6 +333,10 @@ export async function DELETE(request: NextRequest) {
   if (error || !user || !access) return error || json({ error: 'Unauthorized' }, 401)
   const admin = getSupabaseAdmin()
   if (!admin) return json({ error: 'File management is temporarily unavailable.' }, 503)
+
+  if (request.nextUrl.searchParams.get('folder') === '1') {
+    return deleteFolder(request, admin, access.workspaceId, user.id)
+  }
 
   const source = request.nextUrl.searchParams.get('source')
   const fileId = request.nextUrl.searchParams.get('file')?.trim() || ''

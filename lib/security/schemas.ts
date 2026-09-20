@@ -169,6 +169,10 @@ export const clientSelectionStatusSchema = z
   })
   .strict()
 
+export const portalRawDownloadRequestSchema = z
+  .object({ reason: z.string().trim().min(5).max(500) })
+  .strict()
+
 const optionalText = (maximum: number) => z.string().trim().max(maximum).optional()
 const optionalHttpsUrl = z.preprocess(
   (value) => {

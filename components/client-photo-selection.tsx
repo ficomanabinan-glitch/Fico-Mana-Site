@@ -408,7 +408,14 @@ export function ClientPhotoSelection({
         <p role="status">{draftStatus === 'expired' ? 'Your saved draft expired. Any choices still shown on this page can be saved again before you refresh.' : 'This browser could not save your draft. Keep this page open until you submit.'}</p>
         {draftStatus === 'expired' || draftStatus === 'unavailable' ? <button type="button" className={styles.secondary} disabled={submitting} onClick={saveDraftNow}>Save draft again</button> : null}
       </details> : null}
-          {locked ? <div className="mt-4 flex items-start gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-xs text-emerald-200"><Lock className="mt-0.5 size-3.5 shrink-0"/><span>Your selection is submitted and locked{selection.submittedAt ? `. Submitted ${new Date(selection.submittedAt).toLocaleString('en-PH')}` : ''}. Project status: {projectStatus || selection.clientStatus}.</span></div> : null}
+      {locked ? <div className={styles.submittedNotice} role="status">
+        <span className={styles.submittedNoticeIcon} aria-hidden="true"><Lock /></span>
+        <p className={styles.submittedNoticeContent}>
+          <strong>Your selection is submitted and locked.</strong>
+          {selection.submittedAt ? <span>Submitted {new Date(selection.submittedAt).toLocaleString('en-PH')}.</span> : null}
+          <span>Project status: {projectStatus || selection.clientStatus}.</span>
+        </p>
+      </div> : null}
     {selection.status === 'COPY_FAILED' ? <div className="mt-4 rounded-control border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs text-amber-200">Your previous submission could not be completed. Try: review your choices and submit again. If a photo is unavailable, ask the studio to restore the original first.</div> : null}
     {message ? <div role="alert" className="mt-4 flex items-start gap-2 rounded-control border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs text-red-200"><AlertTriangle className="mt-0.5 size-3.5 shrink-0"/>{message}</div> : null}
 

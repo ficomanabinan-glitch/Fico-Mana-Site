@@ -32,6 +32,7 @@ import {
 } from '@/lib/storage/storage-keys'
 import { createDownloadUrl, createUploadUrl } from '@/lib/storage/presigned-urls'
 import { hasSameFolderFilePath } from '@/lib/storage/file-name-policy'
+import { getPortalRawDownloadAccess } from '@/lib/portal-raw-downloads'
 import {
   MULTIPART_PART_BYTES,
   MULTIPART_THRESHOLD_BYTES,
@@ -1069,7 +1070,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
   const pageSize = Math.min(MAX_PORTAL_PAGE_SIZE, Math.max(1, limit))
-  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult, expirySettings] =
+  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult, expirySettings, rawDownloadAccessResult] =
     await Promise.all([
       admin.from('bookings').select('*').eq('workspace_id', workspaceId).eq('id', bookingId).single(),
       admin.from('photo_selections').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
@@ -1098,6 +1099,9 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .order('display_order', { ascending: true })
         .order('name', { ascending: true }),
       admin.from('storage_settings').select('portal_expiry_days').eq('workspace_id', workspaceId).eq('id', 1).maybeSingle(),
+      getPortalRawDownloadAccess(publicId)
+        .then((data) => ({ data, error: null }))
+        .catch((error: unknown) => ({ data: null, error: error instanceof Error ? error : new Error('Download access could not be checked.') })),
     ])
   if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
   const warnings: string[] = []
@@ -1110,6 +1114,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     ['project resources', resourcesResult],
     ['add-ons', catalogResult],
     ['portal expiry', expirySettings],
+    ['original download access', rawDownloadAccessResult],
   ] as const) {
     if (result.error) {
       warnings.push(label)
@@ -1230,6 +1235,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       publishedAt: String(file.published_at),
     })),
     resources: resourcesResult.data || [],
+    rawDownloadAccess: rawDownloadAccessResult.data,
   }
 }
 

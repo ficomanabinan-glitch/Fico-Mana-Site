@@ -110,7 +110,7 @@ export default function SystemPage() {
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <ShootStorageCleanup />
-          <a href="https://editor.ficomana.com/editor/client-portals" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
+          <a href="https://editor.ficomana.com/editor/files" className={`${adminBtnGhost} inline-flex shrink-0 items-center gap-2 px-4 py-3`}>
             Manage Storage <ExternalLink className="size-3.5" />
           </a>
         </div>

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { WorkflowRole } from '@/lib/auth/workflow'
 
-export const MANAGEABLE_STAFF_ROLES = ['admin', 'editor', 'onsite', 'staff'] as const
+export const MANAGEABLE_STAFF_ROLES = ['admin', 'editor', 'staff'] as const
 export type ManageableStaffRole = (typeof MANAGEABLE_STAFF_ROLES)[number]
 
 const passwordSchema = z

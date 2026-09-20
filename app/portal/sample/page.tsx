@@ -33,6 +33,8 @@ export default function SamplePortalPage() {
     resources: [],
     downloadAllUrl: '#',
     rawDownloadAllUrl: null,
+    rawDownloadRequestUrl: null,
+    rawDownloadAccess: null,
     warnings: [],
   }
 

@@ -23,7 +23,10 @@ export const API_RATE_LIMITS = {
   portalSelection: { name: 'portal-selection', limit: 10, windowSeconds: 10 * 60, failClosed: true },
   portalSubmissionPin: { name: 'portal-submission-pin', limit: 5, windowSeconds: 15 * 60, failClosed: true },
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
-  portalRawDownload: { name: 'portal-raw-download', limit: 3, windowSeconds: 60 * 60, failClosed: true },
+  // Abuse control only. The completed-download business allowance is enforced
+  // atomically in the database so interrupted transfers do not consume access.
+  portalRawDownload: { name: 'portal-raw-download', limit: 10, windowSeconds: 60 * 60, failClosed: true },
+  portalRawDownloadRequest: { name: 'portal-raw-download-request', limit: 3, windowSeconds: 24 * 60 * 60, failClosed: true },
   editorUpload: { name: 'editor-upload', limit: 1_000, windowSeconds: 60 * 60, failClosed: true },
   websiteMediaUpload: { name: 'website-media-upload', limit: 60, windowSeconds: 60 * 60, failClosed: true },
   storageOperation: { name: 'storage-operation', limit: 120, windowSeconds: 15 * 60, failClosed: true },

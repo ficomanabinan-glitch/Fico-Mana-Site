@@ -11,6 +11,7 @@ import PortalOverview from '@/components/portal-overview'
 import styles from '@/components/portal-workspace.module.css'
 import PortalExpiryNotice from '@/components/portal-expiry-notice'
 import PortalDeliverableGallery from '@/components/portal-deliverable-gallery'
+import PortalOriginalDownload from '@/components/portal-original-download'
 import PortalPageSkeleton from '@/components/portal-page-skeleton'
 import { PortalPreviewProvider } from '@/components/portal-preview-cache'
 import type { PortalExpiry } from '@/lib/portal-expiry'
@@ -24,6 +25,7 @@ import {
   type ClientSelection,
   type ClientSelectionProgress,
 } from '@/components/client-photo-selection'
+import type { PortalRawDownloadAccess } from '@/lib/portal-raw-downloads'
 
 type PortalResource={id:string;resource_type:string;title:string;url?:string|null;content?:string|null;created_at:string}
 export type PortalData={
@@ -42,6 +44,8 @@ export type PortalData={
   resources:PortalResource[]
   downloadAllUrl:string
   rawDownloadAllUrl:string|null
+  rawDownloadRequestUrl:string|null
+  rawDownloadAccess:PortalRawDownloadAccess|null
   warnings?:string[]
 }
 
@@ -102,6 +106,30 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
     }
   }, [publicId, queryClient, queryKey, sampleMode])
 
+  const refreshRawDownloadAccess = useCallback(async () => {
+    if (sampleMode) return
+    const response = await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-download-state`, {
+      cache: 'no-store', credentials: 'include',
+    })
+    if (!response.ok) return
+    const access = (await response.json()) as PortalRawDownloadAccess
+    setData((previous) => {
+      if (!previous) return previous
+      const rawDownloadAllUrl = previous.selection?.status === 'SUBMITTED' && access.allowed
+        ? `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-photos.zip`
+        : null
+      const next = { ...previous, rawDownloadAccess: access, rawDownloadAllUrl }
+      queryClient.setQueryData(queryKey, next)
+      return next
+    })
+  }, [publicId, queryClient, queryKey, sampleMode])
+
+  useEffect(() => {
+    if (!data?.rawDownloadAccess?.activeDownloads || sampleMode) return
+    const timer = window.setInterval(() => void refreshRawDownloadAccess(), 10_000)
+    return () => window.clearInterval(timer)
+  }, [data?.rawDownloadAccess?.activeDownloads, refreshRawDownloadAccess, sampleMode])
+
   useEffect(() => {
     // Hydrate the authorized server snapshot without immediately fetching it again.
     if (initialData) { queryClient.setQueryData(queryKey, initialData); return }
@@ -157,7 +185,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
       </div>}
       notices={<>{sampleMode ? <aside className={styles.sampleNotice} aria-label="Sample portal information"><div><strong>Sample portal</strong><p>Practice the full selection flow with example photos. Nothing here is submitted or saved to a booking.</p></div><Link href="/portal">Exit sample</Link></aside> : null}{error ? <div className={styles.notice} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}{data.warnings?.length ? <div className={styles.notice} role="status">Some project details are temporarily unavailable: {data.warnings.join(', ')}.</div> : null}{data.expiry?.expiresAt ? <PortalExpiryNotice expiry={data.expiry} /> : null}</>}
       footerContent={<div className="mt-10 space-y-8">
-            {data.rawDownloadAllUrl ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-card-title font-semibold tracking-heading">Your original photos</h2><p className="mt-1 text-caption leading-relaxed text-white/45">Your selection is submitted. You can now download all {data.galleryTotal} original photos from this shoot.</p></div><a href={data.rawDownloadAllUrl} className={`${portalPrimaryAction} inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2.5 text-caption font-semibold`}><Download className="size-3.5" strokeWidth={1.5} />Download all originals</a></div></section> : null}
+            {data.selection?.status === 'SUBMITTED' ? <PortalOriginalDownload total={data.galleryTotal} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /> : null}
             {data.deliverables.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><h2 className="text-card-title font-semibold tracking-heading">Final Deliverables</h2><div className="mt-4 flex flex-col gap-3 rounded-control border border-emerald-500/20 bg-emerald-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-emerald-200">Your photos are ready</p><p className="mt-1 text-caption text-white/45">{data.deliverables.length} edited photo{data.deliverables.length === 1 ? '' : 's'}</p></div><a href={data.downloadAllUrl} className={`${portalPrimaryAction} inline-flex items-center justify-center gap-2 px-4 py-2.5 text-caption font-semibold`}><Download className="size-3.5" strokeWidth={1.5} />Download All</a></div><PortalDeliverableGallery key={publicId} files={data.deliverables} /></section> : null}
             {data.resources.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><div className="flex items-center gap-2"><FileText className="size-4 text-[#C4CEFF]" strokeWidth={1.5} /><h2 className="text-card-title font-semibold tracking-heading">Project files and updates</h2></div><div className="mt-4 divide-y divide-white/[0.07]">{data.resources.map(resource => <div key={resource.id} className="py-4 first:pt-0 last:pb-0"><p className="text-caption font-medium tracking-[0.04em] text-white/40">{resource.resource_type.replace(/_/g, ' ')}</p><p className="mt-1 text-sm font-semibold">{resource.title}</p>{resource.content ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/50">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="group mt-3 inline-flex min-h-11 items-center gap-2 rounded-control border border-transparent px-2 text-caption font-semibold text-[#C4CEFF] transition-[transform,background-color,border-color,color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[#C4CEFF]/20 hover:bg-[#C4CEFF]/[0.07] hover:text-white">Open resource <ExternalLink className="size-3" strokeWidth={1.5} /></a> : null}</div>)}</div></section> : null}</div>}
     />

@@ -3,36 +3,13 @@ import { addServerNotification, listNotifications } from '@/lib/server-store'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
-import { listNotificationsFromDb, addNotificationToDb, addSystemNotificationToDb } from '@/lib/supabase-store'
+import { listNotificationsFromDb, addNotificationToDb } from '@/lib/supabase-store'
 import type { Notification } from '@/lib/data-store'
-import { getActiveEmailStorageReminder } from '@/lib/ops-subscriptions'
 import { getWorkflowAccess } from '@/lib/auth/workflow'
 import { canManageShootReminders } from '@/lib/shoot-reminder-settings'
 import { getShootReminderHealth, notifyShootReminderIssue } from '@/lib/shoot-reminder-alerts'
 import { SHOOT_REMINDER_NOTIFICATION_TYPE } from '@/lib/shoot-reminder-issues'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
-
-/** Ensure the email-storage renewal reminder exists in DB so mark-read works. */
-async function ensureOpsReminders(existing: Notification[]): Promise<Notification[]> {
-  const draft = getActiveEmailStorageReminder(new Date(), existing)
-  if (!draft) return existing
-
-  const already = existing.find(
-    (n) => n.type === 'OPS_REMINDER' && n.id === draft.id,
-  )
-  if (already) return existing
-
-  if (isSupabaseConfigured()) {
-    const admin = getSupabaseAdmin()
-    if (!admin) throw new Error('Notification storage unavailable')
-    const saved = await addSystemNotificationToDb(admin, draft.id, draft.type, draft.message)
-    if (!saved) throw new Error('Notification storage unavailable')
-    return [saved, ...existing]
-  }
-
-  const saved = await addServerNotification(draft.bookingId, draft.type, draft.message)
-  return [saved, ...existing]
-}
 
 export async function GET() {
   try {
@@ -66,8 +43,11 @@ export async function GET() {
       notifications = await listNotifications()
     }
 
-    notifications = await ensureOpsReminders(notifications)
-    return NextResponse.json(notifications.filter(n => reminderAdmin || n.type !== SHOOT_REMINDER_NOTIFICATION_TYPE), { headers: privateNoStoreHeaders() })
+    return NextResponse.json(notifications.filter(n =>
+      n.type !== 'OPS_REMINDER' &&
+      n.type !== 'OPS_PAID' &&
+      (reminderAdmin || n.type !== SHOOT_REMINDER_NOTIFICATION_TYPE)
+    ), { headers: privateNoStoreHeaders() })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to load notifications' }, { status: 500 })
   }

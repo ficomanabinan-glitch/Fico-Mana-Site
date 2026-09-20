@@ -62,6 +62,7 @@ test('actual portal ZIP route streams R2 objects and records only a nonempty com
       preparePortalDeliverables: async () => available ? [{ name: 'sample.JPG', storageKey: 'workspaces/studio/shoots/2026/09/14/booking/deliverable/sample.jpg' }] : [],
       recordPortalFirstDownload: async (id: string) => { assert.equal(id, publicId); records++ },
     },
+    '@/lib/portal-raw-downloads': {},
     '@/lib/storage/storage-service': {
       getObject: async () => {
         if (storageFailed) throw new Error('Synthetic R2 failure')

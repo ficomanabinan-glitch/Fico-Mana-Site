@@ -7,10 +7,20 @@ import EditorCapabilityGate from '@/components/editor-capability-gate'
 import { uploadRawDirect } from '@/lib/raw-upload-client'
 import { invalidateStaffPages, readStaffPage, staffPageCacheGeneration, writeStaffPage } from '@/lib/staff-page-cache'
 import FileDeleteDialog from '@/components/file-delete-dialog'
+import FolderDeleteDialog from '@/components/folder-delete-dialog'
+import { FOLDER_DELETE_CONFIRMATION, type FileManagementFolderScope } from '@/lib/file-management-delete'
 
 type Item = Record<string, any>
 type View = { level: 'dates' | 'clients' | 'categories' | 'files'; items: Item[]; shootDate?: string; booking?: Item }
 type UploadState = { fileName: string; complete: number; total: number; percent: number }
+type FolderTarget = {
+  scope: FileManagementFolderScope
+  label: string
+  fileCount: number
+  date?: string
+  bookingId?: string
+  category?: string
+}
 
 const categoryLabels: Record<string, string> = {
   raw: 'Original photos', original: 'Original photos', preview: 'Previews', thumbnail: 'Thumbnails',
@@ -37,6 +47,9 @@ function FileManagement() {
   const [deleteTarget, setDeleteTarget] = useState<Item | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [folderDeleteTarget, setFolderDeleteTarget] = useState<FolderTarget | null>(null)
+  const [folderDeleting, setFolderDeleting] = useState(false)
+  const [folderDeleteError, setFolderDeleteError] = useState('')
   const uploadInput = useRef<HTMLInputElement>(null)
   const query = new URLSearchParams({ ...(date ? { date } : {}), ...(booking ? { booking } : {}), ...(category ? { category } : {}) }).toString()
 
@@ -117,6 +130,34 @@ function FileManagement() {
     } finally { setDeleting(false) }
   }
 
+  async function deleteFolder() {
+    if (!folderDeleteTarget) return
+    setFolderDeleting(true); setFolderDeleteError(''); setNotice('')
+    try {
+      const response = await fetch('/api/editor-files?folder=1', {
+        method: 'DELETE', credentials: 'include',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmation: FOLDER_DELETE_CONFIRMATION,
+          scope: folderDeleteTarget.scope,
+          date: folderDeleteTarget.date,
+          booking: folderDeleteTarget.bookingId,
+          category: folderDeleteTarget.category,
+        }),
+      })
+      const body = await response.json().catch(() => ({})) as { error?: string; deletedFiles?: number }
+      if (!response.ok) throw new Error(body.error || 'The folder could not be deleted.')
+      invalidateStaffPages('editor-files:')
+      const deletedFiles = Number(body.deletedFiles || folderDeleteTarget.fileCount)
+      const label = folderDeleteTarget.label
+      setFolderDeleteTarget(null)
+      setNotice(`${label} deleted · ${deletedFiles} ${deletedFiles === 1 ? 'file' : 'files'} removed.`)
+      setRefresh((value) => value + 1)
+    } catch (cause) {
+      setFolderDeleteError(cause instanceof Error ? cause.message : 'The folder could not be deleted.')
+    } finally { setFolderDeleting(false) }
+  }
+
   return <div className="mx-auto w-full max-w-[1500px]">
     <header className="mb-6 flex flex-col gap-4 border-b border-white/[0.08] pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>{date ? <button onClick={back} className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 text-xs font-semibold text-white/65 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><ArrowLeft className="size-3.5"/>Back</button> : null}
@@ -136,11 +177,22 @@ function FileManagement() {
       const key = item.date || item.id || item.name
       const label = item.date || item.customer_name || categoryLabels[item.name] || item.name
       const count = item.fileCount ?? item.count
-      return <button key={key} onClick={() => { if (level === 'dates') setDate(item.date); else if (level === 'clients') setBooking(item.id); else setCategory(item.name) }}
-        className="group flex min-h-24 items-center gap-4 rounded-2xl border border-white/[0.09] bg-white/[0.025] p-5 text-left outline-none transition hover:border-[#C4CEFF]/35 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-[#C4CEFF]">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#C4CEFF]/10 text-[#C4CEFF]"><Folder className="size-5"/></span>
-        <span className="min-w-0"><strong className="block truncate text-sm text-white">{label}</strong><span className="mt-1 block text-xs text-white/65">{count} {count === 1 ? 'file' : 'files'}{item.package_name ? ` · ${item.package_name}` : ''}</span></span>
-      </button>
+      const folderTarget: FolderTarget = level === 'dates'
+        ? { scope: 'date', label, fileCount: count, date: item.date }
+        : level === 'clients'
+          ? { scope: 'booking', label, fileCount: count, date, bookingId: item.id }
+          : { scope: 'category', label, fileCount: count, date, bookingId: booking, category: item.name }
+      return <div key={key} className="group flex min-h-24 items-center rounded-2xl border border-white/[0.09] bg-white/[0.025] transition hover:border-[#C4CEFF]/35 hover:bg-white/[0.045] focus-within:border-[#C4CEFF]/35">
+        <button type="button" onClick={() => { if (level === 'dates') setDate(item.date); else if (level === 'clients') setBooking(item.id); else setCategory(item.name) }}
+          className="flex min-w-0 flex-1 items-center gap-4 self-stretch rounded-l-2xl p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C4CEFF]">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#C4CEFF]/10 text-[#C4CEFF]"><Folder className="size-5"/></span>
+          <span className="min-w-0"><strong className="block truncate text-sm text-white">{label}</strong><span className="mt-1 block text-xs text-white/65">{count} {count === 1 ? 'file' : 'files'}{item.package_name ? ` · ${item.package_name}` : ''}</span></span>
+        </button>
+        <button type="button" onClick={() => { setFolderDeleteError(''); setFolderDeleteTarget(folderTarget) }} aria-label={`Delete folder ${label}`}
+          className="mr-3 grid size-11 shrink-0 place-items-center rounded-xl text-white/45 outline-none transition hover:bg-red-400/10 hover:text-red-200 focus-visible:ring-2 focus-visible:ring-red-200">
+          <Trash2 className="size-4"/>
+        </button>
+      </div>
     })}</div> : null}
     {level === 'files' && visibleItems.length ? <div className="divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/[0.09]">{visibleItems.map((item) => <div key={`${item.source}-${item.id}`} className="group flex items-center gap-3 bg-white/[0.02] p-3 transition hover:bg-white/[0.035] sm:gap-4 sm:p-4">
       {item.previewAvailable ? <a href={`/api/editor-files?source=${encodeURIComponent(item.source)}&file=${encodeURIComponent(item.id)}`} target="_blank" rel="noreferrer" aria-label={`Preview ${item.fileName}`} className="relative block size-14 shrink-0 overflow-hidden rounded-xl bg-white/[0.05] outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><Image src={`/api/editor-files?source=${encodeURIComponent(item.source)}&file=${encodeURIComponent(item.id)}&preview=1`} alt="" width={56} height={56} unoptimized className="size-full object-cover"/><span className="pointer-events-none absolute inset-0 rounded-xl border border-white/10"/></a> : <span className="grid size-14 shrink-0 place-items-center rounded-xl bg-white/[0.05] text-white/65"><FileImage className="size-5"/></span>}
@@ -148,6 +200,7 @@ function FileManagement() {
       <div className="flex shrink-0 items-center gap-1"><a href={`/api/editor-files?source=${encodeURIComponent(item.source)}&file=${encodeURIComponent(item.id)}`} target="_blank" rel="noreferrer" aria-label={`Open ${item.fileName}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-xs font-semibold text-white/65 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><span className="hidden sm:inline">Open</span><ExternalLink className="size-3.5"/></a><button type="button" onClick={() => setDeleteTarget(item)} aria-label={`Delete ${item.fileName}`} className="grid size-11 place-items-center rounded-xl text-white/65 outline-none hover:bg-red-400/10 hover:text-red-200 focus-visible:ring-2 focus-visible:ring-red-200"><Trash2 className="size-4"/></button></div>
     </div>)}</div> : null}
     <FileDeleteDialog fileName={deleteTarget?.fileName ?? null} busy={deleting} error={deleteError} onClose={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }} onDelete={() => void deleteFile()}/>
+    <FolderDeleteDialog folderName={folderDeleteTarget?.label ?? null} fileCount={folderDeleteTarget?.fileCount ?? 0} busy={folderDeleting} error={folderDeleteError} onClose={() => { if (!folderDeleting) { setFolderDeleteTarget(null); setFolderDeleteError('') } }} onDelete={() => void deleteFolder()}/>
   </div>
 }
 

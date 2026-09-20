@@ -160,6 +160,41 @@
 .note a { display:inline-block; min-height:44px; padding-block:10px; color:#c4ceff; text-decoration:underline; text-underline-offset:3px; }
 .reviewZoom { width:100%; cursor:zoom-in; }
 .notice { margin-bottom:21px; display:flex; align-items:flex-start; gap:10px; padding:14px 16px; border:1px solid rgba(196,206,255,.2); border-radius:var(--portal-radius-photo); background:rgba(196,206,255,.04); color:#c4ceff; font-size:12px; line-height:1.6; }
+.submittedNotice {
+  display:grid;
+  grid-template-columns:32px minmax(0,1fr);
+  align-items:center;
+  gap:12px;
+  margin:0 0 32px;
+  padding:14px 16px;
+  border:1px solid rgba(110,231,183,.22);
+  border-radius:var(--portal-radius-photo);
+  background:rgba(16,185,129,.065);
+  color:#b6f3da;
+  box-shadow:inset 0 1px rgba(255,255,255,.035);
+}
+.submittedNoticeIcon {
+  display:grid;
+  width:32px;
+  height:32px;
+  place-items:center;
+  border-radius:10px;
+  background:rgba(110,231,183,.08);
+  color:#85e9c1;
+}
+.submittedNoticeIcon svg { width:16px; height:16px; }
+.submittedNoticeContent {
+  display:flex;
+  min-width:0;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:2px 8px;
+  margin:0;
+  color:#8fd9ba;
+  font-size:var(--portal-type-body);
+  line-height:1.5;
+}
+.submittedNoticeContent strong { color:#d6f8e9; font-weight:650; }
 .notice[data-tone=error] { color:#ffb5b5; background:rgba(239,68,68,.05); border-color:rgba(239,68,68,.2); }
 .notice[data-tone=success] { color:#9ee5c5; background:rgba(16,185,129,.05); border-color:rgba(16,185,129,.2); }
 .overviewContent { padding:20px 24px 28px; overflow-y:auto; min-height:0; }
@@ -887,6 +922,28 @@
 
   .main {
     padding-top: 22px;
+  }
+
+  .submittedNotice {
+    grid-template-columns:28px minmax(0,1fr);
+    gap:10px;
+    margin-bottom:24px;
+    padding:12px;
+  }
+
+  .submittedNoticeIcon {
+    width:28px;
+    height:28px;
+    border-radius:9px;
+  }
+
+  .submittedNoticeContent {
+    display:block;
+  }
+
+  .submittedNoticeContent span {
+    display:block;
+    margin-top:2px;
   }
 
   .photoHeading {

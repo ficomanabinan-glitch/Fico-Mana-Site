@@ -17,6 +17,7 @@ import {
   ListChecks,
   PenTool,
   Upload,
+  Download,
 } from 'lucide-react'
 import { type Booking } from '@/lib/data-store'
 import { fetchFilteringBookings, peekFilteringBookings } from '@/lib/filtering-read-cache'
@@ -45,8 +46,9 @@ import AdminBookingCalendar from '@/components/admin-booking-calendar'
 import AdminRawPhotoQueue from '@/components/admin-raw-photo-queue'
 import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import DownloadRequestsPanel from '@/components/download-requests-panel'
 
-export type FilteringDashTab = 'overview' | 'queue' | 'calendar' | 'editor'
+export type FilteringDashTab = 'overview' | 'queue' | 'downloads' | 'calendar' | 'editor'
 
 type Props = {
   initialSearch?: string
@@ -78,6 +80,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
   )
   const [selectedDate, setSelectedDate] = useState(todayKey())
   const [queueSearch, setQueueSearch] = useState(initialSearch)
+  const [downloadRequestCount, setDownloadRequestCount] = useState(0)
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
@@ -152,6 +155,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
   const tabs: { id: FilteringDashTab; label: string; icon: typeof LayoutDashboard; count?: number }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'queue', label: 'Review Queue', icon: ListChecks, count: pipeline.pendingReview },
+    { id: 'downloads', label: 'Download Requests', icon: Download, count: downloadRequestCount },
     { id: 'calendar', label: 'Calendar', icon: CalendarDays },
     { id: 'editor', label: 'Editing Batches', icon: FolderDown, count: pipeline.awaitingEdit },
   ]
@@ -249,6 +253,10 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
             }}
           />
         </div>
+      )}
+
+      {activeTab === 'downloads' && (
+        <DownloadRequestsPanel onCountChange={setDownloadRequestCount} />
       )}
 
       {activeTab === 'editor' && (

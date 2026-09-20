@@ -40,12 +40,12 @@ const roleCopy: Record<StaffAccessRole, { label: string; detail: string }> = {
   owner: { label: 'Owner', detail: 'Full account and studio control' },
   admin: { label: 'Administrator', detail: 'Studio management and user access' },
   editor: { label: 'Editor', detail: 'Selections, editing batches, and files' },
-  onsite: { label: 'Onsite staff', detail: 'Shoot-day preparation and uploads' },
+  onsite: { label: 'Staff', detail: 'Basic studio and onsite access' },
   staff: { label: 'Staff', detail: 'Basic studio and onsite access' },
   unassigned: { label: 'No access', detail: 'Authentication exists without workspace access' },
 }
 
-const roleOptions: ManageableStaffRole[] = ['admin', 'editor', 'onsite', 'staff']
+const roleOptions: ManageableStaffRole[] = ['admin', 'editor', 'staff']
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -271,9 +271,9 @@ function CreateAccountForm({ busy, currentRole, onSubmit, onCancel }: { busy: bo
 }
 
 function AccountRow({ account, busy, canManage, roleChoices, onSave, onDelete }: { account: StaffAccount; busy: boolean; canManage: boolean; roleChoices: ManageableStaffRole[]; onSave: (account: StaffAccount, role: ManageableStaffRole, displayName: string) => Promise<void>; onDelete: () => void }) {
-  const [role, setRole] = useState<ManageableStaffRole>(account.role === 'owner' || account.role === 'unassigned' ? 'editor' : account.role)
+  const [role, setRole] = useState<ManageableStaffRole>(account.role === 'owner' || account.role === 'unassigned' ? 'editor' : account.role === 'onsite' ? 'staff' : account.role)
   const [displayName, setDisplayName] = useState(account.displayName)
-  const changed = role !== account.role || displayName.trim() !== account.displayName
+  const changed = role !== (account.role === 'onsite' ? 'staff' : account.role) || displayName.trim() !== account.displayName
   return <div className="grid min-w-0 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,.65fr)_minmax(0,1.6fr)] xl:items-center">
     <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-semibold">{account.displayName}</p>{account.isCurrent ? <span className="rounded-full border border-[#C4CEFF]/25 bg-[#C4CEFF]/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-[#C4CEFF]">You</span> : null}</div><p className="mt-1 break-all text-sm text-white/65">{account.email}</p></div>
     <div className="min-w-0"><p className="text-sm font-semibold">{roleCopy[account.role].label}</p><p className="mt-1 text-xs text-white/65">{account.lastSignInAt ? `Last sign-in ${new Date(account.lastSignInAt).toLocaleDateString('en-PH')}` : 'Has not signed in yet'}</p></div>
