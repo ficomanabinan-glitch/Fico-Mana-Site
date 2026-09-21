@@ -49,10 +49,9 @@ test('cancelled and failed download streams do not record completion', async () 
   assert.equal(records, 0)
 })
 
-test('actual portal ZIP route streams R2 objects and records only a nonempty completed client download', async () => {
-  let records = 0
+test('actual portal ZIP route creates a private Cloudflare handoff only for nonempty deliverables', async () => {
+  let manifests = 0
   let available = true
-  let storageFailed = false
   const code = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     archiver,
     'next/server': { NextResponse: { json: Response.json, redirect: (url: string, init: ResponseInit) => new Response(null, { ...init, headers: { ...init.headers, location: url } }) } },
@@ -60,15 +59,18 @@ test('actual portal ZIP route streams R2 objects and records only a nonempty com
     '@/lib/portal-download-stream': { trackCompletedPortalDownload },
     '@/lib/editor-workflow': {
       preparePortalDeliverables: async () => available ? [{ name: 'sample.JPG', storageKey: 'workspaces/studio/shoots/2026/09/14/booking/deliverable/sample.jpg' }] : [],
-      recordPortalFirstDownload: async (id: string) => { assert.equal(id, publicId); records++ },
     },
-    '@/lib/portal-raw-downloads': {},
-    '@/lib/storage/storage-service': {
-      getObject: async () => {
-        if (storageFailed) throw new Error('Synthetic R2 failure')
-        return { Body: Readable.from([Buffer.from('synthetic photo bytes')]) }
+    '@/lib/private-download-manifest': {
+      createPortalDownloadRedirect: async (input: { publicId: string; kind: string; entries: unknown[] }) => {
+        assert.equal(input.publicId, publicId)
+        assert.equal(input.kind, 'PORTAL_DELIVERABLES')
+        assert.equal(input.entries.length, 1)
+        manifests++
+        return 'https://ficomana-private-downloads.example/download/manifest?token=private'
       },
     },
+    '@/lib/portal-raw-downloads': {},
+    '@/lib/storage/storage-service': {},
     '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async () => null },
     '@/lib/package-workflow': {}, '@/lib/auth-api': {}, '@/lib/auth/workflow': {},
     '@/lib/security/file-validation': {}, '@/lib/security/schemas': {}, '@/lib/security/security-audit': {},
@@ -82,18 +84,14 @@ test('actual portal ZIP route streams R2 objects and records only a nonempty com
       params: Promise.resolve({ path: ['portal', publicId, 'deliverables.zip'] }),
     })
   }
-  const zip = await request()
-  assert.equal(zip.status, 200)
-  const bytes = new Uint8Array(await zip.arrayBuffer())
-  assert.deepEqual([...bytes.slice(0, 2)], [80, 75])
-  assert.equal(records, 1)
+  const redirect = await request()
+  assert.equal(redirect.status, 307)
+  assert.match(redirect.headers.get('location') || '', /^https:\/\/ficomana-private-downloads\.example\//)
+  assert.match(redirect.headers.get('cache-control') || '', /no-store/)
+  assert.equal(manifests, 1)
   available = false
   assert.equal((await request()).status, 404)
-  assert.equal(records, 1)
-  available = true
-  storageFailed = true
-  await assert.rejects((await request()).arrayBuffer(), /Synthetic R2 failure/)
-  assert.equal(records, 1)
+  assert.equal(manifests, 1)
 })
 
 test('notice shows the final-delivery start rule and the exact GMT+8 deadline afterwards', () => {

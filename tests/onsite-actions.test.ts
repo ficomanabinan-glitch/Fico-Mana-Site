@@ -127,7 +127,7 @@ test('reset route requires onsite capability, trusted origin, rate budget and ex
     '@/lib/security/file-validation':{},'@/lib/security/schemas':{},'@/lib/security/security-audit':{},'@/lib/security/upload-scanner':{},'@/lib/security/request-security':{},
     '@/lib/raw-upload-contract':{RawUploadError},'@/lib/raw-upload-server':{},
     '@/lib/onsite-photo-reset':{beginOnsitePhotoReset:async(context:any)=>{calls.push(context);return{resetId:'00000000-0000-4000-8000-000000000003'}},continueOnsitePhotoReset:async(context:any,id:string)=>{calls.push({...context,id});return{complete:true}}},
-    "@/lib/portal-download-stream": {},
+    "@/lib/portal-download-stream": {}, '@/lib/private-download-manifest': {},
   })
   const request=(body:any)=>route.POST(new Request('https://editor.ficomana.com/api/editor-workflow/raw/ONE/reset',{method:'POST',body:JSON.stringify(body)}) as never,{params:Promise.resolve({path:['raw','ONE','reset']})})
   for(const bad of [{},{confirmBookingId:'TWO'},{confirmBookingId:'ONE',resetId:5},{confirmBookingId:'ONE',resetId:'------------------------------------'}])assert.equal((await request(bad)).status,400)

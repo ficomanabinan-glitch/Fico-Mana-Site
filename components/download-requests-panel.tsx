@@ -74,7 +74,7 @@ export default function DownloadRequestsPanel({ onCountChange }: { onCountChange
         <div className={`${adminEmptyState} m-5 min-h-56`}>
           <Download className="size-7 text-white/25" />
           <p className="text-sm font-medium text-white/70">No download requests</p>
-          <p className="max-w-sm text-center text-caption leading-relaxed text-white/40">Clients appear here after using both original downloads within seven days.</p>
+          <p className="max-w-sm text-center text-caption leading-relaxed text-white/40">Clients appear here after using both included original downloads.</p>
         </div>
       ) : (
         <div className="divide-y divide-white/[0.07]">

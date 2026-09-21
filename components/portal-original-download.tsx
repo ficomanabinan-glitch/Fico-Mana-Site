@@ -33,9 +33,6 @@ export default function PortalOriginalDownload({
   const pending = access.requestStatus === 'PENDING'
   const reserved = access.requestStatus === 'RESERVED' || access.activeDownloads > 0
   const granted = access.requestStatus === 'GRANTED'
-  const nextLabel = access.nextAvailableAt
-    ? new Date(access.nextAvailableAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : null
 
   async function submitRequest() {
     const clean = reason.trim()
@@ -78,8 +75,7 @@ export default function PortalOriginalDownload({
         <div className="max-w-2xl">
           <h2 className="text-card-title font-semibold tracking-heading">Your original photos</h2>
           <p className="mt-1 text-caption leading-relaxed text-white/45">
-            Download all {total} originals up to {access.limit} times every seven days.
-            {nextLabel && !access.allowed ? ` Standard access refreshes ${nextLabel}.` : ''}
+            Download all {total} originals up to {access.limit} times from this portal.
           </p>
           <p className="mt-2 text-caption text-white/35">{access.completedInWindow} of {access.limit} downloads used</p>
         </div>

@@ -135,6 +135,9 @@ importers:
       '@vercel/analytics':
         specifier: 1.6.1
         version: 1.6.1(next@16.3.4(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.63.0)(@types/node@24.10.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
+      '@zip.js/zip.js':
+        specifier: 2.16.0
+        version: 2.16.0
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -1346,6 +1349,10 @@ packages:
         optional: true
       vue-router:
         optional: true
+
+  '@zip.js/zip.js@2.16.0':
+    resolution: {integrity: sha512-D2DZ0Gdn4TP0HlIERuLLRyzKd65C7YUqxF2A6tpthM9TAcWBE+oWGvN52tJ12smenv6vo9J2tXVX4Obzh6skuA==}
+    engines: {bun: '>=0.7.0', deno: '>=1.0.0', node: '>=18.0.0'}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -4935,6 +4942,8 @@ snapshots:
     optionalDependencies:
       next: 16.3.4(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.63.0)(@types/node@24.10.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react: 19.2.4
+
+  '@zip.js/zip.js@2.16.0': {}
 
   abort-controller@3.0.0:
     dependencies:

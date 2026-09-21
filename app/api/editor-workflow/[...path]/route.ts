@@ -29,7 +29,6 @@ import {
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
   preparePortalRawPhotos,
-  recordPortalFirstDownload,
   reconcileBookingStorage,
   recordMatchReviews,
   resolveMatchReview,
@@ -72,6 +71,7 @@ import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from
 import { beginOnsitePhotoReset, continueOnsitePhotoReset } from '@/lib/onsite-photo-reset'
 import { reviewSelection, SelectionReviewError } from '@/lib/selection-review'
 import { portalPagePayload } from '@/lib/portal-page-payload'
+import { createPortalDownloadRedirect } from '@/lib/private-download-manifest'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -83,6 +83,18 @@ function json(data: unknown, status = 200) {
   return NextResponse.json(data, {
     status,
     headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+  })
+}
+
+function privateDownloadRedirect(location: string) {
+  return new Response(null, {
+    status: 307,
+    headers: {
+      location,
+      'cache-control': 'private, no-store',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+    },
   })
 }
 
@@ -243,7 +255,13 @@ async function handlePortal(request: NextRequest, path: string[]) {
   if (path[2] === 'deliverables.zip' && method === 'GET') {
     const files = await preparePortalDeliverables(publicId)
     if (!files.length) return json({ error: 'No delivered photos are available yet.' }, 404)
-    return zipResponse(files, `${publicId}-FICO-MANA-PHOTOS.zip`, undefined, () => recordPortalFirstDownload(publicId))
+    const location = await createPortalDownloadRedirect({
+      publicId,
+      kind: 'PORTAL_DELIVERABLES',
+      entries: files,
+      fileName: `${publicId}-FICO-MANA-PHOTOS.zip`,
+    })
+    return privateDownloadRedirect(location)
   }
   if (path.length === 3 && path[2] === 'raw-download-request' && method === 'POST') {
     const parsed = portalRawDownloadRequestSchema.safeParse(await request.json().catch(() => null))
@@ -263,17 +281,23 @@ async function handlePortal(request: NextRequest, path: string[]) {
       attemptId = (await beginPortalRawDownload(publicId)).attemptId
     } catch (error) {
       if (error instanceof Error && error.message === 'DOWNLOAD_LIMIT_REACHED') {
-        return json({ error: 'You have used both downloads for this seven-day period. Request another download access from the studio.' }, 429)
+        return json({ error: 'You have used both included downloads for this portal. Request another download access from the studio.' }, 429)
       }
       throw error
     }
-    return zipResponse(
-      files,
-      `${publicId}-FICO-MANA-ORIGINALS.zip`,
-      undefined,
-      () => finishPortalRawDownload(attemptId, true),
-      () => finishPortalRawDownload(attemptId, false),
-    )
+    try {
+      const location = await createPortalDownloadRedirect({
+        publicId,
+        kind: 'PORTAL_ORIGINALS',
+        entries: files,
+        fileName: `${publicId}-FICO-MANA-ORIGINALS.zip`,
+        rawAttemptId: attemptId,
+      })
+      return privateDownloadRedirect(location)
+    } catch (error) {
+      await finishPortalRawDownload(attemptId, false).catch(() => undefined)
+      throw error
+    }
   }
   return json({ error: 'Unknown client portal workflow endpoint.' }, 404)
 }

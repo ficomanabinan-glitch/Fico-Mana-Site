@@ -79,6 +79,7 @@ function fixture() {
     },
     '@/lib/storage/multipart-upload': {},
     '@/lib/portal-raw-downloads': {},
+    '@/lib/private-download-manifest': {},
   })
   const route = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
     'next/server': {
@@ -96,6 +97,7 @@ function fixture() {
     '@/lib/auth/workflow': {},
     '@/lib/editor-workflow': workflow,
     '@/lib/portal-raw-downloads': {},
+    '@/lib/private-download-manifest': {},
     '@/lib/storage/storage-service': { getObject: async () => ({ Body: Readable.from([Buffer.from('private image bytes')]) }) },
     '@/lib/portal-download-stream': {},
     '@/lib/security/api-rate-limit': {

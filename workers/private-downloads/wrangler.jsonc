@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ficomana-private-downloads",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "preview_urls": false,
+  "r2_buckets": [
+    {
+      "binding": "PRIVATE_PHOTOS",
+      "bucket_name": "ficomana-private-photos-production"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "DOWNLOAD_RATE_LIMITER",
+      "namespace_id": "26092101",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://psosdbnemnsspmsligpp.supabase.co"
+  },
+  "observability": {
+    "enabled": false
+  }
+}

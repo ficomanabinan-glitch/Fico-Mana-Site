@@ -3,14 +3,15 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
 const migrationPath = 'supabase/migrations/20260920113000_portal_original_download_access.sql'
+const lifetimeMigrationPath = 'supabase/migrations/20260921041745_private_cloudflare_downloads.sql'
 
-test('original downloads use a two-completion rolling seven-day policy', async () => {
-  const [migration, policy] = await Promise.all([readFile(migrationPath, 'utf8'), readFile('lib/portal-raw-downloads.ts', 'utf8')])
+test('original downloads use a two-completion portal-lifetime policy', async () => {
+  const [migration, policy] = await Promise.all([readFile(lifetimeMigrationPath, 'utf8'), readFile('lib/portal-raw-downloads.ts', 'utf8')])
   assert.match(policy, /PORTAL_RAW_DOWNLOAD_LIMIT = 2/)
-  assert.match(migration, /completed_at > clock_timestamp\(\) - interval '7 days'/i)
+  assert.doesNotMatch(migration, /completed_at > clock_timestamp\(\) - interval '7 days'/i)
   assert.match(migration, /completed_count \+ active_count < 2/i)
   assert.match(migration, /status='COMPLETED'/i)
-  assert.match(migration, /p_success then 'COMPLETED' else 'FAILED'/i)
+  assert.match(migration, /interval '6 hours'/i)
 })
 
 test('download requests require a readable reason and remain duplicate-safe', async () => {
@@ -32,11 +33,12 @@ test('a staff grant is one-time, workspace-scoped, and audited', async () => {
 })
 
 test('portal and editor surfaces expose the request and grant workflow', async () => {
-  const [portal, panel, dashboard, route] = await Promise.all([
+  const [portal, panel, dashboard, route, worker] = await Promise.all([
     readFile('components/portal-original-download.tsx', 'utf8'),
     readFile('components/download-requests-panel.tsx', 'utf8'),
     readFile('components/filtering-dashboard.tsx', 'utf8'),
     readFile('app/api/editor-workflow/[...path]/route.ts', 'utf8'),
+    readFile('workers/private-downloads/src/index.js', 'utf8'),
   ])
   assert.match(portal, /Request another download access/)
   assert.match(portal, /Tell the studio why you need another download/)
@@ -44,7 +46,8 @@ test('portal and editor surfaces expose the request and grant workflow', async (
   assert.match(panel, /Grant access/)
   assert.match(dashboard, /Download Requests/)
   assert.match(route, /raw-download-request/)
-  assert.match(route, /finishPortalRawDownload\(attemptId, true\)/)
+  assert.match(route, /createPortalDownloadRedirect/)
+  assert.match(worker, /complete_private_download_manifest/)
 })
 
 test('database policy completes two downloads, queues a reason, and consumes one staff grant', async () => {
@@ -59,6 +62,7 @@ test('database policy completes two downloads, queues a reason, and consumes one
     create table public.workflow_audit_logs(id bigint generated always as identity primary key,workspace_id uuid,actor_type text,actor_id text,action text,booking_id varchar,metadata jsonb);
   `)
   await db.exec(await readFile(migrationPath, 'utf8'))
+  await db.exec(await readFile(lifetimeMigrationPath, 'utf8'))
   const workspace = '11111111-1111-4111-8111-111111111111'
   const portal = '22222222-2222-4222-8222-222222222222'
   const publicId = '33333333-3333-4333-8333-333333333333'
