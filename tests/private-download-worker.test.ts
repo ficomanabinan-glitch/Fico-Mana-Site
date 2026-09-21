@@ -48,3 +48,35 @@ test('private download worker authorizes, streams R2 bytes, and records completi
     globalThis.fetch = originalFetch
   }
 })
+
+test('private download worker includes inline batch manifests without reading R2', async () => {
+  const manifestId = '22222222-2222-4222-8222-222222222222'
+  const originalFetch = globalThis.fetch
+  let r2Reads = 0
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith('/resolve_private_download_manifest')) {
+      return Response.json({
+        fileName: 'editor-batch.zip',
+        entries: [{ name: 'manifest.json', inlineBase64: Buffer.from('{"batch":true}').toString('base64') }],
+      })
+    }
+    return Response.json(true)
+  }) as typeof fetch
+  try {
+    const response = await worker.fetch(
+      new Request(`https://downloads.example/download/${manifestId}?token=${'b'.repeat(43)}`),
+      {
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_PUBLISHABLE_KEY: 'public-key',
+        PRIVATE_PHOTOS: { get: async () => { r2Reads++; return null } },
+      },
+    )
+    assert.equal(response.status, 200)
+    const archive = new Uint8Array(await response.arrayBuffer())
+    assert.equal(String.fromCharCode(...archive.slice(0, 2)), 'PK')
+    assert.equal(r2Reads, 0)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

@@ -1,5 +1,4 @@
-import { PassThrough, Readable } from 'node:stream'
-import archiver from 'archiver'
+import { Readable } from 'node:stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { requireWorkflowAuth } from '@/lib/auth-api'
@@ -24,7 +23,6 @@ import {
   getStaffSelectionFiles,
   getWorkflowMembers,
   refreshRawFiles,
-  markBatchDownloaded,
   prepareBatchDownload,
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
@@ -48,7 +46,6 @@ import {
   requestPortalRawDownload,
 } from '@/lib/portal-raw-downloads'
 import { getObject } from '@/lib/storage/storage-service'
-import { trackCompletedPortalDownload } from '@/lib/portal-download-stream'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/lib/security/file-validation'
 import {
@@ -71,13 +68,11 @@ import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from
 import { beginOnsitePhotoReset, continueOnsitePhotoReset } from '@/lib/onsite-photo-reset'
 import { reviewSelection, SelectionReviewError } from '@/lib/selection-review'
 import { portalPagePayload } from '@/lib/portal-page-payload'
-import { createPortalDownloadRedirect } from '@/lib/private-download-manifest'
+import { createEditorBatchDownloadRedirect, createPortalDownloadRedirect } from '@/lib/private-download-manifest'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
-
-type ZipEntry = { name: string; data?: Buffer; storageKey?: string }
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, {
@@ -110,59 +105,6 @@ function errorResponse(error: unknown, fallback: string, requestId: string, stat
     { error: exposeDetails ? message : fallback, requestId },
     serverError ? 503 : exposeDetails ? status : 500,
   )
-}
-
-function lazyStorageStream(storageKey: string) {
-  return Readable.from(
-    (async function* () {
-      const response = await getObject(storageKey)
-      if (!response.Body) throw new Error('This file is currently unavailable.')
-      for await (const chunk of response.Body as AsyncIterable<Uint8Array>) yield chunk
-    })(),
-  )
-}
-
-function zipResponse(
-  entries: ZipEntry[],
-  fileName: string,
-  onComplete?: () => Promise<void>,
-  beforeDownloadEnd?: () => Promise<void>,
-  onInterrupted?: () => Promise<void>,
-) {
-  const output = new PassThrough()
-  const archive = archiver('zip', { zlib: { level: 0 } })
-  const sources: Readable[] = []
-  archive.on('error', (error) => output.destroy(error))
-  archive.pipe(output)
-  for (const entry of entries) {
-    if (entry.storageKey) {
-      const source = lazyStorageStream(entry.storageKey)
-      source.once('error', (error) => output.destroy(error))
-      sources.push(source)
-      archive.append(source, { name: entry.name })
-    }
-    else archive.append(entry.data || Buffer.alloc(0), { name: entry.name })
-  }
-  output.once('close', () => {
-    if (!output.readableEnded) {
-      archive.abort()
-      sources.forEach(source => source.destroy())
-      if (onInterrupted) void onInterrupted().catch((error) => console.error('ZIP interruption update failed:', error))
-    }
-  })
-  void archive.finalize().catch((error) => output.destroy(error))
-  if (onComplete) {
-    output.once('end', () => void onComplete().catch((error) => console.error('ZIP completion update failed:', error)))
-  }
-  const body = Readable.toWeb(output) as ReadableStream
-  return new Response(beforeDownloadEnd ? trackCompletedPortalDownload(body, beforeDownloadEnd) : body, {
-    headers: {
-      'content-type': 'application/zip',
-      'content-disposition': `attachment; filename="${safeDownloadName(fileName)}"`,
-      'cache-control': 'private, no-store',
-      'x-content-type-options': 'nosniff',
-    },
-  })
 }
 
 async function handlePortal(request: NextRequest, path: string[]) {
@@ -429,11 +371,13 @@ async function handle(request: NextRequest, path: string[]) {
         actorId,
         canUseWorkflow(access, 'admin'),
       )
-      return zipResponse(prepared.entries, prepared.fileName, async () => {
-        for (const item of prepared.prepared) {
-          await markBatchDownloaded(workspaceId, item.batch.id, item.jobs, actorId)
-        }
-      })
+      return privateDownloadRedirect(await createEditorBatchDownloadRedirect({
+        workspaceId,
+        actorId,
+        entries: prepared.entries,
+        fileName: prepared.fileName,
+        batches: prepared.prepared.map((item) => ({ batchId: item.batch.id, jobs: item.jobs })),
+      }))
     }
 
     if (path[0] === 'batches') {
@@ -456,9 +400,13 @@ async function handle(request: NextRequest, path: string[]) {
           actorId,
           canUseWorkflow(access, 'admin'),
         )
-        return zipResponse(prepared.entries, prepared.fileName, () =>
-          markBatchDownloaded(workspaceId, prepared.batch.id, prepared.jobs, actorId),
-        )
+        return privateDownloadRedirect(await createEditorBatchDownloadRedirect({
+          workspaceId,
+          actorId,
+          entries: prepared.entries,
+          fileName: prepared.fileName,
+          batches: [{ batchId: prepared.batch.id, jobs: prepared.jobs }],
+        }))
       }
       if (path[2] === 'failed' && method === 'GET') {
         return json({ bookingIds: await getBatchFailedBookingIds(workspaceId, batchId) })

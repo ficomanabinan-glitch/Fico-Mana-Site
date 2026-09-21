@@ -224,6 +224,26 @@ export async function GET(request: NextRequest) {
   const openId = request.nextUrl.searchParams.get('file')?.trim() || ''
   const preview = request.nextUrl.searchParams.get('preview') === '1'
 
+  if (request.nextUrl.searchParams.get('summary') === '1') {
+    const result = await admin.rpc('private_storage_summary', { p_workspace: access.workspaceId })
+    if (result.error) return json({ error: 'Storage usage could not be loaded. Try again.' }, 503)
+    const summary = (result.data || {}) as Record<string, unknown>
+    const indexedBytes = Number(summary.indexedBytes || 0)
+    const storageGb = indexedBytes / 1024 ** 3
+    const estimatedMonthlyUsd = Math.max(0, storageGb - 10) * 0.015
+    return json({
+      ...summary,
+      storageGb,
+      estimatedMonthlyUsd,
+      pricing: { currency: 'USD', freeGb: 10, storagePerGbMonth: 0.015, egressPerGb: 0 },
+      delivery: {
+        privateWorkerConfigured: Boolean(process.env.PRIVATE_DOWNLOAD_WORKER_URL),
+        portalDownloads: 'Cloudflare R2 Worker',
+        editorBatchDownloads: 'Cloudflare R2 Worker',
+      },
+    })
+  }
+
   if (openId && (openSource === 'gallery' || openSource === 'deliverable')) {
     const result = openSource === 'gallery'
       ? await admin.from('gallery_files').select('id,booking_id,storage_key,file_name,thumbnail_reference,preview_reference')
