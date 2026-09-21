@@ -71,7 +71,7 @@ export default function ExpiredRawCleanupDialog({ open, preview, loading, busy, 
       <span className="grid size-10 place-items-center rounded-xl bg-red-400/10 text-red-200"><AlertTriangle aria-hidden="true" className="size-5"/></span>
       <h2 id="expired-raw-cleanup-title" className="mt-4 text-lg font-semibold tracking-[-0.01em]">Delete all eligible RAW photos?</h2>
       <p id="expired-raw-cleanup-description" className="mt-2 max-w-[64ch] text-sm leading-6 text-white/65">
-        This permanently removes original camera files only after the client portal has expired and the configured retention period has passed. Enhanced, final, and print files are not included.
+        This permanently removes original camera files only after the client portal has been expired for the configured grace period. Enhanced, final, and print files are not included.
       </p>
     </div>
 
@@ -97,7 +97,7 @@ export default function ExpiredRawCleanupDialog({ open, preview, loading, busy, 
             onChange={(event) => setConfirmation(event.target.value)} placeholder={FOLDER_DELETE_CONFIRMATION}
             className="mt-2 min-h-11 w-full rounded-xl border border-white/15 bg-black/20 px-3 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-red-200/60 focus:ring-2 focus:ring-red-200/15 disabled:opacity-60"/>
           <p className="mt-2 text-xs text-white/45">The phrase is case-sensitive. This cannot be undone.</p>
-        </div> : <div className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] p-4 text-sm leading-6 text-emerald-100/80">No RAW folders are eligible. A folder appears here only after delivery, portal expiry, and the {preview.retentionDays}-day retention period.</div>}
+        </div> : <div className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] p-4 text-sm leading-6 text-emerald-100/80">No RAW folders are eligible. A folder appears here only after delivery and {preview.retentionDays} full days have passed since portal expiry.</div>}
       </> : null}
       {error ? <p role="alert" className="mt-4 rounded-xl border border-red-300/20 bg-red-300/10 p-3 text-sm text-red-100">{error}</p> : null}
       <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

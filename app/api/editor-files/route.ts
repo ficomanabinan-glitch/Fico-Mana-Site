@@ -68,7 +68,14 @@ async function rawCleanupCandidates(admin: AdminClient, workspaceId: string) {
   { pageSize: 1_000, maxPages: 200 })
 }
 
-function rawCleanupPreview(rows: RawCleanupCandidate[]) {
+async function rawRetentionDays(admin: AdminClient, workspaceId: string) {
+  const result = await admin.from('storage_retention_settings').select('retention_days')
+    .eq('workspace_id', workspaceId).maybeSingle()
+  if (result.error) throw new Error(result.error.message)
+  return Number(result.data?.retention_days || 7)
+}
+
+function rawCleanupPreview(rows: RawCleanupCandidate[], configuredDays = 7) {
   const folders = new Map<string, {
     bookingId: string
     customerName: string
@@ -97,7 +104,7 @@ function rawCleanupPreview(rows: RawCleanupCandidate[]) {
       row.id, row.booking_id, row.storage_key, row.preview_reference, row.thumbnail_reference,
       row.file_size, row.portal_expired_at, row.retention_days,
     ]).sort(([a], [b]) => String(a).localeCompare(String(b))))).digest('hex'),
-    retentionDays: Number(rows[0]?.retention_days || 60),
+    retentionDays: Number(rows[0]?.retention_days || configuredDays),
     fileCount: rows.length,
     bytes: rows.reduce((total, row) => total + Number(row.file_size || 0), 0),
     folders: items,
@@ -126,7 +133,7 @@ async function deleteExpiredRawPhotos(
   }
   if (!candidates.length) return json({ error: 'No expired RAW folders are currently eligible. Refresh File Management.' }, 409)
 
-  const preview = rawCleanupPreview(candidates)
+  const preview = rawCleanupPreview(candidates, await rawRetentionDays(admin, workspaceId))
   if (body.confirmationToken !== preview.confirmationToken) {
     return json({ error: 'The eligible folders changed since you opened the preview. Close it and review the updated list before deleting.' }, 409)
   }
@@ -421,7 +428,11 @@ export async function GET(request: NextRequest) {
     const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.storageOperation, [user.id, access.workspaceId, 'expired-raw-preview'])
     if (limited) return limited
     try {
-      return json(rawCleanupPreview(await rawCleanupCandidates(admin, access.workspaceId)))
+      const [candidates, retentionDays] = await Promise.all([
+        rawCleanupCandidates(admin, access.workspaceId),
+        rawRetentionDays(admin, access.workspaceId),
+      ])
+      return json(rawCleanupPreview(candidates, retentionDays))
     } catch (cause) {
       console.error('Expired RAW cleanup preview failed:', cause)
       return json({ error: 'Eligible RAW folders could not be loaded. Try again.' }, 503)

@@ -281,11 +281,10 @@ function StorageCostSummary({ summary, error, onOpenRawCleanup }: { summary: Sto
     <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)] lg:p-6">
       <div className="min-w-0">
         <div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#C4CEFF]/10 text-[#C4CEFF]"><Cloud className="size-5"/></span><div><h2 id="storage-summary-title" className="text-base font-semibold text-white">Private storage overview</h2><p className="mt-1 text-sm text-white/65">Usage is read from indexed private R2 files. Opening this page does not download photos.</p></div></div>
-        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
           <div><dt className="text-xs text-white/65">Indexed storage</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-white">{sizeLabel(summary.indexedBytes)}</dd></div>
           <div><dt className="text-xs text-white/65">Private files</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-white">{summary.fileCount.toLocaleString()}</dd></div>
           <div><dt className="text-xs text-white/65">R2 storage estimate</dt><dd className="mt-1 text-lg font-semibold tabular-nums text-white">${summary.estimatedMonthlyUsd.toFixed(2)}<span className="ml-1 text-xs font-normal text-white/65">/ month</span></dd></div>
-          <div><dt className="text-xs text-white/65">Internet egress</dt><dd className="mt-1 text-lg font-semibold text-emerald-200">$0</dd></div>
         </dl>
         <p className="mt-4 text-xs leading-5 text-white/65">Estimate uses Standard R2 pricing: first 10 GB included, then $0.015 per GB-month. Operations and other providers are separate.</p>
       </div>
@@ -296,7 +295,7 @@ function StorageCostSummary({ summary, error, onOpenRawCleanup }: { summary: Sto
           <div className="flex items-start justify-between gap-4"><span className="text-white/65">RAW retention</span><strong className="text-right text-white">{summary.retention.days} days · {summary.candidateFiles} eligible</strong></div>
           <div className="flex items-start justify-between gap-4"><span className="text-white/65">Recoverable space</span><strong className="tabular-nums text-white">{summary.candidateBytes > 0 ? sizeLabel(summary.candidateBytes) : '0 B'}</strong></div>
         </div>
-        <p className="mt-4 text-xs leading-5 text-white/65">Only delivered shoots with expired client portals and RAW photos older than {summary.retention.days} days can qualify. Enhanced, final, and print files stay untouched.</p>
+        <p className="mt-4 text-xs leading-5 text-white/65">Only delivered shoots whose client portals expired at least {summary.retention.days} days ago can qualify. Enhanced, final, and print files stay untouched.</p>
         <button type="button" onClick={onOpenRawCleanup} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300/25 px-3.5 text-xs font-semibold tracking-[0.02em] text-red-200 outline-none transition hover:border-red-300/50 hover:bg-red-300/[0.07] focus-visible:ring-2 focus-visible:ring-red-200">
           <Trash2 className="size-3.5" aria-hidden="true"/>DELETE ALL RAW PHOTOS
         </button>

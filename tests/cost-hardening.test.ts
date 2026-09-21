@@ -18,15 +18,17 @@ test('editor batch archives are handed to the private R2 worker', async () => {
   assert.match(worker, /entry\.inlineBase64/)
 })
 
-test('automatic retention is restricted to delivered originals with no active portal', async () => {
-  const migration = await readFile('supabase/migrations/20260921052025_manual_expired_raw_cleanup.sql', 'utf8')
+test('automatic retention starts seven full days after portal expiry', async () => {
+  const migration = await readFile('supabase/migrations/20260921054332_change_raw_retention_to_7_days_after_portal_expiry.sql', 'utf8')
   assert.match(migration, /split_part\(g\.storage_key, '\/', 8\) in \('raw', 'original'\)/i)
   assert.match(migration, /j\.status = 'DELIVERED'/i)
   assert.match(migration, /p\.status = 'active'/i)
   assert.match(migration, /p\.expires_at is not null/i)
-  assert.match(migration, /p\.expires_at <= clock_timestamp\(\)/i)
+  assert.match(migration, /p\.expires_at <= clock_timestamp\(\) - make_interval\(days => s\.retention_days\)/i)
   assert.match(migration, /p\.expires_at is null or p\.expires_at > clock_timestamp\(\)/i)
-  assert.match(migration, /from public\.private_expired_raw_cleanup_candidates\(settings\.workspace_id\)/i)
+  assert.match(migration, /set retention_days = 7/i)
+  assert.match(migration, /alter column retention_days set default 7/i)
+  assert.doesNotMatch(migration, /g\.created_at <=/i)
   assert.doesNotMatch(migration, /split_part\(g\.storage_key,'\/',8\) in \([^)]*'enhanced'/i)
   assert.match(await readFile(migrationPath, 'utf8'), /enabled boolean not null default false/i)
 })
@@ -54,9 +56,11 @@ test('file management exposes indexed storage cost and retention readiness', asy
   assert.match(page, /confirmationToken: rawCleanupPreview\.confirmationToken/)
   assert.match(route, /private_storage_summary/)
   assert.match(route, /private_expired_raw_cleanup_candidates/)
+  assert.match(route, /rawRetentionDays/)
   assert.match(route, /body\.confirmationToken !== preview\.confirmationToken/)
   assert.match(route, /storagePerGbMonth: 0\.015/)
   assert.match(route, /egressPerGb: 0/)
+  assert.doesNotMatch(page, /Internet egress/i)
 })
 
 test('manual RAW cleanup presents every eligible folder and requires the exact phrase', async () => {
