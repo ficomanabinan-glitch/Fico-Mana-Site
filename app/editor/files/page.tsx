@@ -253,7 +253,7 @@ function StorageCostSummary({ summary, error }: { summary: StorageSummary | null
         <div className="mt-4 space-y-3 text-sm">
           <div className="flex items-start justify-between gap-4"><span className="text-white/65">Private ZIP delivery</span><strong className={summary.delivery.privateWorkerConfigured ? 'text-emerald-200' : 'text-amber-100'}>{summary.delivery.privateWorkerConfigured ? 'R2 Worker ready' : 'Needs configuration'}</strong></div>
           <div className="flex items-start justify-between gap-4"><span className="text-white/65">RAW retention</span><strong className="text-right text-white">{summary.retention.days} days · {summary.candidateFiles} eligible</strong></div>
-          <div className="flex items-start justify-between gap-4"><span className="text-white/65">Recoverable space</span><strong className="tabular-nums text-white">{sizeLabel(summary.candidateBytes)}</strong></div>
+          <div className="flex items-start justify-between gap-4"><span className="text-white/65">Recoverable space</span><strong className="tabular-nums text-white">{summary.candidateBytes > 0 ? sizeLabel(summary.candidateBytes) : '0 B'}</strong></div>
         </div>
         <p className="mt-4 text-xs leading-5 text-white/65">Only delivered shoots with no active client portal can become eligible. Enhanced, final, and print files are always excluded.</p>
       </div>
