@@ -55,42 +55,49 @@ async function complete(env, manifestId, hash, success) {
 
 async function runRetention(env) {
   if (!env.RETENTION_SECRET) return
-  let claim
-  try {
-    claim = await rpc(env, 'claim_storage_retention_batch', {
-      p_secret: env.RETENTION_SECRET,
-      p_limit: 1000,
-    })
-  } catch (error) {
-    console.error('Storage retention claim failed', error instanceof Error ? error.message : 'unknown error')
-    return
-  }
-  if (!claim?.enabled || !Array.isArray(claim.items)) return
-  const fileIds = claim.items.map((item) => String(item.fileId || '')).filter(Boolean)
-  const keys = [...new Set(claim.items.flatMap((item) => Array.isArray(item.keys) ? item.keys : [])
-    .map((key) => String(key || '')).filter(Boolean))]
-  let success = false
-  let errorMessage = null
-  try {
-    for (let start = 0; start < keys.length; start += 1000) {
-      await env.PRIVATE_PHOTOS.delete(keys.slice(start, start + 1000))
+  // One nightly invocation drains a bounded backlog. An empty run stops
+  // immediately; failures stop too, so a broken backend cannot spin.
+  for (let batch = 0; batch < 50; batch += 1) {
+    let claim
+    try {
+      claim = await rpc(env, 'claim_storage_retention_batch', {
+        p_secret: env.RETENTION_SECRET,
+        p_limit: 1000,
+      })
+    } catch (error) {
+      console.error('Storage retention claim failed', error instanceof Error ? error.message : 'unknown error')
+      return
     }
-    success = true
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'R2 deletion failed.'
-    console.error('Storage retention deletion failed', errorMessage)
-  }
-  try {
-    await rpc(env, 'complete_storage_retention_batch', {
-      p_secret: env.RETENTION_SECRET,
-      p_run_id: claim.runId,
-      p_file_ids: fileIds,
-      p_deleted_objects: success ? keys.length : 0,
-      p_success: success,
-      p_error: errorMessage,
-    })
-  } catch (error) {
-    console.error('Storage retention completion failed', error instanceof Error ? error.message : 'unknown error')
+    if (!claim?.enabled || !Array.isArray(claim.items)) return
+    const fileIds = claim.items.map((item) => String(item.fileId || '')).filter(Boolean)
+    const keys = [...new Set(claim.items.flatMap((item) => Array.isArray(item.keys) ? item.keys : [])
+      .map((key) => String(key || '')).filter(Boolean))]
+    let success = false
+    let errorMessage = null
+    try {
+      for (let start = 0; start < keys.length; start += 1000) {
+        await env.PRIVATE_PHOTOS.delete(keys.slice(start, start + 1000))
+      }
+      success = true
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'R2 deletion failed.'
+      console.error('Storage retention deletion failed', errorMessage)
+    }
+    try {
+      const completed = await rpc(env, 'complete_storage_retention_batch', {
+        p_secret: env.RETENTION_SECRET,
+        p_run_id: claim.runId,
+        p_file_ids: fileIds,
+        p_deleted_objects: success ? keys.length : 0,
+        p_success: success,
+        p_error: errorMessage,
+      })
+      if (!completed) throw new Error('Retention completion was not accepted.')
+    } catch (error) {
+      console.error('Storage retention completion failed', error instanceof Error ? error.message : 'unknown error')
+      return
+    }
+    if (!success || fileIds.length === 0) return
   }
 }
 

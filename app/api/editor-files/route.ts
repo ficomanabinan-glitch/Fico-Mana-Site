@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkflowAuth } from '@/lib/auth-api'
 import { canUseWorkflow } from '@/lib/auth/workflow'
 import { Readable } from 'node:stream'
+import { createHash } from 'node:crypto'
 import { assertStorageKeyOwnership, parseStorageKey } from '@/lib/storage/storage-keys'
 import { deleteObjects, getObject } from '@/lib/storage/storage-service'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { readDatabasePages } from '@/lib/database/read-pages'
 import { STORAGE_CATEGORIES } from '@/lib/storage/storage-keys'
 import { isFolderDeleteConfirmation, type FileManagementFolderScope } from '@/lib/file-management-delete'
+import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 300
 
 const headers = { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' }
 const json = (data: unknown, status = 200) => NextResponse.json(data, { status, headers })
@@ -45,6 +48,196 @@ function indexedFile(row: Record<string, any>, source: IndexedFile['source']): I
 }
 
 type AdminClient = NonNullable<ReturnType<typeof getSupabaseAdmin>>
+
+type RawCleanupCandidate = {
+  id: string
+  booking_id: string
+  customer_name: string
+  booking_date: string
+  portal_expired_at: string
+  file_size: number
+  storage_key: string
+  preview_reference: string | null
+  thumbnail_reference: string | null
+  retention_days: number
+}
+
+async function rawCleanupCandidates(admin: AdminClient, workspaceId: string) {
+  return readDatabasePages<RawCleanupCandidate>(() => admin
+    .rpc('private_expired_raw_cleanup_candidates', { p_workspace: workspaceId }),
+  { pageSize: 1_000, maxPages: 200 })
+}
+
+function rawCleanupPreview(rows: RawCleanupCandidate[]) {
+  const folders = new Map<string, {
+    bookingId: string
+    customerName: string
+    shootDate: string
+    portalExpiredAt: string
+    fileCount: number
+    bytes: number
+  }>()
+  for (const row of rows) {
+    const current = folders.get(row.booking_id) || {
+      bookingId: row.booking_id,
+      customerName: row.customer_name,
+      shootDate: row.booking_date,
+      portalExpiredAt: row.portal_expired_at,
+      fileCount: 0,
+      bytes: 0,
+    }
+    current.fileCount += 1
+    current.bytes += Number(row.file_size || 0)
+    folders.set(row.booking_id, current)
+  }
+  const items = [...folders.values()].sort((a, b) =>
+    a.shootDate.localeCompare(b.shootDate) || a.customerName.localeCompare(b.customerName))
+  return {
+    confirmationToken: createHash('sha256').update(JSON.stringify(rows.map((row) => [
+      row.id, row.booking_id, row.storage_key, row.preview_reference, row.thumbnail_reference,
+      row.file_size, row.portal_expired_at, row.retention_days,
+    ]).sort(([a], [b]) => String(a).localeCompare(String(b))))).digest('hex'),
+    retentionDays: Number(rows[0]?.retention_days || 60),
+    fileCount: rows.length,
+    bytes: rows.reduce((total, row) => total + Number(row.file_size || 0), 0),
+    folders: items,
+  }
+}
+
+async function deleteExpiredRawPhotos(
+  request: NextRequest,
+  admin: AdminClient,
+  workspaceId: string,
+  userId: string,
+) {
+  const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.storageOperation, [userId, workspaceId, 'expired-raw-cleanup'])
+  if (limited) return limited
+  const body = await request.json().catch(() => null) as { confirmation?: unknown; confirmationToken?: unknown } | null
+  if (!body || !isFolderDeleteConfirmation(body.confirmation)) {
+    return json({ error: 'Type CONFIRM DELETE exactly to delete eligible RAW photos.' }, 400)
+  }
+
+  let candidates: RawCleanupCandidate[]
+  try {
+    candidates = await rawCleanupCandidates(admin, workspaceId)
+  } catch (cause) {
+    console.error('Expired RAW cleanup validation failed:', cause)
+    return json({ error: 'The eligible folders could not be checked safely. Nothing was removed.' }, 503)
+  }
+  if (!candidates.length) return json({ error: 'No expired RAW folders are currently eligible. Refresh File Management.' }, 409)
+
+  const preview = rawCleanupPreview(candidates)
+  if (body.confirmationToken !== preview.confirmationToken) {
+    return json({ error: 'The eligible folders changed since you opened the preview. Close it and review the updated list before deleting.' }, 409)
+  }
+
+  const fileIds = candidates.map((row) => row.id)
+  const bookingIds = [...new Set(candidates.map((row) => row.booking_id))]
+  const objectKeys = [...new Set(candidates.flatMap((row) => [
+    row.storage_key,
+    row.preview_reference || '',
+    row.thumbnail_reference || '',
+  ]).filter(Boolean))]
+  try {
+    for (const candidate of candidates) {
+      const primary = assertStorageKeyOwnership(candidate.storage_key, workspaceId, candidate.booking_id)
+      if (primary.category !== 'raw' && primary.category !== 'original') throw new Error('Unexpected original category')
+      for (const [storageKey, category] of [
+        [candidate.preview_reference, 'preview'], [candidate.thumbnail_reference, 'thumbnail'],
+      ] as const) {
+        if (storageKey && assertStorageKeyOwnership(storageKey, workspaceId, candidate.booking_id).category !== category) {
+          throw new Error('Unexpected derivative category')
+        }
+      }
+    }
+  } catch {
+    return json({ error: 'An eligible folder contains a file outside its expected storage scope. Nothing was removed.' }, 409)
+  }
+
+  const run = await admin.from('storage_retention_runs').insert({
+    workspace_id: workspaceId,
+    status: 'STARTED',
+    candidate_files: fileIds.length,
+    candidate_bytes: preview.bytes,
+  }).select('id').single()
+  if (run.error || !run.data) return json({ error: 'The cleanup could not be recorded. Nothing was removed.' }, 503)
+  const runId = Number(run.data.id)
+  await admin.from('storage_retention_settings').update({
+    last_started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('workspace_id', workspaceId)
+  const audit = await admin.from('workflow_audit_logs').insert({
+    workspace_id: workspaceId,
+    actor_type: 'staff',
+    actor_id: userId,
+    action: 'EDITOR_EXPIRED_RAW_DELETE_STARTED',
+    metadata: {
+      runId,
+      retentionDays: preview.retentionDays,
+      bookingIds,
+      folderCount: bookingIds.length,
+      fileCount: fileIds.length,
+      objectCount: objectKeys.length,
+    },
+  })
+  if (audit.error) {
+    await admin.from('storage_retention_runs').update({ status: 'FAILED', error: 'Audit log unavailable.', completed_at: new Date().toISOString() }).eq('id', runId)
+    return json({ error: 'The cleanup could not be audited. Nothing was removed.' }, 503)
+  }
+
+  try {
+    const deleted = await deleteObjects(objectKeys)
+    const completedAt = new Date().toISOString()
+    for (let start = 0; start < fileIds.length; start += 100) {
+      const update = await admin.from('gallery_files')
+        .update({ storage_status: 'deleted', updated_at: completedAt })
+        .eq('workspace_id', workspaceId)
+        .eq('storage_status', 'available')
+        .in('id', fileIds.slice(start, start + 100))
+      if (update.error) throw new Error(update.error.message)
+    }
+    await admin.from('storage_retention_runs').update({
+      status: 'COMPLETED', deleted_objects: deleted.deleted, completed_at: completedAt,
+    }).eq('id', runId)
+    await admin.from('storage_retention_settings').update({
+      last_completed_at: completedAt,
+      last_result: {
+        runId, manual: true, success: true, deletedFiles: fileIds.length,
+        deletedObjects: deleted.deleted, deletedFolders: bookingIds.length,
+      },
+      updated_at: completedAt,
+    }).eq('workspace_id', workspaceId)
+    const completed = await admin.from('workflow_audit_logs').insert({
+      workspace_id: workspaceId,
+      actor_type: 'staff',
+      actor_id: userId,
+      action: 'EDITOR_EXPIRED_RAW_DELETE_COMPLETED',
+      metadata: { runId, bookingIds, folderCount: bookingIds.length, fileCount: fileIds.length, objectCount: deleted.deleted },
+    })
+    if (completed.error) console.error('Expired RAW cleanup completion audit failed:', completed.error)
+    return json({ success: true, deletedFolders: bookingIds.length, deletedFiles: fileIds.length, deletedObjects: deleted.deleted })
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Expired RAW cleanup failed.'
+    const completedAt = new Date().toISOString()
+    await admin.from('storage_retention_runs').update({
+      status: 'FAILED', error: message.slice(0, 500), completed_at: completedAt,
+    }).eq('id', runId)
+    await admin.from('storage_retention_settings').update({
+      last_completed_at: completedAt,
+      last_result: { runId, manual: true, success: false, error: message.slice(0, 500) },
+      updated_at: completedAt,
+    }).eq('workspace_id', workspaceId)
+    await admin.from('workflow_audit_logs').insert({
+      workspace_id: workspaceId,
+      actor_type: 'staff',
+      actor_id: userId,
+      action: 'EDITOR_EXPIRED_RAW_DELETE_FAILED',
+      metadata: { runId, bookingIds, fileCount: fileIds.length, objectCount: objectKeys.length, error: message.slice(0, 500) },
+    })
+    console.error('Expired RAW cleanup failed:', cause)
+    return json({ error: 'The cleanup did not finish. It is safe to refresh the preview and retry; already removed objects are handled idempotently.' }, 503)
+  }
+}
 
 async function folderFiles(admin: AdminClient, workspaceId: string, bookingIds: string[], category?: string) {
   const files: IndexedFile[] = []
@@ -224,6 +417,17 @@ export async function GET(request: NextRequest) {
   const openId = request.nextUrl.searchParams.get('file')?.trim() || ''
   const preview = request.nextUrl.searchParams.get('preview') === '1'
 
+  if (request.nextUrl.searchParams.get('rawCleanupPreview') === '1') {
+    const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.storageOperation, [user.id, access.workspaceId, 'expired-raw-preview'])
+    if (limited) return limited
+    try {
+      return json(rawCleanupPreview(await rawCleanupCandidates(admin, access.workspaceId)))
+    } catch (cause) {
+      console.error('Expired RAW cleanup preview failed:', cause)
+      return json({ error: 'Eligible RAW folders could not be loaded. Try again.' }, 503)
+    }
+  }
+
   if (request.nextUrl.searchParams.get('summary') === '1') {
     const result = await admin.rpc('private_storage_summary', { p_workspace: access.workspaceId })
     if (result.error) return json({ error: 'Storage usage could not be loaded. Try again.' }, 503)
@@ -353,6 +557,10 @@ export async function DELETE(request: NextRequest) {
   if (error || !user || !access) return error || json({ error: 'Unauthorized' }, 401)
   const admin = getSupabaseAdmin()
   if (!admin) return json({ error: 'File management is temporarily unavailable.' }, 503)
+
+  if (request.nextUrl.searchParams.get('expiredRaw') === '1') {
+    return deleteExpiredRawPhotos(request, admin, access.workspaceId, user.id)
+  }
 
   if (request.nextUrl.searchParams.get('folder') === '1') {
     return deleteFolder(request, admin, access.workspaceId, user.id)

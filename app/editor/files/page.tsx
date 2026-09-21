@@ -8,6 +8,7 @@ import { uploadRawDirect } from '@/lib/raw-upload-client'
 import { invalidateStaffPages, readStaffPage, staffPageCacheGeneration, writeStaffPage } from '@/lib/staff-page-cache'
 import FileDeleteDialog from '@/components/file-delete-dialog'
 import FolderDeleteDialog from '@/components/folder-delete-dialog'
+import ExpiredRawCleanupDialog, { type ExpiredRawCleanupPreview } from '@/components/expired-raw-cleanup-dialog'
 import { FOLDER_DELETE_CONFIRMATION, type FileManagementFolderScope } from '@/lib/file-management-delete'
 
 type Item = Record<string, any>
@@ -63,6 +64,11 @@ function FileManagement() {
   const [folderDeleteError, setFolderDeleteError] = useState('')
   const [summary, setSummary] = useState<StorageSummary | null>(null)
   const [summaryError, setSummaryError] = useState('')
+  const [rawCleanupOpen, setRawCleanupOpen] = useState(false)
+  const [rawCleanupPreview, setRawCleanupPreview] = useState<ExpiredRawCleanupPreview | null>(null)
+  const [rawCleanupLoading, setRawCleanupLoading] = useState(false)
+  const [rawCleanupBusy, setRawCleanupBusy] = useState(false)
+  const [rawCleanupError, setRawCleanupError] = useState('')
   const uploadInput = useRef<HTMLInputElement>(null)
   const query = new URLSearchParams({ ...(date ? { date } : {}), ...(booking ? { booking } : {}), ...(category ? { category } : {}) }).toString()
 
@@ -184,6 +190,38 @@ function FileManagement() {
     } finally { setFolderDeleting(false) }
   }
 
+  async function openRawCleanup() {
+    setRawCleanupOpen(true); setRawCleanupPreview(null); setRawCleanupError(''); setRawCleanupLoading(true)
+    try {
+      const response = await fetch('/api/editor-files?rawCleanupPreview=1', { credentials: 'include', cache: 'no-store' })
+      const body = await response.json().catch(() => ({})) as ExpiredRawCleanupPreview & { error?: string }
+      if (!response.ok) throw new Error(body.error || 'Eligible folders could not be loaded.')
+      setRawCleanupPreview(body)
+    } catch (cause) {
+      setRawCleanupError(cause instanceof Error ? cause.message : 'Eligible folders could not be loaded.')
+    } finally { setRawCleanupLoading(false) }
+  }
+
+  async function deleteExpiredRaw() {
+    if (!rawCleanupPreview?.fileCount) return
+    setRawCleanupBusy(true); setRawCleanupError(''); setNotice('')
+    try {
+      const response = await fetch('/api/editor-files?expiredRaw=1', {
+        method: 'DELETE', credentials: 'include',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation: FOLDER_DELETE_CONFIRMATION, confirmationToken: rawCleanupPreview.confirmationToken }),
+      })
+      const body = await response.json().catch(() => ({})) as { error?: string; deletedFiles?: number; deletedFolders?: number }
+      if (!response.ok) throw new Error(body.error || 'The RAW cleanup could not finish.')
+      invalidateStaffPages('editor-files:')
+      setRawCleanupOpen(false); setRawCleanupPreview(null)
+      setNotice(`${body.deletedFiles} RAW photos removed from ${body.deletedFolders} expired client folders.`)
+      setRefresh((value) => value + 1)
+    } catch (cause) {
+      setRawCleanupError(cause instanceof Error ? cause.message : 'The RAW cleanup could not finish.')
+    } finally { setRawCleanupBusy(false) }
+  }
+
   return <div className="mx-auto w-full max-w-[1500px]">
     <header className="mb-6 flex flex-col gap-4 border-b border-white/[0.08] pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>{date ? <button onClick={back} className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 text-xs font-semibold text-white/65 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><ArrowLeft className="size-3.5"/>Back</button> : null}
@@ -192,7 +230,7 @@ function FileManagement() {
       </div>
       {canAddOriginals ? <><input ref={uploadInput} type="file" multiple className="sr-only" accept="image/*,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2,.raf" onChange={(event) => void addOriginals(event.target.files)}/><button type="button" onClick={() => uploadInput.current?.click()} disabled={Boolean(upload)} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#C4CEFF] px-4 text-sm font-semibold text-[#11131A] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#171717] disabled:cursor-wait disabled:opacity-60"><ImagePlus className="size-4"/>{upload ? 'Uploading…' : 'Add photos'}</button></> : null}
     </header>
-    {!date ? <StorageCostSummary summary={summary} error={summaryError}/> : null}
+    {!date ? <StorageCostSummary summary={summary} error={summaryError} onOpenRawCleanup={() => void openRawCleanup()}/> : null}
     {upload ? <div aria-live="polite" className="mb-4 rounded-xl border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.07] p-4"><div className="flex items-center justify-between gap-4 text-sm"><span className="min-w-0 truncate text-white/75">Adding {upload.fileName}</span><span className="shrink-0 tabular-nums text-[#C4CEFF]">{upload.complete + 1}/{upload.total} · {upload.percent}%</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#C4CEFF] transition-[width]" style={{ width: `${upload.percent}%` }}/></div></div> : null}
     {notice ? <div role="status" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.07] p-4 text-sm text-emerald-100"><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="Dismiss message" className="grid size-11 shrink-0 place-items-center rounded-lg text-emerald-100/65 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-200"><X className="size-4"/></button></div> : null}
     {error ? <div role="alert" className="flex flex-col gap-3 rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between"><span>{error}</span><button onClick={() => setRefresh((value) => value + 1)} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200/20 px-3 font-semibold hover:bg-red-100/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"><RefreshCw className="size-4"/>Try again</button></div> : null}
@@ -228,10 +266,13 @@ function FileManagement() {
     </div>)}</div> : null}
     <FileDeleteDialog fileName={deleteTarget?.fileName ?? null} busy={deleting} error={deleteError} onClose={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }} onDelete={() => void deleteFile()}/>
     <FolderDeleteDialog folderName={folderDeleteTarget?.label ?? null} fileCount={folderDeleteTarget?.fileCount ?? 0} busy={folderDeleting} error={folderDeleteError} onClose={() => { if (!folderDeleting) { setFolderDeleteTarget(null); setFolderDeleteError('') } }} onDelete={() => void deleteFolder()}/>
+    <ExpiredRawCleanupDialog open={rawCleanupOpen} preview={rawCleanupPreview} loading={rawCleanupLoading} busy={rawCleanupBusy} error={rawCleanupError}
+      onClose={() => { if (!rawCleanupLoading && !rawCleanupBusy) { setRawCleanupOpen(false); setRawCleanupPreview(null); setRawCleanupError('') } }}
+      onDelete={() => void deleteExpiredRaw()}/>
   </div>
 }
 
-function StorageCostSummary({ summary, error }: { summary: StorageSummary | null; error: string }) {
+function StorageCostSummary({ summary, error, onOpenRawCleanup }: { summary: StorageSummary | null; error: string; onOpenRawCleanup: () => void }) {
   if (error) return <div role="status" className="mb-6 rounded-2xl border border-amber-300/15 bg-amber-300/[0.04] px-5 py-4 text-sm text-amber-100/80">{error}</div>
   if (!summary) return <div aria-label="Loading storage summary" className="mb-6 h-36 animate-pulse rounded-2xl border border-white/[0.07] bg-white/[0.025]"/>
   const categories = summary.categories.filter((item) => item.bytes > 0)
@@ -255,7 +296,10 @@ function StorageCostSummary({ summary, error }: { summary: StorageSummary | null
           <div className="flex items-start justify-between gap-4"><span className="text-white/65">RAW retention</span><strong className="text-right text-white">{summary.retention.days} days · {summary.candidateFiles} eligible</strong></div>
           <div className="flex items-start justify-between gap-4"><span className="text-white/65">Recoverable space</span><strong className="tabular-nums text-white">{summary.candidateBytes > 0 ? sizeLabel(summary.candidateBytes) : '0 B'}</strong></div>
         </div>
-        <p className="mt-4 text-xs leading-5 text-white/65">Only delivered shoots with no active client portal can become eligible. Enhanced, final, and print files are always excluded.</p>
+        <p className="mt-4 text-xs leading-5 text-white/65">Only delivered shoots with expired client portals and RAW photos older than {summary.retention.days} days can qualify. Enhanced, final, and print files stay untouched.</p>
+        <button type="button" onClick={onOpenRawCleanup} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-300/25 px-3.5 text-xs font-semibold tracking-[0.02em] text-red-200 outline-none transition hover:border-red-300/50 hover:bg-red-300/[0.07] focus-visible:ring-2 focus-visible:ring-red-200">
+          <Trash2 className="size-3.5" aria-hidden="true"/>DELETE ALL RAW PHOTOS
+        </button>
       </div>
     </div>
     {categories.length ? <div className="border-t border-white/[0.08] px-5 py-4 lg:px-6"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{categories.slice(0,8).map((item) => <div key={item.category} className="min-w-0"><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-white/65">{categoryLabels[item.category] || item.category}</span><span className="shrink-0 tabular-nums text-white/65">{sizeLabel(item.bytes)}</span></div><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.07]"><div className="h-full rounded-full bg-[#C4CEFF]/70" style={{ width: `${Math.max(5, item.bytes / largest * 100)}%` }}/></div></div>)}</div></div> : null}
