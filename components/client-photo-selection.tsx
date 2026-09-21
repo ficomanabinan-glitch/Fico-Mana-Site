@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, Lock } from 'lucide-react'
+import { AlertTriangle, Download, Lock } from 'lucide-react'
+import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle'
 
 import { PortalPhotoPreview } from '@/components/portal-photo-preview'
 import { availableSelectionStep, canVisitSelectionStep } from '@/lib/selection-step-navigation'
@@ -83,6 +84,8 @@ export function ClientPhotoSelection({
   sampleMode = false,
   onLoadMore,
   onSubmitted,
+  downloadUrl,
+  onDownloadStarted,
   onPricingChange,
   onProgressChange,
   headerContent,
@@ -100,6 +103,8 @@ export function ClientPhotoSelection({
   sampleMode?: boolean
   onLoadMore: () => void
   onSubmitted: () => Promise<void>
+  downloadUrl?: string | null
+  onDownloadStarted?: () => void
   onPricingChange?: (summary: AddonPreview) => void
   onProgressChange?: (progress: ClientSelectionProgress) => void
   headerContent?: ReactNode
@@ -132,7 +137,9 @@ export function ClientPhotoSelection({
   const [submitting, setSubmitting] = useState(false)
   // PINs are transient: never put them in the 15-minute draft or a URL.
   const [submissionPin, setSubmissionPin] = useState('')
+  const [pinVisible, setPinVisible] = useState(false)
   const [confirmationOpen, setConfirmationOpen] = useState(false)
+  const [downloadPromptOpen, setDownloadPromptOpen] = useState(false)
   const workspaceRoot = useRef<HTMLElement>(null)
   const workspaceHeader = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -364,10 +371,12 @@ export function ClientPhotoSelection({
       toast.success('Selection submitted', 'Your photographs and print choices are now with FICO MANA.')
       updateStep('review')
       await onSubmitted()
+      setDownloadPromptOpen(true)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Selection submission failed.')
     } finally {
       setSubmissionPin('')
+      setPinVisible(false)
       setSubmitting(false)
     }
   }
@@ -383,6 +392,7 @@ export function ClientPhotoSelection({
       return
     }
     setSubmissionPin('')
+    setPinVisible(false)
     setConfirmationOpen(true)
   }
 
@@ -448,11 +458,25 @@ export function ClientPhotoSelection({
             ['Paid', money(paymentSummary.amountPaid)],
           ].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b border-white/[0.06] pb-3"><dt className="text-white/45">{label}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl>
           <div data-testid="submission-balance" className="flex items-center justify-between gap-4 rounded-card border border-[#C4CEFF]/20 bg-[#C4CEFF]/5 p-4 shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><span className="text-sm text-white/65">Remaining balance</span><strong className="text-2xl tracking-[-0.03em] text-[#C4CEFF]">{money(payment.remaining)}</strong></div>
-          <label className="block"><span className="text-caption font-semibold text-white/80">Final submission PIN</span><span id="mobile-submission-pin-help" className="mt-1 block text-caption text-white/45">Last 4 digits of the phone number used for this booking.</span>
-            <input id="mobile-submission-pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" value={submissionPin} disabled={submitting} aria-describedby="mobile-submission-pin-help" onChange={(event) => setSubmissionPin(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-2 h-11 w-full rounded-control border border-white/10 bg-[#242427] px-3 text-center text-lg tracking-[0.5em] text-white outline-none shadow-[inset_0_1px_rgba(255,255,255,0.04)] transition-[border-color,background-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-white/20 focus:border-[#C4CEFF]/50"/>
-          </label>
+          <div><label htmlFor="mobile-submission-pin" className="block text-caption font-semibold text-white/80">Final submission PIN</label><span id="mobile-submission-pin-help" className="mt-1 block text-caption text-white/45">Last 4 digits of the phone number used for this booking.</span>
+            <div className="relative"><input id="mobile-submission-pin" type={pinVisible ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="off" value={submissionPin} disabled={submitting} aria-describedby="mobile-submission-pin-help" onChange={(event) => setSubmissionPin(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))} className="mt-2 h-11 w-full rounded-control border border-white/10 bg-[#242427] px-12 text-center text-lg tracking-[0.5em] text-white outline-none shadow-[inset_0_1px_rgba(255,255,255,0.04)] transition-[border-color,background-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-white/20 focus:border-[#C4CEFF]/50"/><PasswordVisibilityToggle visible={pinVisible} onToggle={() => setPinVisible(value => !value)} disabled={submitting} label="PIN" /></div>
+          </div>
           {message ? <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/[0.06] p-3 text-xs text-red-200">{message}</p> : null}
           <div className="grid grid-cols-2 gap-3"><button type="button" disabled={submitting} onClick={() => { setConfirmationOpen(false); setSubmissionPin('') }} className="min-h-11 cursor-pointer rounded-control border border-white/10 bg-white/[0.02] px-3 py-3 text-caption font-semibold text-white/70 transition-[transform,background-color,border-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.06] active:translate-y-0 active:scale-[0.98] disabled:opacity-40">Go back</button><button type="button" onClick={() => void submit()} disabled={!canSubmit || submitting} className="min-h-11 cursor-pointer rounded-control bg-primary px-3 py-3 text-caption font-semibold text-white shadow-[inset_0_1px_rgba(255,255,255,0.16)] transition-[transform,background-color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-[#0903e8] active:translate-y-0 active:scale-[0.98] disabled:opacity-40">{submitting ? 'Submitting…' : 'Confirm & Submit'}</button></div>
+        </div>
+      </SheetContent> : null}
+    </Sheet>
+
+    <Sheet open={downloadPromptOpen} onOpenChange={setDownloadPromptOpen}>
+      {downloadPromptOpen ? <SheetContent side="bottom" className="client-portal gap-0 rounded-t-[20px] border-white/[0.12] bg-[#181819] p-5 text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
+        <SheetHeader className="pr-10 text-left">
+          <SheetTitle className="text-lg font-semibold text-white">Selection submitted</SheetTitle>
+          <SheetDescription className="mt-2 text-sm leading-relaxed text-white/65">You can download all original photos now, or come back for them later from this portal.</SheetDescription>
+        </SheetHeader>
+        {!downloadUrl ? <p role="status" className="mt-5 text-sm text-white/65">Your download is being prepared. It will appear below your selection when available.</p> : null}
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {downloadUrl ? <a href={downloadUrl} onClick={() => { setDownloadPromptOpen(false); onDownloadStarted?.() }} className="flex min-h-11 items-center justify-center gap-2 rounded-control bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-[#0903e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70"><Download className="size-4" aria-hidden="true"/>Download Photos</a> : <button type="button" disabled className="min-h-11 rounded-control bg-primary px-4 py-3 text-sm font-semibold text-white opacity-45">Download Photos</button>}
+          <button type="button" onClick={() => setDownloadPromptOpen(false)} className="min-h-11 rounded-control border border-white/15 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70">Maybe Later</button>
         </div>
       </SheetContent> : null}
     </Sheet>

@@ -170,7 +170,8 @@ test('worker auth/probe boundaries and UI/API compatibility remain intact',()=>{
   assert.match(notifications,/canManageShootReminders\(access\)/)
   assert.match(notifications,/reminderAdmin \|\| n.type !== SHOOT_REMINDER_NOTIFICATION_TYPE/)
   assert.match(notifications,/ignore|reserved/)
-  assert.match(readFileSync('app/admin/layout.tsx','utf8'),/Review shoot reminders/)
+  assert.match(readFileSync('app/admin/layout.tsx','utf8'),/notificationDestination\(notification/)
+  assert.match(readFileSync('lib/notification-navigation.ts','utf8'),/case 'SHOOT_REMINDER_ERROR':[\s\S]*?return '\/admin\/shoot-reminders'/)
 })
 
 test('system alerts satisfy the verified production booking foreign key without a fake client booking',async t=>{

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart3, CalendarDays, DollarSign, Users } from 'lucide-react'
+import { BarChart3, CalendarDays, PhilippinePeso, Users } from 'lucide-react'
 import { getBookings, peekBookings, type Booking } from '@/lib/data-store'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { adminCard, adminPage, adminPanel } from '@/lib/admin-ui'
@@ -41,7 +41,7 @@ export default function ReportsPage() {
     { label: 'Clients', value: report.clients, icon: Users },
     { label: 'Bookings', value: report.bookings, icon: CalendarDays },
     { label: 'Confirmed', value: report.confirmed, icon: BarChart3 },
-    { label: 'Collected', value: `₱${report.revenue.toLocaleString()}`, icon: DollarSign },
+    { label: 'Collected', value: `₱${report.revenue.toLocaleString()}`, icon: PhilippinePeso },
   ]
 
   return (

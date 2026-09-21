@@ -46,6 +46,7 @@ export default function PaymentVerificationQueue() {
   const [customReason, setCustomReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => { setSearchTerm(new URLSearchParams(window.location.search).get('search')?.trim() || '') }, [])
   const [exiting, setExiting] = useState<{ id: string; type: 'approve' | 'reject' } | null>(null)
 
   /** Play the card exit animation before removing it from the queue. */

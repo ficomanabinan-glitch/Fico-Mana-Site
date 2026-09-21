@@ -70,6 +70,7 @@ export default function AdminRawPhotoQueue({
   const [actionLoading, setActionLoading] = useState(false)
   const [selectionFiles, setSelectionFiles] = useState<SelectionFile[]>([])
   const [selectionFilesLoading, setSelectionFilesLoading] = useState(false)
+  const [previewSelectionFile, setPreviewSelectionFile] = useState<SelectionFile | null>(null)
   const [exiting, setExiting] = useState<{ id: string; type: 'approve' | 'reject' } | null>(null)
 
   /** Play the card exit animation before the queue refreshes (skipped on the All tab where cards stay visible). */
@@ -102,6 +103,7 @@ export default function AdminRawPhotoQueue({
   usePageBackgroundSync(() => fetchQueue(true))
 
   const openSelectionDetails = async (booking: Booking) => {
+    setPreviewSelectionFile(null)
     setSelectedBooking(booking)
     setSelectionFiles([])
     setSelectionFilesLoading(true)
@@ -561,12 +563,14 @@ export default function AdminRawPhotoQueue({
                   {selectionFiles.map((file) => (
                     <figure key={file.id} className="overflow-hidden rounded-control border border-white/10 bg-black/25">
                       {file.available ? (
-                        <img
-                          src={`/api/editor-workflow/files/${encodeURIComponent(file.id)}?variant=thumbnail`}
-                          alt={file.fileName}
-                          className="aspect-[4/5] w-full object-cover"
-                          loading="lazy"
-                        />
+                        <button type="button" onClick={() => setPreviewSelectionFile(file)} className="block w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C4CEFF]" aria-label={`Preview ${file.fileName}`}>
+                          <img
+                            src={`/api/editor-workflow/files/${encodeURIComponent(file.id)}?variant=thumbnail`}
+                            alt=""
+                            className="aspect-[4/5] w-full object-cover"
+                            loading="lazy"
+                          />
+                        </button>
                       ) : (
                         <div className="flex aspect-[4/5] items-center justify-center p-3 text-center text-caption text-amber-200/70">Photo unavailable</div>
                       )}
@@ -640,6 +644,11 @@ export default function AdminRawPhotoQueue({
           </div>
         </div>
       )}
+
+      {showDetailModal && previewSelectionFile ? <div role="dialog" aria-modal="true" aria-label={`Preview ${previewSelectionFile.fileName}`} onKeyDown={(event) => { if (event.key === 'Escape') setPreviewSelectionFile(null) }} className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4 text-white sm:p-6">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 pb-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{previewSelectionFile.fileName}</p><p className="text-xs text-white/60">{previewSelectionFile.extraEdit ? 'Extra edit' : 'Included'} · {previewSelectionFile.preference}</p></div><button type="button" autoFocus onClick={() => setPreviewSelectionFile(null)} aria-label="Close full photo preview" className="flex size-11 shrink-0 items-center justify-center rounded-control border border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><X className="size-5" aria-hidden="true" /></button></div>
+        <img src={`/api/editor-workflow/files/${encodeURIComponent(previewSelectionFile.id)}?variant=preview`} alt={previewSelectionFile.fileName} className="mx-auto min-h-0 max-h-[calc(100dvh-7rem)] max-w-full flex-1 rounded-control object-contain" />
+      </div> : null}
 
       {showRejectModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">

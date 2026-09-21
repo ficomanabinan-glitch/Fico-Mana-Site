@@ -1903,7 +1903,7 @@ export async function prepareBatchDownload(
       name: `${batch.shoot_date}/${folderName}/.fico-client.json`,
       data: Buffer.from(JSON.stringify(clientMeta, null, 2), 'utf8'),
     })
-    entries.push({ name: `${batch.shoot_date}/${folderName}/EDITED/`, data: Buffer.alloc(0) })
+    entries.push({ name: `${batch.shoot_date}/${folderName}/SELECTED/EDITED/`, data: Buffer.alloc(0) })
     const selectionId = selectionMap.get(String(job.booking_id))
     entries.push({
       name: `${batch.shoot_date}/${folderName}/SELECTED/manifest.json`,

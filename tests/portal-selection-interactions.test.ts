@@ -25,6 +25,7 @@ function setup(initial = selection, photos = gallery, sampleMode = false) {
     react: hooks.react, '@/components/portal-photo-preview': { PortalPhotoPreview: Preview },
     '@/components/portal-photo-contact-sheet': Photos, '@/components/portal-print-picker': Prints,
     '@/components/portal-addon-picker': Addons, '@/components/portal-review': Review,
+    '@/components/password-visibility-toggle': { PasswordVisibilityToggle: () => null },
     '@/components/portal-workspace.module.css': {},
     '@/components/admin-toast-provider': { useAdminToast: () => ({ success() {} }) },
     '@/lib/client-selection-summary':summary, '@/lib/portal-selection-draft':drafts, '@/lib/selection-step-navigation':navigation,
@@ -33,7 +34,7 @@ function setup(initial = selection, photos = gallery, sampleMode = false) {
   let pricing: summary.AddonPreview = { total:0, lines:[] }, submitted = 0
   const onPricingChange = (value:summary.AddonPreview) => { pricing=value }
   const render = () => hooks.render(() => component.ClientPhotoSelection({ publicId:'private',selection:initial,gallery:photos,galleryTotal:7,loadingMore:false,addons,
-    sampleMode, onLoadMore() {}, onSubmitted:async()=>{submitted++}, onPricingChange, paymentSummary:{packageAmount:6500,amountPaid:500} }))
+    sampleMode, onLoadMore() {}, onSubmitted:async()=>{submitted++}, downloadUrl:'/test-photos.zip', onPricingChange, paymentSummary:{packageAmount:6500,amountPaid:500} }))
   let tree=render(); tree=render()
   return { render:()=>tree=render(), unmount:hooks.unmount,
     photos:()=>elements(tree,el=>el.type===Photos)[0].props as ComponentProps<typeof import('../components/portal-photo-contact-sheet.tsx').default>,
@@ -88,10 +89,13 @@ test('PIN confirmation shows balance, clears PIN on cancel and failure, and pres
   for(let attempt=0;attempt<2;attempt++){f.pin('0042');f.render();await f.click('Confirm & Submit');await new Promise(resolve=>setImmediate(resolve));f.render();assert.equal(f.pin(),'')}
   assert.deepEqual(payloads[0],payloads[1])
   assert.equal(f.submitted,0);assert.equal(f.pricing.total,400)
+  assert.doesNotMatch(content(f.tree), /Maybe Later/)
   succeed=true;f.pin('0042');f.render();await f.click('Confirm & Submit');await new Promise(resolve=>setImmediate(resolve));f.render()
   assert.equal(f.submitted,1);assert.equal(payloads[2].pin,'0042')
   assert.equal(payloads[2].total,undefined)
   assert.equal(f.review().locked,true)
+  assert.match(content(f.tree), /Download Photos/)
+  assert.match(content(f.tree), /Maybe Later/)
 })
 
 test('session draft restores add-on photos without PIN or prices and clears after submission', async t=>{

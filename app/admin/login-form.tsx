@@ -9,11 +9,13 @@ import { adminBtnPrimary, adminInput } from '@/lib/admin-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle'
 
 export default function AdminLogin() {
   const searchParams = useSearchParams()
   const [state, formAction, pending] = useActionState(loginAdmin, initialLoginState)
   const [now, setNow] = useState<number | null>(null)
+  const [passwordVisible, setPasswordVisible] = useState(false)
 
   useEffect(() => {
     if (!state.retryAt) { setNow(null); return }
@@ -37,7 +39,7 @@ export default function AdminLogin() {
       <form action={formAction} className="space-y-5">
         {locked?<Alert variant="warning"><AlertTriangle aria-hidden="true"/><AlertTitle>Login temporarily locked</AlertTitle><AlertDescription>Too many login attempts. Please try again in {remainingMinutes} {remainingMinutes===1?'minute':'minutes'}.</AlertDescription></Alert>:state.message?<Alert variant="destructive"><AlertTriangle aria-hidden="true"/><AlertTitle>Sign-in unsuccessful</AlertTitle><AlertDescription>{state.message}</AlertDescription></Alert>:legacyAuthError?<Alert variant="destructive"><AlertTriangle aria-hidden="true"/><AlertTitle>Sign-in unsuccessful</AlertTitle><AlertDescription>Sign-in failed. Please try again.</AlertDescription></Alert>:null}
         <div className="space-y-2"><label htmlFor="email" className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Staff Email</label><div className="relative"><Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" aria-hidden="true"/><Input id="email" name="email" type="email" inputMode="email" autoComplete="email" maxLength={320} required disabled={pending||locked} placeholder="you@ficomana.com" className={`${adminInput} pl-11`}/></div></div>
-        <div className="space-y-2"><label htmlFor="password" className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Password</label><div className="relative"><Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" aria-hidden="true"/><Input id="password" name="password" type="password" autoComplete="current-password" maxLength={1024} required disabled={pending||locked} placeholder="Enter your password" className={`${adminInput} pl-11`}/></div></div>
+        <div className="space-y-2"><label htmlFor="password" className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Password</label><div className="relative"><Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/30" aria-hidden="true"/><Input id="password" name="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" maxLength={1024} required disabled={pending||locked} placeholder="Enter your password" className={`${adminInput} pl-11 pr-12`}/><PasswordVisibilityToggle visible={passwordVisible} onToggle={() => setPasswordVisible(value => !value)} disabled={pending||locked}/></div></div>
         <Button type="submit" disabled={pending||locked} className={`flex h-auto w-full items-center justify-center gap-2 py-4 ${adminBtnPrimary}`}>{pending?<><RefreshCw className="size-4 animate-spin" aria-hidden="true"/>Authenticating…</>:locked?`Try again in ${remainingMinutes} ${remainingMinutes===1?'minute':'minutes'}`:'Login to Console'}</Button>
       </form>
       <p className="mt-8 text-center text-caption leading-relaxed text-white/30">For authorized staff only. Your account is protected against repeated sign-in attempts.</p>

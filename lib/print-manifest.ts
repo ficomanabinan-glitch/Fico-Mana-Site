@@ -118,8 +118,8 @@ export function matchEnhancedPrintSource(output: PrintOutput, files: EnhancedPri
   const matches = exact.length ? exact : candidates.filter(file => stem(enhancedPrintSourceName(file)) === stem(output.source_file_name))
   if (matches.length !== 1) {
     throw new Error(matches.length
-      ? `More than one enhanced photo matches ${output.source_file_name}. Try: keep one enhanced file with that original filename in this client's EDITED folder, then retry.`
-      : `The enhanced photo for ${output.source_file_name} is missing. Try: export it using the original filename (the image extension may change), put it in this client's EDITED folder, then retry.`)
+      ? `More than one enhanced photo matches ${output.source_file_name}. Try: keep one enhanced file with that original filename in this client's SELECTED/EDITED folder, then retry.`
+      : `The enhanced photo for ${output.source_file_name} is missing. Try: export it using the original filename (the image extension may change), put it in this client's SELECTED/EDITED folder, then retry.`)
   }
   return matches[0]
 }

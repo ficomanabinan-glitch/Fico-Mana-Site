@@ -57,6 +57,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { receiptAccessUrl } from '@/lib/security/receipt-reference'
+import { calculateStudioPayment } from '@/lib/studio-cash-discount'
 import {
   adminPage,
   adminInput,
@@ -125,6 +126,9 @@ function BookingsManagement() {
   const [studioPayMethod, setStudioPayMethod] = useState<'Cash' | 'GCash' | 'Card' | 'Maya' | 'Bank Transfer'>('Cash')
   const [studioPayAmount, setStudioPayAmount] = useState<number>(0)
   const [studioPayRef, setStudioPayRef] = useState('')
+  const [showCashDiscount, setShowCashDiscount] = useState(false)
+  const [studioDiscountAmount, setStudioDiscountAmount] = useState('')
+  const [studioDiscountLabel, setStudioDiscountLabel] = useState('')
 
   const [showWalkIn, setShowWalkIn] = useState(false)
   const [walkInName, setWalkInName] = useState('')
@@ -332,6 +336,9 @@ function BookingsManagement() {
     setStudioPayAmount(booking.price - paidSum)
     setStudioPayRef('')
     setStudioPayMethod('Cash')
+    setShowCashDiscount(false)
+    setStudioDiscountAmount('')
+    setStudioDiscountLabel('')
   }
 
   const handleRecordStudioPayment = async (e: React.FormEvent) => {
@@ -339,21 +346,26 @@ function BookingsManagement() {
     if (!selectedBooking) return
 
     const paidSumBefore = (selectedBooking.paymentHistory || []).reduce((acc, pay) => acc + pay.amount, 0)
-    const maxAllowed = selectedBooking.price - paidSumBefore
-
-    if (studioPayAmount <= 0) {
-      toast.warning('Invalid amount', 'Payment must be greater than zero.')
-      return
-    }
-    if (studioPayAmount > maxAllowed) {
-      toast.warning('Amount too high', `Maximum balance is ₱${maxAllowed.toFixed(2)}.`)
+    let terms: ReturnType<typeof calculateStudioPayment>
+    try {
+      terms = calculateStudioPayment({
+        price: selectedBooking.price,
+        paid: paidSumBefore,
+        amount: studioPayAmount,
+        method: studioPayMethod,
+        discountAmount: showCashDiscount ? Number(studioDiscountAmount) : 0,
+        discountLabel: showCashDiscount ? studioDiscountLabel : '',
+        existingDiscountAmount: selectedBooking.discountAmount,
+      })
+    } catch (error) {
+      toast.warning('Check payment details', error instanceof Error ? error.message : 'Review the payment amount.')
       return
     }
 
     setSaveLoading(true)
     try {
       const newRecord: PaymentRecord = {
-        id: 'PAY-' + Math.floor(1000 + Math.random() * 9000),
+        id: `PAY-${crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`,
         amount: studioPayAmount,
         method: studioPayMethod,
         type: 'Balance Payment',
@@ -362,11 +374,13 @@ function BookingsManagement() {
       }
 
       const updatedHistory = [...(selectedBooking.paymentHistory || []), newRecord]
-      const totalPaid = updatedHistory.reduce((acc, pay) => acc + pay.amount, 0)
-      const isFullyPaid = totalPaid >= selectedBooking.price
+      const isFullyPaid = terms.isFullyPaid
 
       const updatedBooking: Booking = {
         ...selectedBooking,
+        price: terms.adjustedPrice,
+        discountAmount: (selectedBooking.discountAmount || 0) + terms.discountAmount,
+        discountLabel: terms.discountLabel || selectedBooking.discountLabel,
         paymentStatus: isFullyPaid ? 'Paid Full' : 'Paid Deposit',
         // Do not auto-complete here; staff complete the session explicitly.
         paymentHistory: updatedHistory,
@@ -378,6 +392,10 @@ function BookingsManagement() {
       ])
 
       setSelectedBooking(saved)
+      setShowCashDiscount(false)
+      setStudioDiscountAmount('')
+      setStudioDiscountLabel('')
+      setStudioPayAmount(terms.remainingBalance)
       fetchBookings(true)
 
       const emailMsg = formatEmailResult(emailErrors)
@@ -391,7 +409,7 @@ function BookingsManagement() {
       } else {
         toast.success(
           'Partial payment recorded',
-          `₱${studioPayAmount.toFixed(2)} — balance ₱${(selectedBooking.price - totalPaid).toFixed(2)}.`,
+          `₱${studioPayAmount.toFixed(2)} — balance ₱${terms.remainingBalance.toFixed(2)}.`,
         )
       }
     } catch (err) {
@@ -1347,6 +1365,10 @@ function BookingsManagement() {
                     <span>Total Paid:</span>
                     <span className="text-green-400">₱{(selectedBooking.paymentHistory || []).reduce((acc, p) => acc + p.amount, 0).toFixed(2)}</span>
                   </div>
+                  {(selectedBooking.discountAmount || 0) > 0 ? <div className="flex justify-between gap-3 text-white/65">
+                    <span>Cash discount{selectedBooking.discountLabel ? ` · ${selectedBooking.discountLabel}` : ''}</span>
+                    <span className="shrink-0">−₱{selectedBooking.discountAmount?.toFixed(2)}</span>
+                  </div> : null}
                 </div>
               )}
             </div>
@@ -1368,12 +1390,24 @@ function BookingsManagement() {
                     Outstanding Balance: <strong className="text-sm font-bold text-amber-400">₱{outstanding.toFixed(2)}</strong>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-xs">
+                  {(selectedBooking.discountAmount || 0) > 0 ? <p className="text-xs text-white/55">Cash discount applied: ₱{selectedBooking.discountAmount?.toFixed(2)}{selectedBooking.discountLabel ? ` · ${selectedBooking.discountLabel}` : ''}</p> : null}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div className="space-y-1.5">
-                      <label className="text-caption font-semibold text-white/45 uppercase">Payment Method</label>
+                      <label htmlFor="studio-payment-method" className="text-caption font-semibold text-white/45 uppercase">Payment Method</label>
                       <select
+                        id="studio-payment-method"
                         value={studioPayMethod}
-                        onChange={(e) => setStudioPayMethod(e.target.value as any)}
+                        onChange={(e) => {
+                          const method = e.target.value as typeof studioPayMethod
+                          setStudioPayMethod(method)
+                          if (method !== 'Cash') {
+                            setShowCashDiscount(false)
+                            setStudioDiscountAmount('')
+                            setStudioDiscountLabel('')
+                            setStudioPayAmount(outstanding)
+                          }
+                        }}
                         className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
                       >
                         <option value="Cash">Cash</option>
@@ -1385,12 +1419,14 @@ function BookingsManagement() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-caption font-semibold text-white/45 uppercase">Amount Received</label>
+                      <label htmlFor="studio-payment-amount" className="text-caption font-semibold text-white/45 uppercase">Amount Received</label>
                       <input
+                        id="studio-payment-amount"
                         type="number"
                         required
-                        min={1}
-                        max={outstanding}
+                        min={0.01}
+                        max={Math.max(0.01, outstanding - (showCashDiscount ? Number(studioDiscountAmount) || 0 : 0))}
+                        step="0.01"
                         value={studioPayAmount}
                         onChange={(e) => setStudioPayAmount(parseFloat(e.target.value) || 0)}
                         className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none"
@@ -1398,9 +1434,40 @@ function BookingsManagement() {
                     </div>
                   </div>
 
+                  {studioPayMethod === 'Cash' && !(selectedBooking.discountAmount || 0) ? <div className="border-t border-white/10 pt-3 text-xs">
+                    <button
+                      type="button"
+                      className="rounded-control min-h-11 text-[#C4CEFF] font-semibold hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C4CEFF]"
+                      aria-expanded={showCashDiscount}
+                      onClick={() => {
+                        setShowCashDiscount(value => !value)
+                        setStudioDiscountAmount('')
+                        setStudioDiscountLabel('')
+                        setStudioPayAmount(outstanding)
+                      }}
+                    >{showCashDiscount ? 'Remove cash discount' : '+ Add cash discount or voucher'}</button>
+                    {showCashDiscount ? <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label htmlFor="studio-discount-amount" className="text-caption font-semibold text-white/45 uppercase">Discount (₱)</label>
+                        <input id="studio-discount-amount" type="number" inputMode="decimal" min="0.01" max={Math.max(0.01, outstanding - 0.01)} step="0.01" required value={studioDiscountAmount} onChange={(event) => {
+                          const value = event.target.value
+                          setStudioDiscountAmount(value)
+                          const discount = Number(value)
+                          if (Number.isFinite(discount) && discount >= 0) setStudioPayAmount(Math.max(0, Math.round((outstanding - discount) * 100) / 100))
+                        }} className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor="studio-discount-label" className="text-caption font-semibold text-white/45 uppercase">Voucher code or reason</label>
+                        <input id="studio-discount-label" type="text" maxLength={80} required value={studioDiscountLabel} onChange={(event) => setStudioDiscountLabel(event.target.value)} placeholder="e.g. Studio promo" className="rounded-control w-full bg-black/40 border border-white/10 p-2 text-xs font-semibold focus:border-primary focus:outline-none" />
+                      </div>
+                      <p className="sm:col-span-2 text-white/60">After discount: ₱{Math.max(0, outstanding - (Number(studioDiscountAmount) || 0)).toFixed(2)} due. The discount is not recorded as cash received.</p>
+                    </div> : null}
+                  </div> : null}
+
                   <div className="space-y-1.5 text-xs">
-                    <label className="text-caption font-semibold text-white/45 uppercase">Transaction Reference (Optional)</label>
+                    <label htmlFor="studio-payment-reference" className="text-caption font-semibold text-white/45 uppercase">Transaction Reference (Optional)</label>
                     <input
+                      id="studio-payment-reference"
                       type="text"
                       value={studioPayRef}
                       onChange={(e) => setStudioPayRef(e.target.value)}

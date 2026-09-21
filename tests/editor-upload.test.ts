@@ -62,7 +62,7 @@ test('routes only files inside the client EDITED folder', async () => {
     picked('batch/manifest.json', JSON.stringify(manifest)),
     picked('batch/CLIENT ONE/SELECTED/source-01.jpg'),
     picked('batch/CLIENT ONE/EDITED/final-01.jpg'),
-    picked('batch/CLIENT ONE/EDITED/subfolder/final-02.jpg'),
+    picked('batch/CLIENT ONE/SELECTED/EDITED/subfolder/final-02.jpg'),
     picked('batch/CLIENT ONE/Enhanced/ENHANCED - final-03.jpg'),
     picked('batch/CLIENT ONE/.fico-client.json', '{}'),
   ]

@@ -8,6 +8,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { getBookingFromDb, saveBookingToDb, deleteBookingFromDb } from '@/lib/supabase-store'
 import { disableClientPortal, provisionBookingResources } from '@/lib/booking-provisioning'
 import { bookingMutationSchema } from '@/lib/security/schemas'
+import { validateCashDiscountMutation } from '@/lib/studio-cash-discount'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 
 const DELETE_REASONS = {
@@ -64,6 +65,9 @@ export async function PUT(
     if (isSupabaseConfigured() && !admin) throw new Error('Booking records are temporarily unavailable.')
     const prior = admin ? await getBookingFromDb(admin, id) : await getBookingById(id)
     if (!prior) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 })
+    if (!validateCashDiscountMutation(prior, booking)) {
+      return NextResponse.json({ error: 'Cash discount details do not match the studio payment.' }, { status: 400 })
+    }
 
     let saved: Booking
     if (admin) {

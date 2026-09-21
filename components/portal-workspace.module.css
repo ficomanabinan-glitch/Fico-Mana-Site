@@ -173,6 +173,7 @@
   color:#b6f3da;
   box-shadow:inset 0 1px rgba(255,255,255,.035);
 }
+.expiryNotice { margin-bottom:20px; }
 .submittedNoticeIcon {
   display:grid;
   width:32px;
@@ -706,6 +707,8 @@
 .preview {
   top: calc(var(--portal-header-height) + 22px);
   max-height: calc(100dvh - var(--portal-header-height) - 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-color: rgba(244, 241, 233, 0.12);
   border-radius: 24px;
   background: #181815;
@@ -930,6 +933,7 @@
     margin-bottom:24px;
     padding:12px;
   }
+  .expiryNotice { margin-bottom:16px; }
 
   .submittedNoticeIcon {
     width:28px;
@@ -1293,6 +1297,18 @@
 
 .reviewPrints > section[data-photo-layout='grid'][data-photo-count='4'] .reviewPhotos {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.reviewPrints > section[data-print-category='WALLET_SIZE'][data-photo-count='1'] .reviewPhotos {
+  max-width: 220px;
+}
+
+.reviewPrints > section[data-print-category='WALLET_SIZE'][data-photo-count='2'] .reviewPhotos {
+  max-width: 452px;
+}
+
+.reviewPrints > section[data-print-category='WALLET_SIZE'][data-photo-count='3'] .reviewPhotos {
+  max-width: 684px;
 }
 
 .reviewPrints .reviewPhotos figure,

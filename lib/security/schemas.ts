@@ -229,6 +229,8 @@ export const bookingMutationSchema = z
     backgroundColor: optionalText(100),
     depositAmount: z.number().finite().nonnegative().max(10_000_000),
     price: z.number().finite().nonnegative().max(10_000_000),
+    discountAmount: z.number().finite().nonnegative().max(10_000_000).optional(),
+    discountLabel: optionalText(80),
     transactionRef: optionalText(160),
     bookingStatus: z.enum(['Pending Payment', 'Pending Verification', 'Confirmed', 'Rejected', 'Cancelled', 'Completed', 'No Show']),
     paymentStatus: z.enum(['Unpaid', 'Pending Verification', 'Paid Deposit', 'Paid Full', 'Refunded']),

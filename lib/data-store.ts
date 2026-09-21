@@ -41,6 +41,9 @@ export interface Booking extends Record<string, unknown> {
   backgroundColor?: string
   depositAmount: number
   price: number
+  /** One-time cash studio discount. price is already the net amount due. */
+  discountAmount?: number
+  discountLabel?: string
   transactionRef?: string
   bookingStatus: 'Pending Payment' | 'Pending Verification' | 'Confirmed' | 'Rejected' | 'Cancelled' | 'Completed' | 'No Show'
   paymentStatus: 'Unpaid' | 'Pending Verification' | 'Paid Deposit' | 'Paid Full' | 'Refunded'
@@ -746,6 +749,29 @@ export async function markNotificationRead(id: string): Promise<void> {
   if (typeof window !== 'undefined') {
     const notifs = getCachedNotifications().map((n) => (n.id === id ? { ...n, isRead: true } : n))
     cacheNotifications(notifs)
+  }
+}
+
+export async function markNotificationsRead(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return true
+  try {
+    const res = await fetch('/api/notifications/read', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      keepalive: true,
+      body: JSON.stringify({ ids }),
+    })
+    if (!res.ok) return false
+    if (typeof window !== 'undefined') {
+      const readIds = new Set(ids)
+      cacheNotifications(getCachedNotifications().map((notification) =>
+        readIds.has(notification.id) ? { ...notification, isRead: true } : notification,
+      ))
+    }
+    return true
+  } catch {
+    return false
   }
 }
 

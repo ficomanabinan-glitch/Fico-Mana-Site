@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { KeyRound, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react'
+import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import {
@@ -264,7 +265,7 @@ function CreateAccountForm({ busy, currentRole, onSubmit, onCancel }: { busy: bo
   return <form onSubmit={onSubmit} className="grid gap-4 border-b border-white/10 bg-white/[0.02] p-5 lg:grid-cols-2">
     <label className={adminLabel}>Full name<input name="displayName" required maxLength={80} className={`${adminInput} mt-2 normal-case`} placeholder="Staff member’s name" /></label>
     <label className={adminLabel}>Email address<input name="email" type="email" required className={`${adminInput} mt-2 normal-case`} placeholder="staff@ficomana.com" /></label>
-    <label className={adminLabel}>Temporary password<input name="password" type="password" required minLength={12} className={`${adminInput} mt-2 normal-case`} autoComplete="new-password" /><span className="mt-1.5 block text-[11px] font-normal normal-case tracking-normal text-white/35">12+ characters with uppercase, lowercase, number, and symbol</span></label>
+    <PasswordField name="password" label="Temporary password" hint="12+ characters with uppercase, lowercase, number, and symbol" />
     <label className={adminLabel}>Access level<select name="role" className={`${adminSelect} mt-2`} defaultValue="editor">{roleOptions.filter((role) => currentRole === 'owner' || role !== 'admin').map((role) => <option value={role} key={role}>{roleCopy[role].label} — {roleCopy[role].detail}</option>)}</select></label>
     <div className="flex justify-end gap-3 lg:col-span-2"><button type="button" onClick={onCancel} className={`${adminBtnGhost} px-4`}>Cancel</button><button disabled={busy} className={`${adminBtnPrimary} px-5`}>Create account</button></div>
   </form>
@@ -286,5 +287,6 @@ function AccountRow({ account, busy, canManage, roleChoices, onSave, onDelete }:
 }
 
 function PasswordField({ name, label, hint }: { name: string; label: string; hint?: string }) {
-  return <label className={`${adminLabel} block min-w-0`}>{label}<input name={name} type="password" required minLength={name === 'currentPassword' ? 1 : 12} className={`${adminInput} mt-2 font-normal normal-case tracking-normal`} aria-describedby={hint ? `${name}-hint` : undefined} autoComplete={name === 'currentPassword' ? 'current-password' : 'new-password'} />{hint ? <span id={`${name}-hint`} className="mt-2 block text-xs font-normal normal-case tracking-normal text-white/65">{hint}</span> : null}</label>
+  const [visible, setVisible] = useState(false)
+  return <div className={`${adminLabel} block min-w-0`}><label htmlFor={name}>{label}</label><div className="relative"><input id={name} name={name} type={visible ? 'text' : 'password'} required minLength={name === 'currentPassword' ? 1 : 12} className={`${adminInput} mt-2 pr-12 font-normal normal-case tracking-normal`} aria-describedby={hint ? `${name}-hint` : undefined} autoComplete={name === 'currentPassword' ? 'current-password' : 'new-password'} /><PasswordVisibilityToggle visible={visible} onToggle={() => setVisible(value => !value)} label={label.toLowerCase()} /></div>{hint ? <span id={`${name}-hint`} className="mt-2 block text-xs font-normal normal-case tracking-normal text-white/65">{hint}</span> : null}</div>
 }

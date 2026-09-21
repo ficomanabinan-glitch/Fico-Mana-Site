@@ -199,7 +199,8 @@ export function createUploadWork(batch: DetectedBatchFolder, allowedBookingIds: 
         )
         if (clientIndex < 0) return null
         const afterClient = parts.slice(clientIndex + 1)
-        const editedFolder = afterClient.shift()?.toUpperCase()
+        const firstFolder = afterClient.shift()?.toUpperCase()
+        const editedFolder = firstFolder === 'SELECTED' ? afterClient.shift()?.toUpperCase() : firstFolder
         if (!['EDITED', 'EDITED PHOTOS', 'ENHANCED'].includes(editedFolder || '')) return null
         if (!afterClient.length || ['manifest.json', '.fico-client.json'].includes(item.file.name)) return null
         const originalName = item.file.name
@@ -257,7 +258,7 @@ export async function uploadDetectedBatch(
   const work = createUploadWork(batch, allowedBookingIds)
   const emptyClient = work.find((item) => item.edited.length === 0)
   if (emptyClient) {
-    throw new Error(`${emptyClient.client.customer_name || emptyClient.client.booking_id} has no photos inside its EDITED folder.`)
+    throw new Error(`${emptyClient.client.customer_name || emptyClient.client.booking_id} has no photos inside its SELECTED/EDITED folder.`)
   }
   const filesTotal = work.reduce((sum, item) => sum + item.edited.length, 0)
   const bytesTotal = work.reduce(

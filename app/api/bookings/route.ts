@@ -43,6 +43,7 @@ import { getAdminAuthContext } from '@/lib/supabase/server'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { rejectUntrustedMutation } from '@/lib/security/request-security'
 import { bookingMutationSchema } from '@/lib/security/schemas'
+import { validateCashDiscountMutation } from '@/lib/studio-cash-discount'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { secureErrorMessage } from '@/lib/security/error-response'
 
@@ -248,6 +249,13 @@ export async function POST(request: Request) {
         : incoming.price,
       selectionLimit: packageChanged ? packageDefinition.selectionLimit : incoming.selectionLimit,
       packageSlotType: packageDefinition.slotType,
+    }
+
+    if (!validateCashDiscountMutation(priorBooking, trustedIncoming)) {
+      return NextResponse.json(
+        { error: 'Cash discount details do not match the studio payment. Refresh the booking and try again.' },
+        { status: 400 },
+      )
     }
 
     const booking = normalizeBookingSchedule(

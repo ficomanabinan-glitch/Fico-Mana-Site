@@ -22,7 +22,8 @@ import {
   X,
 } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
-import { getBookings, getNotifications, markNotificationRead, type Notification } from '@/lib/data-store'
+import { getBookings, getNotifications, markNotificationsRead, type Notification } from '@/lib/data-store'
+import { notificationDestination } from '@/lib/notification-navigation'
 import { AdminToastProvider } from '@/components/admin-toast-provider'
 import { AdminAutoSyncProvider } from '@/components/admin-auto-sync'
 import AdminSyncStatus from '@/components/admin-sync-status'
@@ -94,6 +95,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const mainRef = useRef<HTMLElement>(null)
   const previousPathRef = useRef(pathname)
   const scrollPositionsRef = useRef(new Map<string, number>())
+  const pendingReadIdsRef = useRef(new Set<string>())
+  const applyNotificationRefresh = useCallback((items: Notification[]) => {
+    setNotifications(items.map((notification) => pendingReadIdsRef.current.has(notification.id)
+      ? { ...notification, isRead: true }
+      : notification))
+  }, [])
 
   const isLoginPage = pathname === '/admin'
   const isAuthPage = isLoginPage
@@ -136,7 +143,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (!isLoggedIn) return
     try {
       const [notifs, bookings] = await Promise.all([getNotifications(), getBookings()])
-      setNotifications(notifs)
+      applyNotificationRefresh(notifs)
       setPendingVerifications(
         bookings.filter((booking) => booking.bookingStatus === 'Pending Verification').length,
       )
@@ -150,7 +157,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     } catch (error) {
       console.error('Navigation refresh failed:', error)
     }
-  }, [isLoggedIn])
+  }, [isLoggedIn, applyNotificationRefresh])
 
   useEffect(() => {
     if (!isLoggedIn) return
@@ -167,13 +174,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const refreshNotifications = async () => {
       if (document.visibilityState !== 'visible') return
       const notifs = await getNotifications({ force: true })
-      if (!disposed) setNotifications(notifs)
+      if (!disposed) applyNotificationRefresh(notifs)
     }
     // Lightweight notification refresh only; do not reload bookings or the page.
     const timer = setInterval(() => void refreshNotifications(), 3 * 60_000)
     document.addEventListener('visibilitychange', refreshNotifications)
     return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', refreshNotifications) }
-  }, [isLoggedIn, isAuthPage])
+  }, [isLoggedIn, isAuthPage, applyNotificationRefresh])
 
   useEffect(() => {
     setPendingHref(null)
@@ -255,13 +262,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.refresh()
   }
 
-  const handleMarkRead = async (id: string) => {
-    await markNotificationRead(id)
-    setNotifications((previous) =>
-      previous.map((notification) =>
-        notification.id === id ? { ...notification, isRead: true } : notification,
-      ),
-    )
+  const closeNotifications = () => {
+    setShowNotifDrawer(false)
+    const unreadIds = notifications.filter((notification) => !notification.isRead).map((notification) => notification.id)
+    if (!unreadIds.length) return
+    unreadIds.forEach((id) => pendingReadIdsRef.current.add(id))
+    setNotifications((previous) => previous.map((notification) =>
+      unreadIds.includes(notification.id) ? { ...notification, isRead: true } : notification,
+    ))
+    void markNotificationsRead(unreadIds).then((saved) => {
+      unreadIds.forEach((id) => pendingReadIdsRef.current.delete(id))
+      if (!saved) void getNotifications({ force: true }).then(applyNotificationRefresh)
+    })
   }
 
   if (isAuthPage) return <>{children}</>
@@ -333,8 +345,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div className="relative">
                   <button
                     onClick={() => {
-                      setShowNotifDrawer((previous) => !previous)
-                      if (!showNotifDrawer) void getNotifications({ force: true }).then(setNotifications)
+                      if (showNotifDrawer) closeNotifications()
+                      else {
+                        setShowNotifDrawer(true)
+                        void getNotifications({ force: true }).then(applyNotificationRefresh)
+                      }
                     }}
                     className="relative inline-flex size-11 items-center justify-center rounded-lg text-white/65 hover:bg-white/5 hover:text-white"
                     title="Notifications"
@@ -355,7 +370,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       <button
                         className="fixed inset-0 z-20"
                         aria-label="Close notifications"
-                        onClick={() => setShowNotifDrawer(false)}
+                        onClick={closeNotifications}
                       />
                       <div id="admin-notifications" className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-white/10 bg-[#222222] shadow-2xl">
                         <div className="flex items-center justify-between border-b border-white/10 p-4">
@@ -367,9 +382,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             <div className="p-8 text-center text-xs text-white/35">No notifications.</div>
                           ) : (
                             notifications.map((notification) => (
-                              <div
+                              <a
                                 key={notification.id}
-                                className={`p-3.5 text-xs ${
+                                href={notificationDestination(notification, process.env.NODE_ENV !== 'production')}
+                                onClick={closeNotifications}
+                                className={`block p-3.5 text-xs transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C4CEFF] ${
                                   notification.isRead ? '' : 'bg-primary/[0.05]'
                                 }`}
                               >
@@ -381,16 +398,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                   {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?'Shoot reminder':notification.type.replace(/_/g, ' ')}
                                 </p>
                                 <p className="mt-1.5 text-white/70">{notification.message}</p>
-                                {notification.type===SHOOT_REMINDER_NOTIFICATION_TYPE?<Link href="/admin/shoot-reminders" onClick={()=>setShowNotifDrawer(false)} className="mt-2 mr-3 inline-block cursor-pointer text-caption font-semibold text-[#C4CEFF] hover:underline">Review shoot reminders</Link>:null}
-                                {!notification.isRead ? (
-                                  <button
-                                    onClick={() => void handleMarkRead(notification.id)}
-                                    className="mt-2 text-caption font-semibold text-[#C4CEFF] hover:underline"
-                                  >
-                                    Mark read
-                                  </button>
-                                ) : null}
-                              </div>
+                                <span className="mt-2 inline-block text-caption font-semibold text-[#C4CEFF]">Open related page →</span>
+                              </a>
                             ))
                           )}
                         </div>

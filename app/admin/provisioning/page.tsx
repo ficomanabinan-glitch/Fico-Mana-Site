@@ -38,6 +38,7 @@ export default function ProvisioningPage() {
   const [portalAction, setPortalAction] = useState<{ bookingId: string; kind: 'open' | 'qr' } | null>(null)
   const [qrPortal, setQrPortal] = useState<QrPortal | null>(null)
   const [search, setSearch] = useState('')
+  useEffect(() => { setSearch(new URLSearchParams(window.location.search).get('search')?.trim() || '') }, [])
   const [expiryDays, setExpiryDays] = useState(String(overview?.storage.portalExpiryDays || 30))
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'ALL' | ProvisioningStatus>('ALL')

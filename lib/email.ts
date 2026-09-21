@@ -114,6 +114,7 @@ function receiptNumber(bookingId: string, paymentId: string) {
 
 function paymentDetailsTable(booking: any, payment: PaymentRecord) {
   const price = Number(booking.price ?? 0)
+  const discount = Number(booking.discountAmount ?? 0)
   const paid = totalPaid(booking)
   const remaining = Math.max(0, price - paid)
 
@@ -153,8 +154,10 @@ function paymentDetailsTable(booking: any, payment: PaymentRecord) {
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A;">Package Total</td>
-        <td style="padding: 8px 0; font-weight: bold;">${formatMoney(price)}</td>
+        <td style="padding: 8px 0; font-weight: bold;">${formatMoney(price + discount)}</td>
       </tr>
+      ${discount > 0 ? `<tr><td style="padding: 8px 0; color: #5A5A8A;">Cash discount${booking.discountLabel ? ` (${escapeEmailText(booking.discountLabel)})` : ''}</td><td style="padding: 8px 0; font-weight: bold;">−${formatMoney(discount)}</td></tr>
+      <tr><td style="padding: 8px 0; color: #5A5A8A;">Total after discount</td><td style="padding: 8px 0; font-weight: bold;">${formatMoney(price)}</td></tr>` : ''}
       <tr>
         <td style="padding: 8px 0; color: #5A5A8A;">Remaining Balance</td>
         <td style="padding: 8px 0; font-weight: bold; color: ${remaining > 0 ? '#DC2626' : '#16A34A'};">${formatMoney(remaining)}</td>
@@ -597,6 +600,7 @@ export async function sendBookingSubmittedEmail(booking: Record<string, unknown>
 
 export async function sendFinalOfficialReceiptEmail(booking: any) {
   const subject = `Final Official Receipt - Booking: ${booking.id}`
+  const discount = Number(booking.discountAmount ?? 0)
   const paymentRows = (booking.paymentHistory || []).map((pay: any) => `
     <tr style="border-bottom: 1px solid #EEF0FF;">
       <td style="padding: 10px 0; color: #5A5A8A;">${new Date(pay.date).toLocaleDateString()}</td>
@@ -627,9 +631,11 @@ export async function sendFinalOfficialReceiptEmail(booking: any) {
             <td style="padding: 6px 0; font-weight: bold;">${escapeEmailText(booking.packageName)}</td>
           </tr>
           <tr>
-            <td style="padding: 6px 0; color: #5A5A8A;">Total Package Price:</td>
-            <td style="padding: 6px 0; font-weight: bold;">₱${booking.price.toFixed(2)}</td>
+            <td style="padding: 6px 0; color: #5A5A8A;">Package Price:</td>
+            <td style="padding: 6px 0; font-weight: bold;">₱${(booking.price + discount).toFixed(2)}</td>
           </tr>
+          ${discount > 0 ? `<tr><td style="padding: 6px 0; color: #5A5A8A;">Cash discount${booking.discountLabel ? ` (${escapeEmailText(booking.discountLabel)})` : ''}:</td><td style="padding: 6px 0; font-weight: bold;">−₱${discount.toFixed(2)}</td></tr>
+          <tr><td style="padding: 6px 0; color: #5A5A8A;">Total after discount:</td><td style="padding: 6px 0; font-weight: bold;">₱${booking.price.toFixed(2)}</td></tr>` : ''}
         </table>
 
         <h4 style="text-transform: uppercase; font-size: 10px; tracking-wider: 0.1em; color: #5A5A8A; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; margin-top: 20px;">Payment Ledger</h4>
