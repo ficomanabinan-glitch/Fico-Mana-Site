@@ -341,7 +341,9 @@ async function handle(request: NextRequest, path: string[]) {
     if (path[0] === 'selections' && path[1] && path[2] === 'files' && method === 'GET') {
       const denied = requireCapability('edit')
       if (denied) return denied
-      return json(await getStaffSelectionFiles(workspaceId, decodeURIComponent(path[1])))
+      const selection = await getStaffSelectionFiles(workspaceId, decodeURIComponent(path[1]))
+      if (!selection) return json({ error: 'This booking no longer has a submitted selection. Sync the queue and choose another client.' }, 404)
+      return json(selection)
     }
 
     if (path[0] === 'folders' && path[1] && method === 'POST') {

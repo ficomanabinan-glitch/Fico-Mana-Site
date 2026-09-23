@@ -27,6 +27,7 @@ export default function PortalOriginalDownload({
   const [requestOpen, setRequestOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [sending, setSending] = useState(false)
+  const [starting, setStarting] = useState(false)
   const [message, setMessage] = useState('')
   if (!access || !requestUrl) return null
 
@@ -75,25 +76,33 @@ export default function PortalOriginalDownload({
         <div className="max-w-2xl">
           <h2 className="text-card-title font-semibold tracking-heading">Your original photos</h2>
           <p className="mt-1 text-caption leading-relaxed text-white/45">
-            Download all {total} originals up to {access.limit} times from this portal.
+            Download all {total} originals up to {access.limit} times every 7 days.
           </p>
           <p className="mt-2 text-caption text-white/35">{access.completedInWindow} of {access.limit} downloads used</p>
         </div>
         {downloadUrl ? (
           <a
             href={downloadUrl}
-            className={`${primary} inline-flex shrink-0 items-center justify-center gap-2`}
+            aria-disabled={starting}
+            className={`${primary} inline-flex shrink-0 items-center justify-center gap-2 ${starting ? 'pointer-events-none opacity-60' : ''}`}
             onClick={(event) => {
+              if (starting) {
+                event.preventDefault()
+                return
+              }
               if (onDemoDownload) {
                 event.preventDefault()
                 onDemoDownload()
                 return
               }
-              window.setTimeout(() => void onAccessChanged(), 2500)
+              setStarting(true)
+              window.setTimeout(() => {
+                void onAccessChanged().finally(() => setStarting(false))
+              }, 2500)
             }}
           >
             <Download className="size-3.5" strokeWidth={1.5} />
-            {retrying ? 'Download again' : granted ? 'Use granted download' : 'Download all originals'}
+            {starting ? 'Preparing photos…' : retrying ? 'Download again' : granted ? 'Use granted download' : 'Download all originals'}
           </a>
         ) : pending ? (
           <button type="button" className={secondary} disabled>

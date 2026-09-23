@@ -15,6 +15,15 @@ export async function GET(request: Request) {
     if (!admin) throw new Error('Unavailable')
     const packages = await graduationPackageIds(admin)
     if (!packages.length) return Response.json([], { headers })
+    const selectionBookingIds = new Set<string>()
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error: selectionError } = await admin.from('photo_selections').select('booking_id')
+        .eq('workspace_id', access!.workspaceId).order('booking_id').range(offset, offset + 999)
+      if (selectionError) throw selectionError
+      for (const selection of data || []) selectionBookingIds.add(String(selection.booking_id))
+      if (!data || data.length < 1000) break
+    }
+    if (!selectionBookingIds.size) return Response.json([], { headers })
     const rows = []
     for (let offset = 0; ; offset += 1000) {
       const { data, error: readError } = await admin.from('bookings').select(columns)
@@ -24,7 +33,7 @@ export async function GET(request: Request) {
       rows.push(...(data || []).map(mapDbBookingToModel))
       if (!data || data.length < 1000) break
     }
-    return Response.json(rows, { headers })
+    return Response.json(rows.filter(booking => selectionBookingIds.has(booking.id)), { headers })
   } catch (error) {
     console.error('Filtering read failed:', error)
     return Response.json({ error: 'Could not load selections. Try: refresh the page.' }, { status: 503, headers })

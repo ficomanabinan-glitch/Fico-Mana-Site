@@ -1294,7 +1294,7 @@ export async function getStaffSelectionFiles(workspaceId: string, bookingId: str
     .eq('booking_id', bookingId)
     .maybeSingle()
   if (selectionError) throw new Error(selectionError.message)
-  if (!selection) throw new Error('Photo selection not found.')
+  if (!selection) return null
   const { data: items, error: itemsError } = await admin
     .from('photo_selection_items')
     .select('gallery_file_id,enhancement_preference,is_extra_edit')

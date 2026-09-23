@@ -1299,10 +1299,6 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.reviewPrints > section[data-print-category='WALLET_SIZE'][data-photo-count='1'] .reviewPhotos {
-  max-width: 220px;
-}
-
 .reviewPrints > section[data-print-category='WALLET_SIZE'][data-photo-count='2'] .reviewPhotos {
   max-width: 452px;
 }

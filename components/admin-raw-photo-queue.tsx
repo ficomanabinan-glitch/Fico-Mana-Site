@@ -114,6 +114,12 @@ export default function AdminRawPhotoQueue({
         credentials: 'include',
       })
       const body = (await response.json().catch(() => ({}))) as { files?: SelectionFile[]; error?: string }
+      if (response.status === 404) {
+        invalidateFilteringBookings()
+        setShowDetailModal(false)
+        setSelectedBooking(null)
+        void fetchQueue(true)
+      }
       if (!response.ok) throw new Error(body.error || 'Could not load the selected photos.')
       setSelectionFiles(Array.isArray(body.files) ? body.files : [])
     } catch (error) {

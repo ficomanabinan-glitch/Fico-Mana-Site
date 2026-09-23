@@ -25,6 +25,13 @@ test('zoom preview reserves image space and exposes accessible loading and failu
   assert.doesNotMatch(css,/auto-fill/)
 })
 
+test('one wallet print uses the same full-width preview as the other complimentary prints', () => {
+  const css=source('components/portal-workspace.module.css')
+  assert.doesNotMatch(css,/data-print-category='WALLET_SIZE'\]\[data-photo-count='1'\][^{]*\{[^}]*max-width:/)
+  assert.match(css,/data-print-category='WALLET_SIZE'\]\[data-photo-count='2'\][^{]*\{[^}]*max-width:\s*452px/)
+  assert.match(css,/data-print-category='WALLET_SIZE'\]\[data-photo-count='3'\][^{]*\{[^}]*max-width:\s*684px/)
+})
+
 test('client identity and contextual information use the approved Overview drawer', () => {
   const portal=source('components/client-portal-page.tsx')
   assert.ok(portal.includes('styles.clientName}>{data.booking.customerName}'))

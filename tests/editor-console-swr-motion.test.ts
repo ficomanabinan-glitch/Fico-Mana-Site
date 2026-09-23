@@ -32,6 +32,18 @@ test('capability gating does not weaken protected Editor APIs', () => {
   }
 })
 
+test('filtering queue excludes orphaned booking flags and recovers stale selection cards', () => {
+  const filteringRoute = read('app/api/editor-workflow/filtering/route.ts')
+  assert.match(filteringRoute, /from\('photo_selections'\)\.select\('booking_id'\)/)
+  assert.match(filteringRoute, /selectionBookingIds\.has\(booking\.id\)/)
+
+  const workflowRoute = read('app/api/editor-workflow/[...path]/route.ts')
+  assert.match(workflowRoute, /if \(!selection\) return json\(\{ error: 'This booking no longer has a submitted selection\. Sync the queue and choose another client\.' \}, 404\)/)
+
+  const queue = read('components/admin-raw-photo-queue.tsx')
+  assert.match(queue, /if \(response\.status === 404\) \{[\s\S]*invalidateFilteringBookings\(\)[\s\S]*fetchQueue\(true\)/)
+})
+
 test('only pathname-keyed page content moves while console chrome stays stationary', () => {
   const css = read('app/console-motion.css')
   assert.match(css, /translateY\(6px\)/)
