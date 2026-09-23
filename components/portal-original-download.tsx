@@ -31,8 +31,8 @@ export default function PortalOriginalDownload({
   if (!access || !requestUrl) return null
 
   const pending = access.requestStatus === 'PENDING'
-  const reserved = access.requestStatus === 'RESERVED' || access.activeDownloads > 0
   const granted = access.requestStatus === 'GRANTED'
+  const retrying = access.requestStatus === 'RESERVED' || access.activeDownloads > 0
 
   async function submitRequest() {
     const clean = reason.trim()
@@ -79,9 +79,7 @@ export default function PortalOriginalDownload({
           </p>
           <p className="mt-2 text-caption text-white/35">{access.completedInWindow} of {access.limit} downloads used</p>
         </div>
-        {reserved ? (
-          <button type="button" className={secondary} disabled>Download in progress</button>
-        ) : downloadUrl ? (
+        {downloadUrl ? (
           <a
             href={downloadUrl}
             className={`${primary} inline-flex shrink-0 items-center justify-center gap-2`}
@@ -95,7 +93,7 @@ export default function PortalOriginalDownload({
             }}
           >
             <Download className="size-3.5" strokeWidth={1.5} />
-            {granted ? 'Use granted download' : 'Download all originals'}
+            {retrying ? 'Download again' : granted ? 'Use granted download' : 'Download all originals'}
           </a>
         ) : pending ? (
           <button type="button" className={secondary} disabled>

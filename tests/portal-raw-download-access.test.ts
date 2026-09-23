@@ -4,6 +4,7 @@ import test from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
 const migrationPath = 'supabase/migrations/20260920113000_portal_original_download_access.sql'
 const lifetimeMigrationPath = 'supabase/migrations/20260921041745_private_cloudflare_downloads.sql'
+const interruptedRetryMigrationPath = 'supabase/migrations/20260923030814_retry_interrupted_portal_downloads.sql'
 
 test('original downloads use a two-completion portal-lifetime policy', async () => {
   const [migration, policy] = await Promise.all([readFile(lifetimeMigrationPath, 'utf8'), readFile('lib/portal-raw-downloads.ts', 'utf8')])
@@ -12,6 +13,13 @@ test('original downloads use a two-completion portal-lifetime policy', async () 
   assert.match(migration, /completed_count \+ active_count < 2/i)
   assert.match(migration, /status='COMPLETED'/i)
   assert.match(migration, /interval '6 hours'/i)
+})
+
+test('an interrupted active download can be superseded immediately without consuming permission', async () => {
+  const migration = await readFile(interruptedRetryMigrationPath, 'utf8')
+  assert.match(migration, /status\s*=\s*'FAILED'[\s\S]*status\s*=\s*'STARTED'/i)
+  assert.match(migration, /status\s*=\s*'GRANTED'[\s\S]*status\s*=\s*'RESERVED'/i)
+  assert.doesNotMatch(migration, /completed_count\s*\+\s*active_count\s*<\s*2/i)
 })
 
 test('download requests require a readable reason and remain duplicate-safe', async () => {
@@ -42,6 +50,8 @@ test('portal and editor surfaces expose the request and grant workflow', async (
   ])
   assert.match(portal, /Request another download access/)
   assert.match(portal, /Tell the studio why you need another download/)
+  assert.match(portal, /Download again/)
+  assert.doesNotMatch(portal, /Download in progress/)
   assert.match(panel, /Client reason/)
   assert.match(panel, /Grant access/)
   assert.match(dashboard, /Download Requests/)
@@ -63,6 +73,7 @@ test('database policy completes two downloads, queues a reason, and consumes one
   `)
   await db.exec(await readFile(migrationPath, 'utf8'))
   await db.exec(await readFile(lifetimeMigrationPath, 'utf8'))
+  await db.exec(await readFile(interruptedRetryMigrationPath, 'utf8'))
   const workspace = '11111111-1111-4111-8111-111111111111'
   const portal = '22222222-2222-4222-8222-222222222222'
   const publicId = '33333333-3333-4333-8333-333333333333'
@@ -72,7 +83,17 @@ test('database policy completes two downloads, queues a reason, and consumes one
   await db.query(`insert into client_portals values($1,$2,'FM-1',$3,'active',now()+interval '30 days')`, [portal, workspace, publicId])
   await db.query(`insert into photo_selections(workspace_id,booking_id,status) values($1,'FM-1','SUBMITTED')`, [workspace])
 
-  for (let count = 0; count < 2; count++) {
+  const abandoned = await db.query<{ result: { attemptId: string } }>(`select begin_portal_raw_download($1,$2) result`, [workspace, publicId])
+  const retryState = await db.query<{ state: { allowed: boolean; activeDownloads: number } }>(`select portal_raw_download_state($1,$2) state`, [workspace, publicId])
+  assert.equal(retryState.rows[0].state.allowed, true)
+  assert.equal(retryState.rows[0].state.activeDownloads, 1)
+  const replacement = await db.query<{ result: { attemptId: string } }>(`select begin_portal_raw_download($1,$2) result`, [workspace, publicId])
+  assert.notEqual(replacement.rows[0].result.attemptId, abandoned.rows[0].result.attemptId)
+  const abandonedStatus = await db.query<{ status: string }>(`select status from portal_raw_download_attempts where id=$1`, [abandoned.rows[0].result.attemptId])
+  assert.equal(abandonedStatus.rows[0].status, 'FAILED')
+  await db.query(`select finish_portal_raw_download($1,true)`, [replacement.rows[0].result.attemptId])
+
+  for (let count = 1; count < 2; count++) {
     const started = await db.query<{ result: { attemptId: string } }>(`select begin_portal_raw_download($1,$2) result`, [workspace, publicId])
     await db.query(`select finish_portal_raw_download($1,true)`, [started.rows[0].result.attemptId])
   }
@@ -94,7 +115,13 @@ test('database policy completes two downloads, queues a reason, and consumes one
   const secondRequest = await db.query<{ result: { id: string } }>(`select request_portal_raw_download($1,$2,'Lost the first copy on my device') result`, [workspace, publicId])
   await db.query(`select grant_portal_raw_download($1,$2,$3)`, [workspace, secondRequest.rows[0].result.id, actor])
   const interrupted = await db.query<{ result: { attemptId: string } }>(`select begin_portal_raw_download($1,$2) result`, [workspace, publicId])
-  await db.query(`select finish_portal_raw_download($1,false)`, [interrupted.rows[0].result.attemptId])
+  const grantedRetry = await db.query<{ result: { attemptId: string } }>(`select begin_portal_raw_download($1,$2) result`, [workspace, publicId])
+  assert.notEqual(grantedRetry.rows[0].result.attemptId, interrupted.rows[0].result.attemptId)
+  const interruptedGrantStatus = await db.query<{ status: string }>(`select status from portal_raw_download_attempts where id=$1`, [interrupted.rows[0].result.attemptId])
+  assert.equal(interruptedGrantStatus.rows[0].status, 'FAILED')
+  const reservedAgain = await db.query<{ status: string }>(`select status from portal_raw_download_requests where id=$1`, [secondRequest.rows[0].result.id])
+  assert.equal(reservedAgain.rows[0].status, 'RESERVED')
+  await db.query(`select finish_portal_raw_download($1,false)`, [grantedRetry.rows[0].result.attemptId])
   const restored = await db.query<{ state: { allowed: boolean; requestStatus: string } }>(`select portal_raw_download_state($1,$2) state`, [workspace, publicId])
   assert.equal(restored.rows[0].state.allowed, true)
   assert.equal(restored.rows[0].state.requestStatus, 'GRANTED')
