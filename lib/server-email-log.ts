@@ -24,10 +24,11 @@ async function writeFileLogs(logs: EmailLog[]): Promise<void> {
 }
 
 export async function persistEmailLog(
-  log: Omit<EmailLog, 'id' | 'sentAt'>,
+  log: Omit<EmailLog, 'id' | 'sentAt'> & { providerId?: string | null },
 ): Promise<EmailLog> {
+  const { providerId = null, ...publicLog } = log
   const entry: EmailLog = {
-    ...log,
+    ...publicLog,
     id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     sentAt: new Date().toISOString(),
   }
@@ -35,17 +36,20 @@ export async function persistEmailLog(
   if (isSupabaseConfigured()) {
     const admin = getSupabaseAdmin()
     if (admin) {
-      const { data, error } = await admin
-        .from('email_logs')
-        .insert({
+      const payload = {
           booking_id: log.bookingId,
           recipient_email: log.recipientEmail,
           subject: log.subject,
           body: log.body,
           status: log.status,
-        })
+          provider_id: providerId,
+      }
+      const query = providerId
+        ? admin.from('email_logs').upsert(payload, { onConflict: 'provider_id', ignoreDuplicates: true })
+        : admin.from('email_logs').insert(payload)
+      const { data, error } = await query
         .select()
-        .single()
+        .maybeSingle()
 
       if (!error && data) {
         return {
@@ -56,6 +60,20 @@ export async function persistEmailLog(
           body: String(data.body),
           status: data.status as EmailLog['status'],
           sentAt: String(data.sent_at),
+        }
+      }
+      if (!error && providerId) {
+        const existing = await admin.from('email_logs').select('*').eq('provider_id', providerId).maybeSingle()
+        if (!existing.error && existing.data) {
+          return {
+            id: String(existing.data.id),
+            bookingId: String(existing.data.booking_id),
+            recipientEmail: String(existing.data.recipient_email),
+            subject: String(existing.data.subject),
+            body: String(existing.data.body),
+            status: existing.data.status as EmailLog['status'],
+            sentAt: String(existing.data.sent_at),
+          }
         }
       }
       console.error('Email log persistence failed; no local copy was created.')

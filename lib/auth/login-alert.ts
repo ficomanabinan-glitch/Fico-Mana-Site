@@ -1,4 +1,5 @@
 import { getResendClient, getResendFromAddress } from '@/lib/resend-config'
+import { persistEmailLog } from '@/lib/server-email-log'
 
 function describeDevice(userAgent: string) {
   const ua = userAgent.toLowerCase()
@@ -48,23 +49,30 @@ export async function sendAdminLoginAlert(input: {
   const device = describeDevice(input.userAgent.replace(/[\r\n]/g, ' ').slice(0, 500))
 
   try {
-    const { error } = await resend.emails.send({
+    const subject = 'New Admin Login Detected'
+    const body = [
+      'A new login to your Fico Mana admin account was detected.',
+      '',
+      `Time: ${time} PHT`,
+      `IP Address: ${safeIp}`,
+      `Device: ${device}`,
+      '',
+      'If this was you, no action is required.',
+      'If you do not recognize this login, secure your account immediately.',
+    ].join('\n')
+    const { data, error } = await resend.emails.send({
       from: getResendFromAddress(),
       to: recipient,
-      subject: 'New Admin Login Detected',
-      text: [
-        'A new login to your Fico Mana admin account was detected.',
-        '',
-        `Time: ${time} PHT`,
-        `IP Address: ${safeIp}`,
-        `Device: ${device}`,
-        '',
-        'If this was you, no action is required.',
-        'If you do not recognize this login, secure your account immediately.',
-      ].join('\n'),
+      subject,
+      text: body,
     })
 
-    if (error) console.error('Admin login alert email failed')
+    if (error || !data?.id) console.error('Admin login alert email failed')
+    else await persistEmailLog({
+      bookingId: 'SECURITY', recipientEmail: recipient, subject,
+      body: `<pre>${body.replace(/[&<>]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character] || character)}</pre>`,
+      status: 'SENT', providerId: data.id,
+    })
   } catch {
     // Alert delivery is best-effort and must not invalidate a successful login.
     console.error('Admin login alert email unavailable')

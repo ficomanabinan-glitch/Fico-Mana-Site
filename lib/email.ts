@@ -312,6 +312,7 @@ export async function sendEmail({
       subject,
       body: html,
       status: 'SENT',
+      providerId: result.data.id,
     })
 
     return { success: true, resendId: result.data.id }

@@ -4,6 +4,7 @@ import { getResendClient, getResendDiagnostics, getResendFromAddress } from '@/l
 import { buildEmailHealthCheck, emailHealthRequest, sendEmailHealthCheck } from '@/lib/email-health'
 import { enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
+import { persistEmailLog } from '@/lib/server-email-log'
 
 /** Configuration alone is not evidence of acceptance or inbox delivery. */
 export async function GET() {
@@ -48,6 +49,14 @@ export async function POST(request: Request) {
 
     const message = buildEmailHealthCheck(getResendFromAddress(), user.id, input.data)
     const result = await sendEmailHealthCheck(message, (payload, options) => resend.emails.send(payload, options))
+    await persistEmailLog({
+      bookingId: 'SYSTEM-TEST',
+      recipientEmail: result.to,
+      subject: message.payload.subject,
+      body: message.payload.html,
+      status: 'SENT',
+      providerId: result.resendId,
+    })
     return NextResponse.json(result, { headers })
   } catch (error) {
     // Never expose SDK/transport details or report an accepted message as a booking-log failure.
