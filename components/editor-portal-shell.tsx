@@ -251,7 +251,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
           </aside>
 
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
+            <header className="relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
                   type="button"
@@ -271,13 +271,28 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
             </header>
 
             {menu ? (
-              <div ref={mobileMenuRef} id="editor-mobile-navigation" className="relative z-10 max-h-[65dvh] shrink-0 overflow-y-auto border-b border-white/[0.08] bg-[#222222] p-3 md:hidden">
+              <div ref={mobileMenuRef} id="editor-mobile-navigation" className="absolute inset-x-0 bottom-0 top-14 z-30 overflow-y-auto overscroll-contain border-b border-white/[0.08] bg-[#222222] p-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:hidden">
                 <DashboardSidebarNavigation
                   sections={navigation}
                   activePath={pendingHref ?? pathname}
                   mobile
                   onNavigate={navigate}
                 />
+                <DashboardSidebarProfile
+                  label={session.user.displayName}
+                  detail={`${session.role} · ${session.user.email}`}
+                  onLogout={logout}
+                >
+                  {session.capabilities.admin ? (
+                    <a
+                      href="https://admin.ficomana.com/admin/dashboard"
+                      className="mt-3 flex items-center gap-1.5 border-t border-white/[0.07] pt-3 text-caption font-semibold uppercase text-white/35 hover:text-white"
+                    >
+                      <ShieldCheck className="size-3" />
+                      Open Admin Console
+                    </a>
+                  ) : null}
+                </DashboardSidebarProfile>
               </div>
             ) : null}
 

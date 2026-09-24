@@ -36,6 +36,7 @@ export type PortalData={
   selection:ClientSelection|null
   gallery:ClientGalleryFile[]
   galleryTotal:number
+  rawDownloadBytes:number
   galleryOffset:number
   galleryLimit:number
   editingStatus:string
@@ -88,7 +89,11 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
         throw new Error(`${reason} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)
       }
       setData(previous => {
-        const next = offset === 0 ? body : { ...body, gallery: [...(previous?.gallery || []), ...body.gallery] }
+        const next = offset === 0 ? body : {
+          ...body,
+          gallery: [...(previous?.gallery || []), ...body.gallery],
+          rawDownloadBytes: previous?.rawDownloadBytes || body.rawDownloadBytes,
+        }
         queryClient.setQueryData(queryKey, next)
         return next
       })
@@ -187,7 +192,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
       </div>}
       notices={<>{sampleMode ? <aside className={styles.sampleNotice} aria-label="Sample portal information"><div><strong>Sample portal</strong><p>Practice the full selection flow with example photos. Nothing here is submitted or saved to a booking.</p></div><Link href="/portal">Exit sample</Link></aside> : null}{error ? <div className={styles.notice} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}{data.warnings?.length ? <div className={styles.notice} role="status">Some project details are temporarily unavailable: {data.warnings.join(', ')}.</div> : null}{data.expiry?.expiresAt ? <PortalExpiryNotice expiry={data.expiry} className={styles.expiryNotice} /> : null}</>}
       footerContent={<div className="mt-10 space-y-8">
-            {data.selection?.status === 'SUBMITTED' ? <PortalOriginalDownload total={data.galleryTotal} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /> : null}
+            {data.selection?.status === 'SUBMITTED' ? <PortalOriginalDownload total={data.galleryTotal} totalBytes={data.rawDownloadBytes} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /> : null}
             {data.deliverables.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><h2 className="text-card-title font-semibold tracking-heading">Final Deliverables</h2><div className="mt-4 flex flex-col gap-3 rounded-control border border-emerald-500/20 bg-emerald-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-emerald-200">Your photos are ready</p><p className="mt-1 text-caption text-white/45">{data.deliverables.length} edited photo{data.deliverables.length === 1 ? '' : 's'}</p></div><a href={data.downloadAllUrl} className={`${portalPrimaryAction} inline-flex items-center justify-center gap-2 px-4 py-2.5 text-caption font-semibold`}><Download className="size-3.5" strokeWidth={1.5} />Download All</a></div><PortalDeliverableGallery key={publicId} files={data.deliverables} /></section> : null}
             {data.resources.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><div className="flex items-center gap-2"><FileText className="size-4 text-[#C4CEFF]" strokeWidth={1.5} /><h2 className="text-card-title font-semibold tracking-heading">Project files and updates</h2></div><div className="mt-4 divide-y divide-white/[0.07]">{data.resources.map(resource => <div key={resource.id} className="py-4 first:pt-0 last:pb-0"><p className="text-caption font-medium tracking-[0.04em] text-white/40">{resource.resource_type.replace(/_/g, ' ')}</p><p className="mt-1 text-sm font-semibold">{resource.title}</p>{resource.content ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/50">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="group mt-3 inline-flex min-h-11 items-center gap-2 rounded-control border border-transparent px-2 text-caption font-semibold text-[#C4CEFF] transition-[transform,background-color,border-color,color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[#C4CEFF]/20 hover:bg-[#C4CEFF]/[0.07] hover:text-white">Open resource <ExternalLink className="size-3" strokeWidth={1.5} /></a> : null}</div>)}</div></section> : null}</div>}
     />

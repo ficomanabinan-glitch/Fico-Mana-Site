@@ -54,6 +54,8 @@ test('portal and editor surfaces expose the request and grant workflow', async (
   assert.doesNotMatch(portal, /Download in progress/)
   assert.match(portal, /starting \? 'Preparing photos…'/)
   assert.match(portal, /aria-disabled=\{starting\}/)
+  assert.match(portal, /completedInWindow \+ access\.activeDownloads/)
+  assert.match(portal, /formatDownloadSize/)
   assert.match(panel, /Client reason/)
   assert.match(panel, /Grant access/)
   assert.match(dashboard, /Download Requests/)

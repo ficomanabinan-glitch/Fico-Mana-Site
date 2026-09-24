@@ -17,6 +17,7 @@ import {
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AddonCatalogManager from '@/components/addon-catalog-manager'
+import PaymentQrManager from '@/components/payment-qr-manager'
 import {
   BOOKING_PACKAGE_CATEGORY_LABELS,
   type BookingPackageCategory,
@@ -266,6 +267,8 @@ export default function PackageManagerPage() {
           </div>
         </div>
       </section>
+
+      <PaymentQrManager />
 
       {packageFilters}
 

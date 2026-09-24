@@ -1070,7 +1070,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   const bookingId = String(portal.booking_id)
   const workspaceId = String(portal.workspace_id)
   const pageSize = Math.min(MAX_PORTAL_PAGE_SIZE, Math.max(1, limit))
-  const [bookingResult, selectionResult, galleryResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult, expirySettings, rawDownloadAccessResult] =
+  const [bookingResult, selectionResult, galleryResult, galleryBytesResult, deliverablesResult, jobResult, paymentsResult, resourcesResult, catalogResult, expirySettings, rawDownloadAccessResult] =
     await Promise.all([
       admin.from('bookings').select('*').eq('workspace_id', workspaceId).eq('id', bookingId).single(),
       admin.from('photo_selections').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
@@ -1082,6 +1082,11 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .eq('storage_status', 'available')
         .order('created_at', { ascending: true })
         .range(Math.max(0, offset), Math.max(0, offset) + pageSize - 1),
+      offset === 0
+        ? admin.from('gallery_files').select('file_size')
+          .eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+          .eq('storage_provider', 'r2').eq('storage_status', 'available')
+        : Promise.resolve({ data: null, error: null }),
       admin.from('deliverable_files').select('*').eq('workspace_id', workspaceId).eq('booking_id', bookingId).eq('storage_status', 'available').order('published_at', { ascending: false }),
       admin.from('editing_jobs').select('status').eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle(),
       admin.from('payments').select('amount').eq('booking_id', bookingId).eq('status', 'confirmed'),
@@ -1108,6 +1113,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
   for (const [label, result] of [
     ['photo selection', selectionResult],
     ['gallery photos', galleryResult],
+    ['gallery download size', galleryBytesResult],
     ['deliverables', deliverablesResult],
     ['editing status', jobResult],
     ['payments', paymentsResult],
@@ -1215,6 +1221,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       mimeType: String(file.mime_type),
     })),
     galleryTotal: galleryResult.count || 0,
+    rawDownloadBytes: (galleryBytesResult.data || []).reduce((sum, file) => sum + Math.max(0, Number(file.file_size || 0)), 0),
     galleryOffset: Math.max(0, offset),
     galleryLimit: pageSize,
     editingStatus: String(jobResult.data?.status || 'WAITING_FOR_SELECTION'),
@@ -2539,7 +2546,7 @@ export async function preparePortalDeliverables(publicId: string) {
   const { admin, portal } = await portalRecord(publicId)
   const { data, error } = await admin
     .from('deliverable_files')
-    .select('storage_key,file_name')
+    .select('storage_key,file_name,file_size')
     .eq('workspace_id', portal.workspace_id)
     .eq('booking_id', portal.booking_id)
     .eq('storage_status', 'available')
@@ -2548,6 +2555,7 @@ export async function preparePortalDeliverables(publicId: string) {
   return (data || []).map((file) => ({
     name: safeSegment(String(file.file_name)) || String(file.storage_key),
     storageKey: String(file.storage_key),
+    byteSize: Number(file.file_size || 0),
   }))
 }
 
@@ -2559,7 +2567,7 @@ export async function preparePortalRawPhotos(publicId: string) {
   if (!selection.data || selection.data.status !== 'SUBMITTED') {
     throw new PortalSelectionError('Submit your photo selection before downloading all original photos.', 'SELECTION_REQUIRED', 409)
   }
-  const { data, error } = await admin.from('gallery_files').select('storage_key,file_name')
+  const { data, error } = await admin.from('gallery_files').select('storage_key,file_name,file_size')
     .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id)
     .eq('storage_provider', 'r2').eq('storage_status', 'available').order('created_at', { ascending: true })
   if (error) throw new Error(error.message)
@@ -2569,7 +2577,7 @@ export async function preparePortalRawPhotos(publicId: string) {
     const count = (usedNames.get(baseName.toLowerCase()) || 0) + 1
     usedNames.set(baseName.toLowerCase(), count)
     const duplicateSafeName = count === 1 ? baseName : baseName.replace(/(\.[^.]+)?$/, `-${count}$1`)
-    return { name: duplicateSafeName, storageKey: String(file.storage_key) }
+    return { name: duplicateSafeName, storageKey: String(file.storage_key), byteSize: Number(file.file_size || 0) }
   })
 }
 

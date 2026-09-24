@@ -7,8 +7,17 @@ import type { PortalRawDownloadAccess } from '@/lib/portal-raw-downloads'
 const primary = 'min-h-11 rounded-control bg-primary px-4 py-2.5 text-caption font-semibold text-white transition-[background-color,transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:bg-[#0903e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 disabled:pointer-events-none disabled:opacity-45'
 const secondary = 'min-h-11 rounded-control border border-white/12 bg-white/[0.035] px-4 py-2.5 text-caption font-semibold text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/60 disabled:pointer-events-none disabled:opacity-45'
 
+export function formatDownloadSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return ''
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / (1024 ** exponent)
+  return `${new Intl.NumberFormat('en-PH', { maximumFractionDigits: exponent > 1 ? 1 : 0 }).format(value)} ${units[exponent]}`
+}
+
 export default function PortalOriginalDownload({
   total,
+  totalBytes,
   access,
   downloadUrl,
   requestUrl,
@@ -17,6 +26,7 @@ export default function PortalOriginalDownload({
   onDemoDownload,
 }: {
   total: number
+  totalBytes: number
   access: PortalRawDownloadAccess | null
   downloadUrl: string | null
   requestUrl: string | null
@@ -34,6 +44,8 @@ export default function PortalOriginalDownload({
   const pending = access.requestStatus === 'PENDING'
   const granted = access.requestStatus === 'GRANTED'
   const retrying = access.requestStatus === 'RESERVED' || access.activeDownloads > 0
+  const usedDownloads = Math.min(access.limit, access.completedInWindow + access.activeDownloads)
+  const downloadSize = formatDownloadSize(totalBytes)
 
   async function submitRequest() {
     const clean = reason.trim()
@@ -76,9 +88,9 @@ export default function PortalOriginalDownload({
         <div className="max-w-2xl">
           <h2 className="text-card-title font-semibold tracking-heading">Your original photos</h2>
           <p className="mt-1 text-caption leading-relaxed text-white/45">
-            Download all {total} originals up to {access.limit} times every 7 days.
+            Download all {total} originals{downloadSize ? ` (${downloadSize})` : ''} up to {access.limit} times every 7 days.
           </p>
-          <p className="mt-2 text-caption text-white/35">{access.completedInWindow} of {access.limit} downloads used</p>
+          <p className="mt-2 text-caption text-white/35">{usedDownloads} of {access.limit} downloads used{access.activeDownloads > 0 ? ' · Finalizing current transfer' : ''}</p>
         </div>
         {downloadUrl ? (
           <a

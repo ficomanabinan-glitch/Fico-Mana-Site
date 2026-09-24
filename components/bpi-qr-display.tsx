@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { Expand, X } from 'lucide-react'
+import { useWebsiteMedia } from '@/lib/website-media-client'
+import { PAYMENT_QR_SLOT_KEY } from '@/lib/website-media'
 
 type Props = {
   depositLabel: string
@@ -12,6 +14,10 @@ type Props = {
 
 export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Props) {
   const [open, setOpen] = useState(false)
+  const media = useWebsiteMedia()
+  const paymentQr = media.find((slot) => slot.slotKey === PAYMENT_QR_SLOT_KEY)
+  const imageUrl = paymentQr?.url || '/bpi_qr.jpg'
+  const imageAlt = paymentQr?.altText || 'BPI payment QR code for FICO MANA deposit'
 
   useEffect(() => {
     if (!open) return
@@ -35,8 +41,8 @@ export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Pro
           aria-label="View full size BPI QR code"
         >
           <Image
-            src="/bpi_qr.jpg"
-            alt="BPI payment QR code for FICO MANA deposit"
+            src={imageUrl}
+            alt={imageAlt}
             fill
             className="object-contain"
             sizes="240px"
@@ -76,8 +82,8 @@ export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Pro
           </button>
           <div className="relative max-w-lg w-full bg-white rounded-sm p-2" onClick={(e) => e.stopPropagation()}>
             <Image
-              src="/bpi_qr.jpg"
-              alt="BPI payment QR code for FICO MANA deposit"
+              src={imageUrl}
+              alt={imageAlt}
               width={800}
               height={800}
               className="w-full h-auto"

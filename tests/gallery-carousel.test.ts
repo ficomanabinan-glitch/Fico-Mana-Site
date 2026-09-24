@@ -19,7 +19,7 @@ test('graduation carousel supports swipe and continuous automatic movement', asy
   assert.match(gallery, /scrollPositionRef\.current %=/)
   assert.match(gallery, /resumeAfterInteraction\(\)/)
   assert.match(gallery, /useWebsiteMedia\(\)/)
-  assert.match(gallery, /slot\.kind === 'image'/)
+  assert.match(gallery, /isWebsiteMediaGallerySlotKey\(slot\.slotKey\)/)
   assert.match(gallery, /aria-hidden=\{sequence === 1 \? true : undefined\}/)
   assert.match(gallery, /tabIndex=\{isClone \? -1 : undefined\}/)
   assert.doesNotMatch(gallery, /onMouseEnter=\{/)

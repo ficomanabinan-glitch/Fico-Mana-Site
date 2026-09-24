@@ -42,15 +42,63 @@ function inlineBytes(value) {
 }
 
 async function complete(env, manifestId, hash, success) {
-  try {
-    await rpc(env, 'complete_private_download_manifest', {
-      p_manifest: manifestId,
-      p_token_hash: hash,
-      p_success: success,
-    })
-  } catch (error) {
-    console.error('Download completion update failed', error instanceof Error ? error.message : 'unknown error')
+  let lastError = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const completed = await rpc(env, 'complete_private_download_manifest', {
+        p_manifest: manifestId,
+        p_token_hash: hash,
+        p_success: success,
+      })
+      if (completed === false) throw new Error('Download completion was not accepted.')
+      return true
+    } catch (error) {
+      lastError = error
+    }
   }
+  console.error('Download completion update failed', lastError instanceof Error ? lastError.message : 'unknown error')
+  return false
+}
+
+function positiveSize(value) {
+  const size = Number(value)
+  return Number.isSafeInteger(size) && size > 0 ? size : 0
+}
+
+async function preflightEntries(entries, env) {
+  const checked = []
+  for (let start = 0; start < entries.length; start += 16) {
+    const batch = entries.slice(start, start + 16)
+    const results = await Promise.all(batch.map(async (entry) => {
+      const name = String(entry.name || 'file')
+      if (entry.storageKey) {
+        const object = await env.PRIVATE_PHOTOS.head(String(entry.storageKey))
+        const byteSize = positiveSize(object?.size)
+        if (!byteSize) throw new Error(`${name} is unavailable in private storage.`)
+        const expectedSize = positiveSize(entry.byteSize)
+        if (expectedSize && expectedSize !== byteSize) throw new Error(`${name} did not match its stored size.`)
+        return { ...entry, name, byteSize }
+      }
+      if (typeof entry.inlineBase64 === 'string') {
+        const bytes = inlineBytes(entry.inlineBase64)
+        if (!bytes.byteLength) throw new Error(`${name} is empty.`)
+        return { ...entry, name, byteSize: bytes.byteLength, inlineBytes: bytes }
+      }
+      throw new Error(`${name} is not a valid download entry.`)
+    }))
+    checked.push(...results)
+  }
+  return checked
+}
+
+// zip.js uses a deterministic ZIP64 STORE layout here: 98 archive bytes,
+// 158 bytes per non-empty entry, two UTF-8 filename copies, and file data.
+function zipContentLength(entries) {
+  const encoder = new TextEncoder()
+  return entries.reduce(
+    (total, entry) => total + BigInt(entry.byteSize) + 158n + (2n * BigInt(encoder.encode(entry.name).byteLength)),
+    98n,
+  ).toString()
 }
 
 async function runRetention(env) {
@@ -101,8 +149,8 @@ async function runRetention(env) {
   }
 }
 
-export default {
-  async fetch(request, env) {
+const privateDownloadWorker = {
+  async fetch(request, env, context) {
     if (request.method !== 'GET') return json('Method not allowed.', 405)
     const url = new URL(request.url)
     const match = url.pathname.match(/^\/download\/([^/]+)$/)
@@ -121,12 +169,21 @@ export default {
     } catch {
       return json('This private download link is unavailable or has expired.', 410)
     }
-    const entries = Array.isArray(manifest?.entries) ? manifest.entries : []
-    if (!entries.length || entries.length > 2000) return json('No downloadable photos are available.', 404)
+    const manifestEntries = Array.isArray(manifest?.entries) ? manifest.entries : []
+    if (!manifestEntries.length || manifestEntries.length > 2000) return json('No downloadable photos are available.', 404)
+    let entries
+    try {
+      entries = await preflightEntries(manifestEntries, env)
+    } catch (error) {
+      await complete(env, manifestId, hash, false)
+      console.error('Private ZIP preflight failed', error instanceof Error ? error.message : 'unknown error')
+      return json('One or more photos are temporarily unavailable. No download was counted; please try again.', 409)
+    }
+    const sourceBytes = entries.reduce((total, entry) => total + BigInt(entry.byteSize), 0n)
 
     const { readable, writable } = new TransformStream()
     const archive = new ZipWriter(writable, { level: 0, zip64: true, useWebWorkers: false })
-    void (async () => {
+    const streamTask = (async () => {
       let success = false
       try {
         for (const entry of entries) {
@@ -139,8 +196,8 @@ export default {
               zip64: true,
               lastModDate: object.uploaded || new Date(),
             })
-          } else if (typeof entry.inlineBase64 === 'string') {
-            await archive.add(name, new Uint8ArrayReader(inlineBytes(entry.inlineBase64)), {
+          } else if (entry.inlineBytes instanceof Uint8Array) {
+            await archive.add(name, new Uint8ArrayReader(entry.inlineBytes), {
               level: 0,
               zip64: true,
             })
@@ -157,6 +214,7 @@ export default {
         await complete(env, manifestId, hash, success)
       }
     })()
+    context?.waitUntil?.(streamTask)
 
     return new Response(readable, {
       headers: {
@@ -164,7 +222,9 @@ export default {
         'content-disposition': `attachment; filename="${cleanDownloadName(manifest.fileName)}"`,
         'cache-control': 'private, no-store',
         'content-security-policy': "default-src 'none'; sandbox",
+        'content-length': zipContentLength(entries),
         'referrer-policy': 'no-referrer',
+        'x-ficomana-source-bytes': sourceBytes.toString(),
         'x-content-type-options': 'nosniff',
       },
     })
@@ -173,3 +233,5 @@ export default {
     context.waitUntil(runRetention(env))
   },
 }
+
+export default privateDownloadWorker

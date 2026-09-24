@@ -45,6 +45,7 @@ export default function DownloadRequestDemo() {
             </div>
             <PortalOriginalDownload
               total={125}
+              totalBytes={3_840_000_000}
               access={access}
               downloadUrl={status === 'granted' ? '#' : null}
               requestUrl="#sample-request"

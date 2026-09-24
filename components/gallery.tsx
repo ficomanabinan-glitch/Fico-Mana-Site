@@ -8,6 +8,7 @@ import SectionHeader from '@/components/section-header'
 import SectionShell from '@/components/section-shell'
 import { cn } from '@/lib/utils'
 import { useWebsiteMedia } from '@/lib/website-media-client'
+import { isWebsiteMediaGallerySlotKey } from '@/lib/website-media'
 
 const LIGHTBOX_IMAGE_WIDTH = 2040
 const LIGHTBOX_IMAGE_HEIGHT = 2560
@@ -259,7 +260,7 @@ export default function Gallery() {
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null)
   const media = useWebsiteMedia()
   const galleryItems: GalleryItem[] = media
-    .filter((slot) => slot.kind === 'image')
+    .filter((slot) => isWebsiteMediaGallerySlotKey(slot.slotKey))
     .map((slot) => ({
       id: slot.slotKey,
       image: slot.url,

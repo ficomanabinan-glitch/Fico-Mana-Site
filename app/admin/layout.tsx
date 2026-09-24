@@ -324,7 +324,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </aside>
 
           <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
+            <header className="relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#222222]/90 px-5 backdrop-blur-xl md:px-8">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
                   onClick={() => setMobileMenuOpen((previous) => !previous)}
@@ -411,12 +411,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </header>
 
             {mobileMenuOpen ? (
-              <div ref={mobileMenuRef} id="admin-mobile-navigation" className="relative z-10 max-h-[65dvh] overflow-y-auto border-b border-white/[0.08] bg-[#222222] p-3 md:hidden">
+              <div ref={mobileMenuRef} id="admin-mobile-navigation" className="absolute inset-x-0 bottom-0 top-14 z-30 overflow-y-auto overscroll-contain border-b border-white/[0.08] bg-[#222222] p-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:hidden">
                 <DashboardSidebarNavigation
                   sections={navigation}
                   activePath={pendingHref ?? pathname}
                   mobile
                   onNavigate={handleNavigate}
+                />
+                <DashboardSidebarProfile
+                  label={staffLabel}
+                  detail={staffUser?.email || 'Staff account'}
+                  onLogout={handleLogout}
                 />
               </div>
             ) : null}

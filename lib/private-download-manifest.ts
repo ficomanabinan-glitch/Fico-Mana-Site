@@ -2,7 +2,7 @@ import 'server-only'
 import { createHash, randomBytes } from 'node:crypto'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
-type DownloadEntry = { name: string; storageKey?: string; data?: Buffer }
+type DownloadEntry = { name: string; storageKey?: string; data?: Buffer; byteSize?: number }
 type DownloadKind = 'PORTAL_ORIGINALS' | 'PORTAL_DELIVERABLES' | 'EDITOR_BATCH'
 
 function safeFileName(value: string) {
@@ -15,11 +15,13 @@ function cleanEntries(entries: DownloadEntry[]) {
     const name = entry.name.replace(/^[\\/]+|\.\.(?:[\\/]|$)/g, '').slice(0, 240)
     const storageKey = String(entry.storageKey || '').replace(/^\/+/, '').slice(0, 1024)
     const data = entry.data
+    const byteSize = data?.byteLength || (Number.isSafeInteger(entry.byteSize) && Number(entry.byteSize) > 0 ? Number(entry.byteSize) : 0)
     if (data) inlineBytes += data.byteLength
     return {
       name,
       ...(storageKey ? { storageKey } : {}),
       ...(data ? { inlineBase64: data.toString('base64') } : {}),
+      ...(byteSize ? { byteSize } : {}),
     }
   }).filter((entry) => entry.name && (entry.storageKey || 'inlineBase64' in entry))
   if (inlineBytes > 2 * 1024 * 1024) throw new Error('The batch metadata is too large to prepare safely.')

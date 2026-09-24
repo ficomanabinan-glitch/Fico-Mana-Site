@@ -13,9 +13,12 @@ export const WEBSITE_MEDIA_GALLERY_SLOT_KEYS = [
   'gallery_10',
 ] as const
 
+export const PAYMENT_QR_SLOT_KEY = 'payment_qr' as const
+
 export const WEBSITE_MEDIA_SLOT_KEYS = [
   ...WEBSITE_MEDIA_GALLERY_SLOT_KEYS,
   'featured_video',
+  PAYMENT_QR_SLOT_KEY,
 ] as const
 
 export type WebsiteMediaSlotKey = (typeof WEBSITE_MEDIA_SLOT_KEYS)[number]
@@ -98,6 +101,18 @@ export const DEFAULT_WEBSITE_MEDIA: readonly WebsiteMediaSlot[] = [
     isCustom: false,
   },
   {
+    slotKey: PAYMENT_QR_SLOT_KEY,
+    kind: 'image',
+    label: 'Payment QR',
+    url: '/bpi_qr.jpg',
+    altText: 'BPI payment QR code for FICO MANA deposit',
+    fileName: 'bpi_qr.jpg',
+    mimeType: 'image/jpeg',
+    fileSize: null,
+    updatedAt: null,
+    isCustom: false,
+  },
+  {
     slotKey: 'featured_video',
     kind: 'video',
     label: 'Featured Video',
@@ -130,6 +145,7 @@ export function expectedWebsiteMediaKind(slotKey: WebsiteMediaSlotKey): WebsiteM
 
 export function websiteMediaSlotIndex(slotKey: WebsiteMediaSlotKey) {
   if (slotKey === 'featured_video') return Number.POSITIVE_INFINITY
+  if (slotKey === PAYMENT_QR_SLOT_KEY) return Number.MAX_SAFE_INTEGER
   return Number(slotKey.slice('gallery_'.length))
 }
 
@@ -207,10 +223,12 @@ export function mergeWebsiteMedia(value: unknown): WebsiteMediaSlot[] {
     }]
   })
 
+  const paymentQr = mergedDefaults.filter((slot) => slot.slotKey === PAYMENT_QR_SLOT_KEY)
   const video = mergedDefaults.filter((slot) => slot.kind === 'video')
   return [
-    ...mergedDefaults.filter((slot) => slot.kind === 'image'),
+    ...mergedDefaults.filter((slot) => isWebsiteMediaGallerySlotKey(slot.slotKey)),
     ...extraGallery,
+    ...paymentQr,
     ...video,
   ]
 }

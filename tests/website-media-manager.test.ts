@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-test('website media contract preserves five defaults and supports ten gallery slots plus one video', async () => {
+test('website media contract preserves five defaults and supports ten gallery slots, one video, and the payment QR', async () => {
   const config = await readFile('lib/website-media.ts', 'utf8')
   const defaultGallerySlots = config.match(/slotKey: 'gallery_[1-5]'/g) ?? []
   const allowedGallerySlots = config.match(/^  'gallery_(?:[1-9]|10)',?$/gm) ?? []
@@ -11,6 +11,7 @@ test('website media contract preserves five defaults and supports ten gallery sl
   assert.equal(defaultGallerySlots.length, 5)
   assert.equal(allowedGallerySlots.length, 10)
   assert.equal(videoSlots.length, 1)
+  assert.match(config, /PAYMENT_QR_SLOT_KEY = 'payment_qr'/)
   assert.match(config, /WEBSITE_MEDIA_GALLERY_SLOT_KEYS/)
   assert.match(config, /createWebsiteMediaGalleryPlaceholder/)
   assert.match(config, /DEFAULT_WEBSITE_MEDIA/)
@@ -25,7 +26,7 @@ test('public gallery and reel load managed media while keeping bundled fallbacks
   ])
 
   assert.match(gallery, /useWebsiteMedia\(\)/)
-  assert.match(gallery, /slot\.kind === 'image'/)
+  assert.match(gallery, /isWebsiteMediaGallerySlotKey\(slot\.slotKey\)/)
   assert.match(reels, /useWebsiteMedia\(\)/)
   assert.match(reels, /slot\.kind === 'video'/)
   assert.match(reels, /'\/breanna-reel\.mp4'/)

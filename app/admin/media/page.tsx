@@ -156,7 +156,7 @@ export default function WebsiteMediaPage() {
 
   const addGalleryPhoto = async (file: File | undefined) => {
     if (!file) return
-    const used = new Set(media.filter((slot) => slot.kind === 'image').map((slot) => slot.slotKey))
+    const used = new Set(media.filter((slot) => isWebsiteMediaGallerySlotKey(slot.slotKey)).map((slot) => slot.slotKey))
     const slotKey = WEBSITE_MEDIA_GALLERY_SLOT_KEYS.find((key) => !used.has(key))
     if (!slotKey) {
       toast.info('Gallery is full', 'The public gallery supports a maximum of 10 photos.')
@@ -197,7 +197,7 @@ export default function WebsiteMediaPage() {
       return
     }
     if (!slot.isCustom || !isWebsiteMediaGallerySlotKey(slot.slotKey)) return
-    const restoresFallback = websiteMediaSlotIndex(slot.slotKey) <= DEFAULT_WEBSITE_MEDIA.filter((item) => item.kind === 'image').length
+    const restoresFallback = websiteMediaSlotIndex(slot.slotKey) <= DEFAULT_WEBSITE_MEDIA.filter((item) => isWebsiteMediaGallerySlotKey(item.slotKey)).length
     const prompt = restoresFallback
       ? `Restore the bundled fallback for ${slot.label}? The custom photo will be permanently removed.`
       : `Remove ${slot.label} from the public gallery? The uploaded photo will be permanently removed.`
@@ -393,7 +393,7 @@ export default function WebsiteMediaPage() {
     }
   }
 
-  const gallery = media.filter((slot) => slot.kind === 'image')
+  const gallery = media.filter((slot) => isWebsiteMediaGallerySlotKey(slot.slotKey))
   const video = media.find((slot) => slot.kind === 'video')
 
   return (

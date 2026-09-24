@@ -71,3 +71,8 @@ test('PIN and balance are in the final confirmation, never above the review cont
   assert.match(source, /portalPaymentSummary\(paymentSummary.packageAmount, paymentSummary.amountPaid, addonTotal\)/)
 })
 
+test('client overview uses the portal UI face instead of the generic serif sheet title', () => {
+  const source = readFileSync('components/portal-overview.tsx', 'utf8')
+  assert.match(source, /SheetTitle[^>]*className="font-sans text-\[22px\]/)
+})
+
