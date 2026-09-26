@@ -14,6 +14,7 @@ import {
   List,
   Menu,
   PackageOpen,
+  PanelsTopLeft,
   PenTool,
   ReceiptText,
   Settings,
@@ -72,6 +73,7 @@ const navigationSections = [
     items: [
       { label: 'Package Manager', href: '/admin/packages', icon: PackageOpen },
       { label: 'Website Media', href: '/admin/media', icon: Clapperboard },
+      { label: 'Content Management', href: '/admin/content', icon: PanelsTopLeft },
       { label: 'Email Logs', href: '/admin/emails', icon: FileText },
       { label: 'User Access', href: '/admin/users', icon: UserCog },
       { label: 'System Settings', href: '/admin/system', icon: Settings },

@@ -129,3 +129,41 @@ test('never returns a negative remaining target after exceeding goal', () => {
   assert.equal(result.remainingRevenueTarget, 0)
   assert.equal(result.bookingsNeeded, 0)
 })
+
+test('reconciles package and add-on revenue with verified payments and outstanding balance', () => {
+  const result = calculateSalesSummary(
+    [booking({ price: 2000, paymentHistory: [{ id: 'PAY-1', amount: 500, method: 'Cash', type: 'Deposit', date: '2026-09-01' }] })],
+    [
+      { bookingId: 'FM-100001', name: '8R Frame', quantity: 1, totalAmount: 1000 },
+      { bookingId: 'FM-100001', name: 'Extra Edit', quantity: 2, totalAmount: 800 },
+    ],
+    [],
+    settings,
+    'month',
+    anchor,
+  )
+  assert.equal(result.bookedSales, 3800)
+  assert.equal(result.cashCollected, 500)
+  assert.equal(result.outstandingReceivables, 3300)
+  assert.equal(result.revenueBreakdown.packageRevenue, 2000)
+  assert.equal(result.revenueBreakdown.printFrameRevenue, 1000)
+  assert.equal(result.revenueBreakdown.otherAddonRevenue, 800)
+  assert.equal(result.revenueBreakdown.total, 3800)
+})
+
+test('uses the selected report date semantics consistently', () => {
+  const futureShoot = booking({ bookingDate: '2026-10-10', createdAt: '2026-09-05T02:00:00.000Z' })
+  const byShoot = calculateSalesSummary([futureShoot], [], settings, 'month', anchor)
+  const byBooking = calculateSalesSummary([futureShoot], [], settings, 'month', anchor, { reportBy: 'booking_date' })
+  assert.equal(byShoot.bookedSales, 0)
+  assert.equal(byBooking.bookedSales, 25000)
+})
+
+test('booking-date reports use Asia/Manila calendar boundaries', () => {
+  const nearMidnight = booking({
+    bookingDate: '2026-10-10',
+    createdAt: '2026-08-31T16:30:00.000Z',
+  })
+  const result = calculateSalesSummary([nearMidnight], [], settings, 'month', anchor, { reportBy: 'booking_date' })
+  assert.equal(result.bookedSales, 25000)
+})

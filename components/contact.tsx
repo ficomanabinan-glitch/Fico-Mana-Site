@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Mail, ArrowUpRight } from 'lucide-react'
 import SectionHeader from '@/components/section-header'
 import SectionShell from '@/components/section-shell'
+import { useWebsiteContent } from '@/lib/website-content-client'
 
 function FacebookIcon({ className }: { className?: string }) {
   return (
@@ -41,34 +42,14 @@ function TikTokIcon({ className }: { className?: string }) {
   )
 }
 
-const contactMethods = [
-  {
-    icon: FacebookIcon,
-    label: 'Facebook',
-    value: 'FICOMANA',
-    href: 'https://www.facebook.com/FICOMANA',
-  },
-  {
-    icon: InstagramIcon,
-    label: 'Instagram',
-    value: '@ficomanastudio',
-    href: 'https://www.instagram.com/ficomanastudio/',
-  },
-  {
-    icon: TikTokIcon,
-    label: 'TikTok',
-    value: '@ficomanastudio',
-    href: 'https://www.tiktok.com/@ficomanastudio?_r=1',
-  },
-  {
-    icon: Mail,
-    label: 'Email',
-    value: 'ficomanaph@gmail.com',
-    href: 'mailto:ficomanaph@gmail.com',
-  },
-]
-
 export default function Contact() {
+  const content = useWebsiteContent()
+  const contactMethods = [
+    { icon: FacebookIcon, label: 'Facebook', value: 'FICOMANA', href: content.facebookUrl },
+    { icon: InstagramIcon, label: 'Instagram', value: '@ficomanastudio', href: content.instagramUrl },
+    { icon: TikTokIcon, label: 'TikTok', value: '@ficomanastudio', href: content.tiktokUrl },
+    { icon: Mail, label: 'Email', value: content.publicEmail || 'ficomanaph@gmail.com', href: `mailto:${content.publicEmail || 'ficomanaph@gmail.com'}` },
+  ].filter((method) => Boolean(method.href))
   return (
     <SectionShell id="contact" variant="gradient">
       <div className="grid lg:grid-cols-2 gap-12 items-start max-w-6xl mx-auto">
@@ -134,7 +115,7 @@ export default function Contact() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
           <div className="absolute bottom-6 left-6 right-6">
             <p className="text-caption tracking-label uppercase text-white/70 mb-1">Visit Us</p>
-            <p className="text-sm text-white font-medium">Cabuyao Retail Plaza, Laguna</p>
+            <p className="text-sm text-white font-medium">{content.addressLine1}, {content.addressLine2}</p>
           </div>
         </motion.div>
       </div>

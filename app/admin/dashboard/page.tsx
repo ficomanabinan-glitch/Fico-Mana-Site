@@ -20,11 +20,13 @@ import BookingPrioritySelect from '@/components/booking-priority-select'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { AdminPageSkeleton } from '@/components/admin-page-skeleton'
-import { buildDayPriorityMap, getDayPriorityCount, sortBookingsByDayPriority } from '@/lib/booking-priority'
+import { getDayPriorityCount, isPriorityEligible, sortBookingsByDayPriority } from '@/lib/booking-priority'
 import { downloadDayBookingsExcel } from '@/lib/export-day-bookings'
+import { useBookingQueue } from '@/components/use-booking-queue'
+import { studioDay } from '@/lib/new-admin/presentation-data'
 
 function calculateDashboardStats(data: Booking[]) {
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = studioDay()
 
   let todaysBookings = 0
   let pendingVerification = 0
@@ -95,12 +97,15 @@ export default function DashboardOverview() {
 
   useOnAdminDbSync(() => fetchStats(true))
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = studioDay()
+  const { priorityMap: todayPriorityMap, moveBooking, savingBookingId } = useBookingQueue(bookings)
   const todaysList = useMemo(
-    () => sortBookingsByDayPriority(bookings.filter((b) => b.bookingDate === todayStr)),
-    [bookings, todayStr],
+    () => sortBookingsByDayPriority(
+      bookings.filter((b) => b.bookingDate === todayStr && isPriorityEligible(b)),
+      todayPriorityMap,
+    ),
+    [bookings, todayPriorityMap, todayStr],
   )
-  const todayPriorityMap = useMemo(() => buildDayPriorityMap(bookings), [bookings])
   const todayPriorityCount = getDayPriorityCount(bookings, todayStr)
 
   if (loading) {
@@ -262,6 +267,8 @@ export default function DashboardOverview() {
                       priority={todayPriorityMap.get(b.id) ?? null}
                       maxPriority={todayPriorityCount}
                       className="shrink-0"
+                      disabled={Boolean(savingBookingId)}
+                      onChange={(position) => moveBooking(b.id, position)}
                     />
                     <div className="space-y-1 min-w-0">
                       <p className="font-semibold text-white truncate">{b.customerName}</p>

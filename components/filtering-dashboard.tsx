@@ -27,7 +27,7 @@ import {
   rawPhotoWorkflowLabel,
   type RawPhotoWorkflowStatus,
 } from '@/lib/booking-display'
-import { buildDayPriorityMap, getDayPriorityCount, sortBookingsByDayPriority } from '@/lib/booking-priority'
+import { getDayPriorityCount, sortBookingsByDayPriority } from '@/lib/booking-priority'
 import { countPendingRawPhotoReviews, hasRawPhotoSubmission } from '@/lib/raw-photo-display'
 import BookingPrioritySelect from '@/components/booking-priority-select'
 import {
@@ -47,6 +47,7 @@ import AdminRawPhotoQueue from '@/components/admin-raw-photo-queue'
 import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import DownloadRequestsPanel from '@/components/download-requests-panel'
+import { useBookingQueue } from '@/components/use-booking-queue'
 
 export type FilteringDashTab = 'overview' | 'queue' | 'downloads' | 'calendar' | 'editor'
 
@@ -138,18 +139,15 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
       ),
     [bookings],
   )
+  const { priorityMap: dayPriorityMap, moveBooking, savingBookingId } = useBookingQueue(calendarBookings)
 
   const dayBookings = useMemo(
     () =>
       sortBookingsByDayPriority(
         calendarBookings.filter((b) => b.bookingDate === selectedDate),
+        dayPriorityMap,
       ),
-    [calendarBookings, selectedDate],
-  )
-
-  const dayPriorityMap = useMemo(
-    () => buildDayPriorityMap(calendarBookings),
-    [calendarBookings],
+    [calendarBookings, dayPriorityMap, selectedDate],
   )
 
   const tabs: { id: FilteringDashTab; label: string; icon: typeof LayoutDashboard; count?: number }[] = [
@@ -247,6 +245,8 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
             date={selectedDate}
             priorityMap={dayPriorityMap}
             maxPriority={getDayPriorityCount(calendarBookings, selectedDate)}
+            savingBookingId={savingBookingId}
+            onMove={moveBooking}
             onReview={(id) => {
               setQueueSearch(id)
               setActiveTab('queue')
@@ -454,12 +454,16 @@ function FilteringDaySessions({
   date,
   priorityMap,
   maxPriority,
+  savingBookingId,
+  onMove,
   onReview,
 }: {
   bookings: Booking[]
   date: string
   priorityMap: Map<string, number>
   maxPriority: number
+  savingBookingId: string | null
+  onMove: (bookingId: string, position: number) => void | Promise<void>
   onReview: (bookingId: string) => void
 }) {
   const label = date
@@ -518,6 +522,8 @@ function FilteringDaySessions({
                         priority={priorityMap.get(b.id) ?? null}
                         maxPriority={maxPriority}
                         className="shrink-0 mt-0.5"
+                        disabled={Boolean(savingBookingId)}
+                        onChange={(position) => onMove(b.id, position)}
                       />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{b.customerName}</p>

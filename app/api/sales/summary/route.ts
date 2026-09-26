@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { requireStaffAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { calculateSalesSummary, type SalesPeriod } from '@/lib/sales-finance'
-import { getSalesSettings, listSalesBookings, listSalesExpenses } from '@/lib/sales-store'
+import { calculateSalesSummary, type SalesPeriod, type SalesReportBy } from '@/lib/sales-finance'
+import { getSalesSettings, listSalesAddonOrders, listSalesBookings, listSalesExpenses } from '@/lib/sales-store'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
-const VALID_PERIODS = new Set<SalesPeriod>(['month', 'quarter', 'year'])
+const VALID_PERIODS = new Set<SalesPeriod>(['day', 'week', 'month', 'quarter', 'year', 'custom'])
+const VALID_REPORT_BY = new Set<SalesReportBy>(['shoot_date', 'booking_date'])
 
 export async function GET(request: Request) {
   try {
@@ -24,14 +25,29 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Invalid reporting date.' }, { status: 400 })
     }
 
-    const [bookings, expenses, settings] = await Promise.all([
+    const reportByRaw = url.searchParams.get('reportBy') as SalesReportBy | null
+    const reportBy = reportByRaw && VALID_REPORT_BY.has(reportByRaw) ? reportByRaw : 'shoot_date'
+    const customStartRaw = url.searchParams.get('start')
+    const customEndRaw = url.searchParams.get('end')
+    const customStart = customStartRaw ? new Date(`${customStartRaw}T12:00:00`) : undefined
+    const customEnd = customEndRaw ? new Date(`${customEndRaw}T12:00:00`) : undefined
+    if (period === 'custom' && (!customStart || !customEnd || customEnd < customStart)) {
+      return NextResponse.json({ error: 'Choose a valid custom reporting range.' }, { status: 400 })
+    }
+
+    const [bookings, addonOrders, expenses, settings] = await Promise.all([
       listSalesBookings(admin),
+      listSalesAddonOrders(admin),
       listSalesExpenses(admin, { activeOnly: true, ordered: false }),
       getSalesSettings(admin),
     ])
 
     return NextResponse.json({
-      summary: calculateSalesSummary(bookings, expenses, settings, period, anchor),
+      summary: calculateSalesSummary(bookings, addonOrders, expenses, settings, period, anchor, {
+        reportBy,
+        customStart,
+        customEnd,
+      }),
       settings,
     })
   } catch (error) {

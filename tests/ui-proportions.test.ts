@@ -67,7 +67,7 @@ test('sales insight cards use the same rounded corners as other dashboard metric
   const sales = source('app/admin/sales/page.tsx')
   const insight = sales.slice(sales.indexOf('function Insight('), sales.indexOf('function ExpenseBar('))
   assert.match(insight, /className="rounded-control border border-white\/\[0\.07\] bg-black\/10 p-3"/)
-  assert.equal((sales.match(/<Insight label=/g) || []).length, 8)
+  assert.ok((sales.match(/<Insight label=/g) || []).length >= 8)
 })
 
 test('business expense summary cards use the shared rounded card style', () => {

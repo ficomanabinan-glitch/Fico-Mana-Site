@@ -7,7 +7,6 @@ import {
   Banknote,
   BriefcaseBusiness,
   Calculator,
-  Crosshair,
   ReceiptText,
   Save,
   Target,
@@ -34,6 +33,7 @@ import {
   SALES_DATA_CHANGED_EVENT,
   salesCacheKey,
   type SalesPeriod as Period,
+  type SalesReportBy,
   type SalesSummaryPayload as Payload,
   type SalesTrendPoint as TrendPoint,
 } from '@/lib/sales-read-cache'
@@ -82,10 +82,14 @@ function SalesBodySkeleton() {
 
 export default function SalesManagementPage() {
   const toast = useAdminToast()
-  const initialView = useRef(getRememberedSalesView() ?? { period: 'month' as Period, anchor: DEFAULT_ANCHOR }).current
-  const initialData = useRef(getCachedSales(initialView.period, initialView.anchor)).current
+  const initialView = useRef(getRememberedSalesView() ?? { period: 'month' as Period, anchor: DEFAULT_ANCHOR, reportBy: 'shoot_date' as SalesReportBy }).current
+  const initialReportBy = initialView.reportBy ?? 'shoot_date'
+  const initialData = useRef(getCachedSales(initialView.period, initialView.anchor, initialReportBy, initialView.start, initialView.end)).current
   const [period, setPeriod] = useState<Period>(initialView.period)
   const [anchor, setAnchor] = useState(initialView.anchor)
+  const [reportBy, setReportBy] = useState<SalesReportBy>(initialReportBy)
+  const [customStart, setCustomStart] = useState(initialView.start ?? initialView.anchor)
+  const [customEnd, setCustomEnd] = useState(initialView.end ?? initialView.anchor)
   const [data, setData] = useState<Payload | null>(initialData)
   const [loading, setLoading] = useState(initialData === null)
   const [refreshing, setRefreshing] = useState(false)
@@ -110,19 +114,19 @@ export default function SalesManagementPage() {
 
   const load = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
-      const requestKey = salesCacheKey(period, anchor)
+      const requestKey = salesCacheKey(period, anchor, reportBy, customStart, customEnd)
       activeRequestKeyRef.current = requestKey
-      const cached = getCachedSales(period, anchor)
+      const cached = getCachedSales(period, anchor, reportBy, customStart, customEnd)
       if (cached) applyPayload(cached)
       const keepExistingData = Boolean(cached || hasDataRef.current)
       setLoading(!keepExistingData)
-      if (!force && cached && isSalesCacheFresh(period, anchor)) {
+      if (!force && cached && isSalesCacheFresh(period, anchor, reportBy, customStart, customEnd)) {
         setRefreshing(false)
         return
       }
       setRefreshing(keepExistingData)
       try {
-        const body = await fetchSales(period, anchor, { force })
+        const body = await fetchSales(period, anchor, { force, reportBy, start: customStart, end: customEnd })
         if (activeRequestKeyRef.current === requestKey) applyPayload(body)
       } catch (error) {
         if (activeRequestKeyRef.current === requestKey) {
@@ -135,13 +139,13 @@ export default function SalesManagementPage() {
         }
       }
     },
-    [anchor, applyPayload, period, toast],
+    [anchor, applyPayload, customEnd, customStart, period, reportBy, toast],
   )
 
   useEffect(() => {
-    rememberSalesView(period, anchor)
+    rememberSalesView(period, anchor, reportBy, customStart, customEnd)
     void load()
-  }, [anchor, load, period])
+  }, [anchor, customEnd, customStart, load, period, reportBy])
 
   useEffect(() => {
     const handleSalesDataChanged = () => {
@@ -177,17 +181,31 @@ export default function SalesManagementPage() {
   const pageHeader = (
     <AdminPageHeader
       title="Sales Management"
-      subtitle="Track sales, expenses, and profit."
+      subtitle="See booked sales, verified collections, receivables, and studio profit for one reporting period."
       onRefresh={() => void load({ force: true })}
       refreshing={refreshing}
     >
       <div className="flex flex-wrap gap-2">
         <select aria-label="Sales reporting period" value={period} onChange={(event) => setPeriod(event.target.value as Period)} className={`${adminSelect} !w-auto min-w-28`}>
+          <option value="day">Day</option>
+          <option value="week">Week</option>
           <option value="month">Month</option>
           <option value="quarter">Quarter</option>
           <option value="year">Year</option>
+          <option value="custom">Custom Range</option>
         </select>
-        <input aria-label="Sales reporting date" type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className={`${adminInput} !w-auto`} />
+        {period === 'custom' ? (
+          <>
+            <input aria-label="Reporting start date" type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} className={`${adminInput} !w-auto`} />
+            <input aria-label="Reporting end date" type="date" min={customStart} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} className={`${adminInput} !w-auto`} />
+          </>
+        ) : (
+          <input aria-label="Sales reporting date" type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className={`${adminInput} !w-auto`} />
+        )}
+        <select aria-label="Report sales by" value={reportBy} onChange={(event) => setReportBy(event.target.value as SalesReportBy)} className={`${adminSelect} !w-auto min-w-36`}>
+          <option value="shoot_date">By Shoot Date</option>
+          <option value="booking_date">By Booking Date</option>
+        </select>
       </div>
     </AdminPageHeader>
   )
@@ -202,13 +220,15 @@ export default function SalesManagementPage() {
   }
 
   const s = data.summary
+  const showsMonthlyTarget = period === 'month'
+  const hasMonthlyTarget = showsMonthlyTarget && s.revenueGoal > 0
   const metrics = [
-    { label: 'Booked Sales', value: peso(s.bookedSales), detail: `${s.totalBookings} valid bookings`, icon: TrendingUp },
-    { label: 'Cash Collected', value: peso(s.cashCollected), detail: 'Verified payments', icon: Banknote },
-    { label: 'Outstanding', value: peso(s.outstandingReceivables), detail: 'Remaining client receivables', icon: WalletCards },
-    { label: 'Net Profit', value: peso(s.netProfit), detail: `${s.profitMargin.toFixed(1)}% actual margin`, icon: BarChart3 },
-    { label: 'Average Booking', value: peso(s.averageBookingValue), detail: 'Average valid booking value', icon: BriefcaseBusiness },
-    { label: 'More Shoots Needed', value: s.bookingsNeeded === null ? '—' : String(s.bookingsNeeded), detail: `To reach ${peso(s.revenueGoal)}`, icon: Crosshair },
+    { label: 'Booked Revenue', value: peso(s.bookedSales), detail: `${s.totalBookings} confirmed bookings`, icon: TrendingUp, help: 'Total value of confirmed bookings and selected add-ons for this period.' },
+    { label: 'Payments Collected', value: peso(s.cashCollected), detail: 'Verified payments toward these sessions', icon: Banknote, help: 'Verified payments actually received from clients in this booking group.' },
+    { label: 'Outstanding Balance', value: peso(s.outstandingReceivables), detail: `${s.unpaidBookingCount} bookings with balance`, icon: WalletCards, help: 'Remaining unpaid balances from confirmed bookings.' },
+    { label: 'Studio Expenses', value: peso(s.totalExpenses), detail: 'Fixed + variable expenses', icon: ReceiptText, help: 'Recorded operating costs for this period.' },
+    { label: 'Projected Profit', value: peso(s.projectedProfit), detail: `${s.profitMargin.toFixed(1)}% projected margin`, icon: BarChart3, help: 'Booked revenue minus recorded expenses.' },
+    { label: 'Average Booking Value', value: peso(s.averageBookingValue), detail: 'Average client spend', icon: BriefcaseBusiness, help: 'Average value of each valid booking, including add-ons.' },
   ]
 
   return (
@@ -219,7 +239,7 @@ export default function SalesManagementPage() {
         {metrics.map((metric) => {
           const Icon = metric.icon
           return (
-            <div key={metric.label} className={`${adminCard} flex items-start gap-4 p-5`}>
+            <div key={metric.label} className={`${adminCard} flex items-start gap-4 p-5`} title={metric.help}>
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-[#C4CEFF]">
                 <Icon className="size-4" />
               </div>
@@ -237,21 +257,21 @@ export default function SalesManagementPage() {
         <section className={`xl:col-span-7 ${adminPanel} p-5`}>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-caption font-semibold uppercase tracking-label text-white/35">Revenue goal</p>
-              <h2 className="mt-1 text-lg font-semibold">{peso(s.bookedSales)} of {peso(s.revenueGoal)}</h2>
+              <p className="text-caption font-semibold uppercase tracking-label text-white/35">Monthly sales target</p>
+              <h2 className="mt-1 text-lg font-semibold">{hasMonthlyTarget ? `${peso(s.bookedSales)} of ${peso(s.revenueGoal)}` : showsMonthlyTarget ? 'No monthly target set' : 'Available in Month view'}</h2>
             </div>
             <Target className="size-5 text-[#C4CEFF]" />
           </div>
-          <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          {hasMonthlyTarget ? <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]">
             <div
               className="h-full rounded-full bg-primary"
               style={{ width: `${Math.max(0, Math.min(100, s.revenueGoalProgress))}%` }}
             />
-          </div>
+          </div> : <p className="mt-4 text-xs text-white/45">{showsMonthlyTarget ? 'Set a target below to track progress and estimate the bookings still needed.' : 'Choose Month to compare one complete operating month with its target.'}</p>}
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <Insight label="Progress" value={`${s.revenueGoalProgress.toFixed(1)}%`} />
-            <Insight label="Revenue Remaining" value={peso(s.remainingRevenueTarget)} />
-            <Insight label="Bookings Remaining" value={s.bookingsNeeded === null ? 'Unavailable' : String(s.bookingsNeeded)} />
+            <Insight label="Progress" value={hasMonthlyTarget ? `${s.revenueGoalProgress.toFixed(1)}%` : '—'} />
+            <Insight label="Revenue Remaining" value={hasMonthlyTarget ? peso(s.remainingRevenueTarget) : '—'} />
+            <Insight label="Estimated Bookings Needed" value={hasMonthlyTarget && s.bookingsNeeded !== null ? String(s.bookingsNeeded) : '—'} />
           </div>
           <div className="mt-5 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
             <Insight label="Contribution / Booking" value={peso(s.contributionPerBooking)} />
@@ -289,7 +309,53 @@ export default function SalesManagementPage() {
         </section>
       </div>
 
-      <TrendChart points={s.daily} />
+      <div className="grid gap-6 xl:grid-cols-12">
+        <section className={`xl:col-span-4 ${adminPanel} p-5`}>
+          <p className="text-caption font-semibold uppercase tracking-label text-white/35">Session performance</p>
+          <h2 className="mt-1 text-sm font-semibold">Studio activity</h2>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Insight label="Total Bookings" value={String(s.sessions.total)} />
+            <Insight label="Completed" value={String(s.sessions.completed)} />
+            <Insight label="Upcoming" value={String(s.sessions.upcoming)} />
+            <Insight label="Cancelled" value={String(s.sessions.cancelled)} />
+          </div>
+        </section>
+
+        <section className={`xl:col-span-8 ${adminPanel} p-5`}>
+          <p className="text-caption font-semibold uppercase tracking-label text-white/35">Revenue breakdown</p>
+          <h2 className="mt-1 text-sm font-semibold">What clients booked</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Insight label="Package Revenue" value={peso(s.revenueBreakdown.packageRevenue)} />
+            <Insight label="Print / Frame Revenue" value={peso(s.revenueBreakdown.printFrameRevenue)} />
+            <Insight label="Other Add-ons" value={peso(s.revenueBreakdown.otherAddonRevenue)} />
+            <Insight label="Total Booked" value={peso(s.revenueBreakdown.total)} />
+          </div>
+          {s.revenueBreakdown.discounts > 0 ? (
+            <p className="mt-4 text-caption text-white/40">Cash discounts already reflected in package revenue: {peso(s.revenueBreakdown.discounts)}</p>
+          ) : null}
+        </section>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <PerformanceTable
+          title="Top packages"
+          empty="No package sales in this period."
+          rows={s.packagePerformance.map((item) => ({
+            label: item.name,
+            detail: `${item.bookings} booking${item.bookings === 1 ? '' : 's'} · ${item.share.toFixed(1)}% of booked revenue`,
+            value: peso(item.revenue),
+          }))}
+        />
+        <PerformanceTable
+          title="Add-on revenue"
+          empty="No add-ons were selected in this period."
+          rows={s.addonPerformance.map((item) => ({
+            label: item.name,
+            detail: `${item.quantity} sold`,
+            value: peso(item.revenue),
+          }))}
+        />
+      </div>
 
       <section className={`${adminPanel} p-5`}>
         <div className="flex items-center justify-between gap-3">
@@ -357,6 +423,37 @@ function Insight({ label, value }: { label: string; value: string }) {
   )
 }
 
+function PerformanceTable({
+  title,
+  empty,
+  rows,
+}: {
+  title: string
+  empty: string
+  rows: Array<{ label: string; detail: string; value: string }>
+}) {
+  return (
+    <section className={`${adminPanel} overflow-hidden`}>
+      <div className="border-b border-white/[0.08] p-5">
+        <p className="text-caption font-semibold uppercase tracking-label text-white/35">{title}</p>
+      </div>
+      {rows.length ? (
+        <div className="divide-y divide-white/[0.06]">
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-center justify-between gap-4 p-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white/85">{row.label}</p>
+                <p className="mt-1 text-caption text-white/35">{row.detail}</p>
+              </div>
+              <p className="shrink-0 text-sm font-bold tabular-nums text-white">{row.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : <p className="p-6 text-sm text-white/40">{empty}</p>}
+    </section>
+  )
+}
+
 function ExpenseBar({ label, value, total }: { label: string; value: number; total: number }) {
   const percentage = total > 0 ? Math.max(0, Math.min(100, (value / total) * 100)) : 0
   return (
@@ -404,7 +501,7 @@ function curvedPath(coordinates: Array<{ x: number; y: number }>) {
   }, `M ${coordinates[0].x} ${coordinates[0].y}`)
 }
 
-function TrendChart({ points }: { points: TrendPoint[] }) {
+export function TrendChart({ points }: { points: TrendPoint[] }) {
   const latestIndex = Math.max(0, points.length - 1)
   const latestKey = points[latestIndex]?.key
   const [activeIndex, setActiveIndex] = useState(latestIndex)

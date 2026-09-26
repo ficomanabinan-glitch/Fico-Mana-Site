@@ -13,20 +13,23 @@ export async function GET() {
       return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
     }
 
-    const { data, error } = await admin
-      .from('bookings')
-      .select('id, booking_date, client_priority')
-      .not('client_priority', 'is', null)
-
-    if (error) throw error
-
-    return NextResponse.json(
-      (data ?? []).map((row) => ({
+    const rows: { bookingId: string; bookingDate: string; clientPriority: number }[] = []
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await admin
+        .from('bookings')
+        .select('id, booking_date, client_priority')
+        .not('client_priority', 'is', null)
+        .order('id')
+        .range(offset, offset + 999)
+      if (error) throw error
+      rows.push(...(data ?? []).map((row) => ({
         bookingId: String(row.id),
         bookingDate: String(row.booking_date),
         clientPriority: Number(row.client_priority),
-      })),
-    )
+      })))
+      if ((data ?? []).length < 1000) break
+    }
+    return NextResponse.json(rows)
   } catch (error) {
     console.error('GET /api/bookings/client-priorities', error)
     return NextResponse.json({ error: 'Failed to load client order.' }, { status: 500 })
@@ -42,13 +45,11 @@ export async function PATCH(request: Request) {
       bookingId?: string
       priority?: number
       previousPriority?: number
-      swapBookingId?: string | null
     }
 
     const bookingId = body.bookingId?.trim()
     const priority = Number(body.priority)
     const previousPriority = Number(body.previousPriority)
-    const swapBookingId = body.swapBookingId?.trim() || null
 
     if (
       !bookingId ||
@@ -69,9 +70,12 @@ export async function PATCH(request: Request) {
       p_booking_id: bookingId,
       p_priority: priority,
       p_previous_priority: previousPriority,
-      p_swap_booking_id: swapBookingId,
+      p_swap_booking_id: null,
     })
 
+    if (error?.code === '40001') {
+      return NextResponse.json({ error: 'The client queue changed on another screen. It has been refreshed; try again.' }, { status: 409 })
+    }
     if (error) throw error
 
     return NextResponse.json({

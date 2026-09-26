@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   getBookings,
@@ -31,10 +31,11 @@ import {
 } from '@/lib/booking-slots'
 import { generateBookingId } from '@/lib/booking-id'
 import { enrichBookingDisplay, filterBookings } from '@/lib/booking-display'
-import { buildDayPriorityMap, getDayPriorityCount } from '@/lib/booking-priority'
+import { getDayPriorityCount } from '@/lib/booking-priority'
 import { isPlaceholderCustomerEmail } from '@/lib/customer-email'
 import AdminReceiptActions from '@/components/admin-receipt-actions'
 import BookingPrioritySelect from '@/components/booking-priority-select'
+import { useBookingQueue } from '@/components/use-booking-queue'
 import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
 import { 
   Search, 
@@ -288,7 +289,7 @@ function BookingsManagement() {
   }, [searchTerm, statusFilter, paymentFilter, packageFilter, dateFilter, bookings])
 
   /** Client numbers from full day roster so filters don't renumber Client 1, 2, …. */
-  const dayPriorityMap = useMemo(() => buildDayPriorityMap(bookings), [bookings])
+  const { priorityMap: dayPriorityMap, moveBooking, savingBookingId } = useBookingQueue(bookings)
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
@@ -1268,6 +1269,8 @@ function BookingsManagement() {
                         <BookingPrioritySelect
                           priority={dayPriorityMap.get(selectedBooking.id) ?? null}
                           maxPriority={getDayPriorityCount(bookings, selectedBooking.bookingDate)}
+                          disabled={Boolean(savingBookingId)}
+                          onChange={(position) => moveBooking(selectedBooking.id, position)}
                         />
                       </div>
                       <div>

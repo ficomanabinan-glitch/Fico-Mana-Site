@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
 import { MapPin, Phone, ExternalLink } from 'lucide-react'
+import { useWebsiteContent } from '@/lib/website-content-client'
 
 const navLinks = [
   { href: '/#home', label: 'Home' },
@@ -18,6 +19,7 @@ const navLinks = [
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
+  const content = useWebsiteContent()
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -91,14 +93,14 @@ export default function Footer() {
                   <div className="flex items-start gap-2">
                     <MapPin className="w-3.5 h-3.5 text-white mt-0.5 flex-shrink-0" />
                     <span>
-                      Cabuyao Retail Plaza<br />
-                      4025 Cabuyao Laguna
+                      {content.addressLine1}<br />
+                      {content.addressLine2}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Phone className="w-3.5 h-3.5 text-white flex-shrink-0" />
-                    <a href="tel:+63495765176" className="hover:underline hover:text-white transition-colors font-medium">
-                      +63 49 576 5176
+                    <a href={`tel:${content.phoneNumber.replace(/[^+\d]/g, '')}`} className="hover:underline hover:text-white transition-colors font-medium">
+                      {content.phoneNumber}
                     </a>
                   </div>
                 </div>
@@ -109,8 +111,8 @@ export default function Footer() {
                   Connect
                 </h4>
                 <div className="flex gap-2.5">
-                  <a
-                    href="https://www.facebook.com/FICOMANA"
+                  {content.facebookUrl && <a
+                    href={content.facebookUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Facebook"
@@ -119,9 +121,9 @@ export default function Footer() {
                     <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                       <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c4.56-.93 8-4.96 8-9.75z"/>
                     </svg>
-                  </a>
-                  <a
-                    href="https://www.instagram.com/ficomanastudio/"
+                  </a>}
+                  {content.instagramUrl && <a
+                    href={content.instagramUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Instagram"
@@ -132,9 +134,9 @@ export default function Footer() {
                       <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
                       <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
                     </svg>
-                  </a>
-                  <a
-                    href="https://www.tiktok.com/@ficomanastudio?_r=1"
+                  </a>}
+                  {content.tiktokUrl && <a
+                    href={content.tiktokUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="TikTok"
@@ -143,7 +145,7 @@ export default function Footer() {
                     <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                       <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.02 1.59 4.23.82.96 1.93 1.66 3.16 2.05.02 1.33.01 2.66.02 4-.98-.05-1.94-.35-2.8-.83-.8-.44-1.49-1.07-2-1.84v6.23c.04 1.35-.3 2.72-1.02 3.86-.88 1.33-2.3 2.27-3.88 2.58-1.57.34-3.26.13-4.7-.58-1.5-.72-2.73-2.02-3.37-3.62-.64-1.57-.61-3.37.07-4.92.68-1.58 2.02-2.84 3.65-3.48.96-.39 2-.54 3.03-.45v4.06c-.7-.14-1.46-.02-2.09.31-.67.33-1.19.95-1.41 1.67-.28.84-.13 1.79.39 2.49.52.71 1.36 1.12 2.24 1.12.87 0 1.69-.41 2.19-1.12.35-.5.5-1.12.47-1.74V.02z"/>
                     </svg>
-                  </a>
+                  </a>}
                 </div>
               </div>
             </motion.div>
@@ -155,14 +157,14 @@ export default function Footer() {
               <div className="w-full h-[120px] border border-white/10 overflow-hidden">
                 <iframe
                   title="Cabuyao Retail Plaza Map"
-                  src="https://maps.google.com/maps?q=Cabuyao%20Retail%20Plaza,%20Laguna&t=&z=14&ie=UTF8&iwloc=&output=embed"
+                  src={content.mapEmbedUrl}
                   className="w-full h-full border-0 opacity-90 hover:opacity-100 transition-opacity duration-300"
                   allowFullScreen
                   loading="lazy"
                 />
               </div>
               <a
-                href="https://maps.google.com/?q=Cabuyao+Retail+Plaza+Laguna"
+                href={content.mapDirectionsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-caption font-medium tracking-wider uppercase text-white/80 hover:text-white transition-colors"
