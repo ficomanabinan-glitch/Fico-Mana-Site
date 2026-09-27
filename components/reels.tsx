@@ -1,5 +1,7 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion } from 'framer-motion'
 import { Volume2, VolumeX, Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -18,6 +20,7 @@ function loadReel(video: HTMLVideoElement, source: string) {
 }
 
 export default function Reels() {
+  const { copy } = useWebsiteContent()
   const media = useWebsiteMedia()
   const reelSource = media.find((slot) => slot.kind === 'video')?.url || '/breanna-reel.mp4'
   const sectionRef = useRef<HTMLElement>(null)
@@ -249,10 +252,10 @@ export default function Reels() {
             className="text-xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-[0.05em] sm:tracking-[0.08em] uppercase text-white"
             style={{ fontFamily: 'var(--font-aileron)' }}
           >
-            Graduation Shoot Reel
+            {copy.reelTitle}
           </h2>
           <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm md:text-base lg:text-lg font-light tracking-label sm:tracking-label uppercase text-white/80">
-            Sample
+            {copy.reelDescription}
           </p>
         </motion.div>
       </div>

@@ -1,39 +1,19 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion, AnimatePresence } from 'framer-motion'
 import { Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import SectionHeader from '@/components/section-header'
 import SectionShell from '@/components/section-shell'
 
-const testimonials = [
-  {
-    id: 1,
-    quote: 'Galing ng team ng Fico Mana. Very professional at naasikaso po kami ng maayos. Mula hair and make up, pati directing sa pictures. Sana gawin na sila official photographers of PLS para same ang standards ng grad pic. Thank you to the whole team.',
-    author: 'Student from Philippine Law School',
-    rating: 5,
-  },
-  {
-    id: 2,
-    quote: 'Thank you Fico Mana for the incredible work! These photos are exactly what I needed as I wrap up my final semester and prepare for graduation. Thank you for making me look and feel ready for the next chapter!',
-    author: 'Leanne Genecela',
-    rating: 5,
-  },
-  {
-    id: 3,
-    quote: 'Thank you so much, Fico Mana, for making my grad photo look so beautiful! It\'s a 1M/10 po Highly recommended!',
-    author: 'Jea May Demillo',
-    rating: 5,
-  },
-  {
-    id: 4,
-    quote: 'Hello po! Kakauwi lang po namin ng brother ko. Maraming salamat po for today! I\'m so happy and grateful po ang ganda ng pictures! natupad isa sa mga pangarap ko excited na ko ipost yung pics! Pero sa July 3 pa po yung graduation ko hehe BTS po muna.',
-    author: 'Rain Ara Pega',
-    rating: 5,
-  },
-]
 
 export default function Testimonials() {
+  const { copy } = useWebsiteContent()
+  const testimonials = ([1, 2, 3, 4] as const).map(id => ({
+    id, quote: copy[`story${id}Quote`], author: copy[`story${id}Author`], rating: 5,
+  }))
   const [currentIndex, setCurrentIndex] = useState(0)
 
   useEffect(() => {
@@ -61,7 +41,7 @@ export default function Testimonials() {
       document.removeEventListener('visibilitychange', updatePlayback)
       reducedMotion.removeEventListener('change', updatePlayback)
     }
-  }, [])
+  }, [testimonials.length])
 
   const current = testimonials[currentIndex]
 
@@ -69,9 +49,9 @@ export default function Testimonials() {
     <SectionShell id="stories" variant="blue-glow">
       <div className="max-w-4xl mx-auto">
         <SectionHeader
-          eyebrow="Testimonials"
-          title="Client Stories"
-          description="Hear from those who've experienced the magic of a FICO MANA session."
+          eyebrow={copy.storiesEyebrow}
+          title={copy.storiesTitle}
+          description={copy.storiesDescription}
           align="center"
         />
 

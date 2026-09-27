@@ -1,31 +1,35 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion } from 'framer-motion'
 import SectionHeader from '@/components/section-header'
 import SectionShell from '@/components/section-shell'
 
-const partnerSchools = [
-  {
-    name: 'Philippine Law School – Lacson College',
-    short: 'PLS',
-    tag: 'Official Photographer',
-    logo: 'https://phillaw.edu.ph/assets/img/phillaw-logo.png',
-  },
-  {
-    name: 'Our Lady of Fatima University – Laguna Campus',
-    short: 'OLFU',
-    tag: 'Official Photographer',
-    logo: '/fatima.jpg',
-  },
-]
 
 export default function SchoolAffiliations() {
+  const { copy } = useWebsiteContent()
+  const partnerSchools = [
+    {
+      name: copy.partner1Name,
+      short: 'PLS',
+      tag: copy.partner1Tag,
+      logo: 'https://phillaw.edu.ph/assets/img/phillaw-logo.png',
+    },
+    {
+      name: copy.partner2Name,
+      short: 'OLFU',
+      tag: copy.partner2Tag,
+      logo: '/fatima.jpg',
+    },
+  ]
+
   return (
     <SectionShell id="affiliations" variant="elevated">
       <SectionHeader
-        eyebrow="Institutional Partners"
-        title="Trusted by Leading Institutions"
-        description="Proudly chosen as the official photography partner of respected institutions, capturing milestones with excellence, professionalism, and artistry."
+        eyebrow={copy.schoolsEyebrow}
+        title={copy.schoolsTitle}
+        description={copy.schoolsDescription}
         align="center"
       />
 

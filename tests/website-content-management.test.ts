@@ -3,15 +3,16 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 test('content management is staff-only and public output is restricted to presentation fields', async () => {
-  const [adminRoute, publicRoute, page, footer, migration] = await Promise.all([
+  const [adminRoute, publicRoute, page, footer, migration, validation] = await Promise.all([
     readFile(new URL('../app/api/admin/website-content/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/api/website-content/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../app/admin/content/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../components/footer.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/20260926175903_website_content_management.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../lib/website-content-validation.ts', import.meta.url), 'utf8'),
   ])
   assert.match(adminRoute, /requireWorkflowAuth\('admin'/)
-  assert.match(adminRoute, /Google Maps embed link/)
+  assert.match(validation, /Google Maps embed link/)
   assert.doesNotMatch(publicRoute, /updated_by|auth\.users/)
   assert.match(page, /Content Management/)
   assert.match(footer, /useWebsiteContent/)

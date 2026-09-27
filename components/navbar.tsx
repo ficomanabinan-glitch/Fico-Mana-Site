@@ -1,12 +1,14 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, Menu as MenuIcon } from 'lucide-react'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
@@ -25,31 +27,6 @@ function isDropdown(item: NavItem): item is NavDropdown {
   return 'links' in item
 }
 
-const navItems: NavItem[] = [
-  { href: '/#home', label: 'Home' },
-  {
-    label: 'Explore',
-    links: [
-      { href: '/gallery', label: 'Gallery' },
-      { href: '/#reels', label: 'Reels' },
-    ],
-  },
-  {
-    label: 'Packages',
-    links: [
-      { href: '/#pricing', label: 'Pricing' },
-      { href: '/packages', label: 'All Packages' },
-    ],
-  },
-  {
-    label: 'About',
-    links: [
-      { href: '/#about', label: 'Our Story' },
-      { href: '/#affiliations', label: 'Schools' },
-    ],
-  },
-  { href: '/#contact', label: 'Contact' },
-]
 
 function NavAnchor({ href, label, className }: { href: string; label: string; className: string }) {
   return (
@@ -156,6 +133,33 @@ function NavDropdownMenu({
 }
 
 export default function Navbar() {
+  const { copy } = useWebsiteContent()
+  const navItems: NavItem[] = [
+    { href: '/#home', label: copy.navHome },
+    {
+      label: copy.exploreLabel,
+      links: [
+        { href: '/gallery', label: copy.navGallery },
+        { href: '/#reels', label: copy.navReels },
+      ],
+    },
+    {
+      label: copy.navPackages,
+      links: [
+        { href: '/#pricing', label: copy.navPricing },
+        { href: '/packages', label: copy.navAllPackages },
+      ],
+    },
+    {
+      label: copy.navAbout,
+      links: [
+        { href: '/#about', label: copy.aboutEyebrow },
+        { href: '/#affiliations', label: copy.navSchools },
+      ],
+    },
+    { href: '/#contact', label: copy.navContact },
+  ]
+
   const pathname = usePathname()
   const [isScrolled, setIsScrolled] = useState(false)
   const [open, setOpen] = useState(false)

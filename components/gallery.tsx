@@ -1,5 +1,7 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
@@ -257,6 +259,7 @@ function GalleryCarousel({
 }
 
 export default function Gallery() {
+  const { copy } = useWebsiteContent()
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null)
   const media = useWebsiteMedia()
   const galleryItems: GalleryItem[] = media
@@ -280,9 +283,9 @@ export default function Gallery() {
   return (
     <SectionShell id="gallery" variant="elevated">
       <SectionHeader
-        eyebrow="Portfolio"
-        title="Graduation Gallery"
-        description="Celebrate your achievement with professionally captured graduation portraits — elegant, timeless, and uniquely yours."
+        eyebrow={copy.galleryEyebrow}
+        title={copy.galleryTitle}
+        description={copy.galleryDescription}
       />
 
       <GalleryCarousel items={galleryItems} onOpen={setLightbox} />

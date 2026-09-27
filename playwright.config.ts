@@ -18,6 +18,15 @@ export default defineConfig({
   ],
   webServer: {
     command: `npm run dev -- --hostname 127.0.0.1 --port ${new URL(baseURL).port || '3200'}`,
+    // Browser fixtures are synthetic; never inherit hosted database credentials.
+    env: {
+      QA_ISOLATED_LOCAL: 'true',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'qa-publishable',
+      SUPABASE_SECRET_KEY: '',
+      SUPABASE_SERVICE_ROLE_KEY: '',
+      RESEND_API_KEY: '',
+    },
     url: `${baseURL}/portal/sample`,
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

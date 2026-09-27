@@ -1,27 +1,11 @@
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import { requireWorkflowAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { mapWebsiteContent } from '@/lib/website-content'
+import { contentSchema } from '@/lib/website-content-validation'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
-const httpsUrl = z.string().trim().url().max(500).refine((value) => new URL(value).protocol === 'https:', 'Use a secure HTTPS address.')
-const optionalHttpsUrl = z.union([z.literal(''), httpsUrl])
-const contentSchema = z.object({
-  studioName: z.string().trim().min(1).max(80),
-  phoneNumber: z.string().trim().min(7).max(40),
-  publicEmail: z.union([z.literal(''), z.string().trim().email().max(160)]),
-  addressLine1: z.string().trim().min(1).max(160),
-  addressLine2: z.string().trim().max(160),
-  mapEmbedUrl: httpsUrl.refine((value) => /(^|\.)google\.(com|com\.ph)$|(^|\.)googleapis\.com$|(^|\.)maps\.google\.com$/.test(new URL(value).hostname), 'Use a Google Maps embed link.'),
-  mapDirectionsUrl: httpsUrl,
-  facebookUrl: optionalHttpsUrl,
-  instagramUrl: optionalHttpsUrl,
-  tiktokUrl: optionalHttpsUrl,
-  businessHours: z.string().trim().max(200),
-}).strict()
-
-const columns = 'workspace_id,studio_name,phone_number,public_email,address_line_1,address_line_2,map_embed_url,map_directions_url,facebook_url,instagram_url,tiktok_url,business_hours'
+const columns = 'workspace_id,studio_name,phone_number,public_email,address_line_1,address_line_2,map_embed_url,map_directions_url,facebook_url,instagram_url,tiktok_url,business_hours,website_copy'
 
 export async function GET(request: Request) {
   const auth = await requireWorkflowAuth('admin', request)
@@ -59,6 +43,7 @@ export async function PATCH(request: Request) {
       instagram_url: value.instagramUrl,
       tiktok_url: value.tiktokUrl,
       business_hours: value.businessHours,
+      ...(value.copy ? { website_copy: value.copy } : {}),
       updated_by: auth.user.id,
     }, { onConflict: 'workspace_id' }).select(columns).single()
     if (error) throw error

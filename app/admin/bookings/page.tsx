@@ -862,10 +862,10 @@ function BookingsManagement() {
       )}
 
       {/* FILTER BAR */}
-      <div className="rounded-card border border-white/10 bg-[#222222] p-5 shadow-sm space-y-4">
+      <div role="search" aria-label="Booking filters" className="min-w-0 rounded-card border border-white/10 bg-[#222222] p-5 shadow-sm space-y-4">
         {/* Search & Date */}
-        <div className="grid md:grid-cols-12 gap-4">
-          <div className="md:col-span-8 relative">
+        <div className="grid min-w-0 grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="min-w-0 md:col-span-8 relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
             <input
               type="text"
@@ -876,20 +876,20 @@ function BookingsManagement() {
               className={`${adminInput} pl-11`}
             />
           </div>
-          <div className="md:col-span-4 relative">
+          <div className="min-w-0 md:col-span-4 relative">
             <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
             <input
               type="date"
               value={dateFilter}
               aria-label="Filter by shoot date"
               onChange={(e) => setDateFilter(e.target.value)}
-              className={`${adminInput} pl-11`}
+              className={`${adminInput} block max-w-full appearance-none pl-11`}
             />
           </div>
         </div>
 
         {/* Dropdowns */}
-        <div className="grid sm:grid-cols-3 gap-4 border-t border-white/10 pt-4 flex-wrap">
+        <div className="grid min-w-0 grid-cols-1 sm:grid-cols-3 gap-4 border-t border-white/10 pt-4">
           {/* Status */}
           <div className="space-y-1.5">
             <span className="text-caption font-semibold tracking-label text-white/40 uppercase">Booking Status</span>

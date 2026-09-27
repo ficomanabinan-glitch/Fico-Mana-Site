@@ -1,5 +1,7 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion, useScroll, useTransform } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -9,6 +11,7 @@ import { cn } from '@/lib/utils'
 const ease = [0.22, 1, 0.36, 1] as const
 
 export default function Hero() {
+  const { copy } = useWebsiteContent()
   const { scrollY } = useScroll()
   const contentY = useTransform(scrollY, [0, 600], [0, 40])
   const contentOpacity = useTransform(scrollY, [0, 400], [1, 0.3])
@@ -67,7 +70,7 @@ export default function Hero() {
             className="mb-4 max-w-[15rem] text-[12px] font-bold uppercase leading-[1.5] tracking-label text-white"
             style={{ fontFamily: 'var(--font-sans)' }}
           >
-            The Portrait of Success
+            {copy.heroTitle}
           </motion.p>
 
           <motion.div variants={itemVariants} className="flex w-full flex-col items-start gap-3">
@@ -80,14 +83,14 @@ export default function Hero() {
               )}
               style={{ fontFamily: 'var(--font-sans)' }}
             >
-              Reserve Your Session
+              {copy.reserveLabel}
             </Button>
             <Link
               href="/gallery"
               className="w-full py-1 text-center text-caption font-semibold uppercase tracking-label text-white transition-colors hover:text-white/75"
               style={{ fontFamily: 'var(--font-sans)' }}
             >
-              View Gallery
+              {copy.galleryLabel}
             </Link>
           </motion.div>
         </motion.div>
@@ -105,7 +108,7 @@ export default function Hero() {
               className="text-caption font-semibold uppercase tracking-label text-white/50 sm:text-caption"
               style={{ fontFamily: 'var(--font-neue)' }}
             >
-              Self Portrait Studio
+              {copy.heroTagline}
             </span>
           </motion.div>
 
@@ -114,8 +117,7 @@ export default function Hero() {
             className="mb-5 text-lg font-semibold uppercase tracking-label text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)] md:text-xl lg:text-2xl"
             style={{ fontFamily: 'var(--font-neue)' }}
           >
-            <span className="text-white">The Portrait </span>
-            <span className="text-white/90">of Success</span>
+            <span className="text-white">{copy.heroTitle}</span>
           </motion.p>
 
           <motion.p
@@ -123,7 +125,7 @@ export default function Hero() {
             className="mb-8 text-xl font-normal italic leading-snug text-white/95 md:mb-10 md:text-[1.75rem] lg:text-3xl"
             style={{ fontFamily: "'Times New Roman', Times, serif" }}
           >
-            Creating Visuals That Celebrate Every Story
+            {copy.heroDescription}
           </motion.p>
 
           <motion.div variants={itemVariants} className="flex w-auto flex-row gap-4">
@@ -136,7 +138,7 @@ export default function Hero() {
               )}
               style={{ fontFamily: 'var(--font-sans)' }}
             >
-              Reserve Your Session
+              {copy.reserveLabel}
             </Button>
             <Button
               nativeButton={false}
@@ -148,7 +150,7 @@ export default function Hero() {
               )}
               style={{ fontFamily: 'var(--font-sans)' }}
             >
-              View Gallery
+              {copy.galleryLabel}
             </Button>
           </motion.div>
         </motion.div>
@@ -162,7 +164,7 @@ export default function Hero() {
           aria-label="Scroll to gallery"
         >
           <span className="text-caption uppercase tracking-label" style={{ fontFamily: 'var(--font-neue)' }}>
-            Explore
+            {copy.exploreLabel}
           </span>
           <motion.span
             className="block h-8 w-px bg-gradient-to-b from-white/50 to-transparent"

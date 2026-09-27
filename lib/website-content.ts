@@ -1,4 +1,7 @@
+import { DEFAULT_WEBSITE_COPY, mapWebsiteCopy, type WebsiteCopy } from './website-copy.ts'
+
 export type WebsiteContent = {
+  copy: WebsiteCopy
   studioName: string
   phoneNumber: string
   publicEmail: string
@@ -13,9 +16,10 @@ export type WebsiteContent = {
 }
 
 export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
+  copy: DEFAULT_WEBSITE_COPY,
   studioName: 'FICO MANA',
   phoneNumber: '+63 49 576 5176',
-  publicEmail: '',
+  publicEmail: 'ficomanaph@gmail.com',
   addressLine1: 'Cabuyao Retail Plaza',
   addressLine2: '4025 Cabuyao, Laguna',
   mapEmbedUrl: 'https://maps.google.com/maps?q=Cabuyao%20Retail%20Plaza,%20Laguna&t=&z=14&ie=UTF8&iwloc=&output=embed',
@@ -29,6 +33,7 @@ export const DEFAULT_WEBSITE_CONTENT: WebsiteContent = {
 export function mapWebsiteContent(row: Record<string, unknown> | null | undefined): WebsiteContent {
   if (!row) return { ...DEFAULT_WEBSITE_CONTENT }
   return {
+    copy: mapWebsiteCopy(row.website_copy),
     studioName: String(row.studio_name || DEFAULT_WEBSITE_CONTENT.studioName),
     phoneNumber: String(row.phone_number || DEFAULT_WEBSITE_CONTENT.phoneNumber),
     publicEmail: String(row.public_email || ''),

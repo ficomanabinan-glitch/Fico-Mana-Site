@@ -1,5 +1,7 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -14,6 +16,7 @@ const highlights = [
 ]
 
 export default function PackageTeaser() {
+  const { copy } = useWebsiteContent()
   return (
     <section
       className="relative py-14 md:py-16 overflow-hidden bg-black border-t border-white/6"
@@ -37,13 +40,13 @@ export default function PackageTeaser() {
           className="text-center mb-8 md:mb-10"
         >
           <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
-            Self Portrait Studio
+            {copy.heroTagline}
           </p>
           <h2 className="text-xl md:text-2xl font-normal tracking-[0.14em] uppercase text-white">
-            Popular Packages
+            {copy.popularTitle}
           </h2>
           <p className="mt-3 text-caption md:text-caption font-light text-white/45 tracking-[0.06em]">
-            Solo, duo, family & barkada — starting at Php 350
+            {copy.popularDescription}
           </p>
         </motion.div>
 
@@ -86,7 +89,7 @@ export default function PackageTeaser() {
                   'mt-6 w-full rounded-none border-white/25 bg-transparent hover:bg-white/10 text-white text-caption md:text-caption font-semibold tracking-label uppercase h-10',
                 )}
               >
-                Book This Package
+                {copy.bookPackageLabel}
               </Button>
             </motion.div>
           ))}
@@ -107,7 +110,7 @@ export default function PackageTeaser() {
               'rounded-none border border-white/30 bg-transparent hover:bg-white/10 text-white text-caption md:text-caption font-semibold tracking-label uppercase h-11 md:h-12 px-8',
             )}
           >
-            See All Packages
+            {copy.allPackagesLabel}
           </Button>
         </motion.div>
       </div>

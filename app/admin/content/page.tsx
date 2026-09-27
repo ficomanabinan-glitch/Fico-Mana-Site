@@ -1,133 +1,146 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { ExternalLink, MapPinned, Save, Smartphone, Share2 } from 'lucide-react'
+import Link from 'next/link'
+import { Save } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
 import { useAdminToast } from '@/components/admin-toast-provider'
-import { adminBtnPrimary, adminInput, adminLabel, adminPage, adminPanel } from '@/lib/admin-ui'
+import { adminBtnPrimary, adminInput, adminLabel, adminPage, adminPanel, adminSelect } from '@/lib/admin-ui'
 import { DEFAULT_WEBSITE_CONTENT, type WebsiteContent } from '@/lib/website-content'
+import { WEBSITE_COPY_SECTIONS, type WebsiteCopyKey } from '@/lib/website-copy'
+import { contentSchema } from '@/lib/website-content-validation'
+
+const sections = [{ id: 'details', title: 'Contact, location & links' }, ...WEBSITE_COPY_SECTIONS]
+const contactFields: { key: Exclude<keyof WebsiteContent, 'copy'>; label: string; type?: string; max: number; optional?: boolean }[] = [
+  { key: 'studioName', label: 'Studio name', max: 80 },
+  { key: 'phoneNumber', label: 'Mobile / telephone', type: 'tel', max: 40 },
+  { key: 'publicEmail', label: 'Public email', type: 'email', max: 160, optional: true },
+  { key: 'businessHours', label: 'Business hours', max: 200, optional: true },
+  { key: 'addressLine1', label: 'Address line 1', max: 160 },
+  { key: 'addressLine2', label: 'Address line 2', max: 160, optional: true },
+  { key: 'mapEmbedUrl', label: 'Google Maps embed URL', type: 'url', max: 500 },
+  { key: 'mapDirectionsUrl', label: 'Google Maps directions URL', type: 'url', max: 500 },
+  { key: 'facebookUrl', label: 'Facebook', type: 'url', max: 500, optional: true },
+  { key: 'instagramUrl', label: 'Instagram', type: 'url', max: 500, optional: true },
+  { key: 'tiktokUrl', label: 'TikTok', type: 'url', max: 500, optional: true },
+]
 
 export default function ContentManagementPage() {
   const toast = useAdminToast()
   const [content, setContent] = useState<WebsiteContent>(DEFAULT_WEBSITE_CONTENT)
+  const [saved, setSaved] = useState<WebsiteContent | null>(null)
+  const [section, setSection] = useState('details')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const dirty = saved !== null && JSON.stringify(content) !== JSON.stringify(saved)
+  const activeSection = WEBSITE_COPY_SECTIONS.find(item => item.id === section)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     try {
       const response = await fetch('/api/admin/website-content', { cache: 'no-store', credentials: 'include' })
       const body = await response.json().catch(() => ({})) as WebsiteContent & { error?: string }
-      if (!response.ok) throw new Error(body.error || 'Could not load website content.')
+      if (!response.ok || !body.copy) throw new Error(body.error || 'Could not load website content. Check that the CMS migration is installed.')
       setContent(body)
+      setSaved(body)
     } catch (error) {
-      toast.error('Content unavailable', error instanceof Error ? error.message : 'Refresh and try again.')
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
+      setLoadError(error instanceof Error ? error.message : 'Refresh and try again.')
+    } finally { setLoading(false) }
+  }, [])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault() }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
 
-  const field = (key: keyof WebsiteContent, value: string) => setContent((current) => ({ ...current, [key]: value }))
-  const save = async () => {
+  const copyField = (key: WebsiteCopyKey, value: string) =>
+    setContent(current => ({ ...current, copy: { ...current.copy, [key]: value } }))
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!saved || saving || !dirty) return
+    const validation = contentSchema.safeParse(content)
+    if (!validation.success) {
+      const issue = validation.error.issues[0]
+      const group = WEBSITE_COPY_SECTIONS.find(item => item.fields.some(field => field.key === issue?.path[1]))
+      setSection(issue?.path[0] === 'copy' ? group?.id || 'details' : 'details')
+      toast.error('Check your content', issue?.message || 'Complete the required fields before publishing.')
+      return
+    }
     setSaving(true)
     try {
       const response = await fetch('/api/admin/website-content', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(content),
       })
       const body = await response.json().catch(() => ({})) as WebsiteContent & { error?: string }
-      if (!response.ok) throw new Error(body.error || 'Could not save website content.')
+      if (!response.ok || !body.copy) throw new Error(body.error || 'Could not confirm the saved content. Your changes are still here; try again.')
       setContent(body)
-      toast.success('Website content updated', 'The public contact and location details are now current.')
+      setSaved(body)
+      toast.success('Website content published', 'Refresh the public page to view the updated text, contact details, and policies.')
     } catch (error) {
-      toast.error('Save failed', error instanceof Error ? error.message : 'Check the details and try again.')
-    } finally {
-      setSaving(false)
-    }
+      toast.error('Nothing was published', error instanceof Error ? error.message : 'Your changes are still here. Try again.')
+    } finally { setSaving(false) }
   }
 
   return (
-    <div className={adminPage}>
-      <AdminPageHeader
-        title="Content Management"
-        subtitle="Update the public studio contact, location, map, and social links without editing code."
-        onRefresh={() => void load()}
-        refreshing={loading}
-      />
-
-      <div className="grid gap-6 xl:grid-cols-12">
-        <div className="space-y-6 xl:col-span-7">
-          <ContentSection icon={Smartphone} eyebrow="Contact" title="Studio identity and contact">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Studio name"><input className={adminInput} value={content.studioName} onChange={(event) => field('studioName', event.target.value)} /></Field>
-              <Field label="Mobile / telephone"><input className={adminInput} value={content.phoneNumber} onChange={(event) => field('phoneNumber', event.target.value)} placeholder="+63 9XX XXX XXXX" /></Field>
-              <Field label="Public email (optional)"><input type="email" className={adminInput} value={content.publicEmail} onChange={(event) => field('publicEmail', event.target.value)} /></Field>
-              <Field label="Business hours (optional)"><input className={adminInput} value={content.businessHours} onChange={(event) => field('businessHours', event.target.value)} placeholder="Daily, 8:00 AM – 6:00 PM" /></Field>
-            </div>
-          </ContentSection>
-
-          <ContentSection icon={MapPinned} eyebrow="Location" title="Address and Google Maps">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Address line 1"><input className={adminInput} value={content.addressLine1} onChange={(event) => field('addressLine1', event.target.value)} /></Field>
-              <Field label="Address line 2"><input className={adminInput} value={content.addressLine2} onChange={(event) => field('addressLine2', event.target.value)} /></Field>
-              <div className="sm:col-span-2"><Field label="Google Maps embed URL"><input className={adminInput} value={content.mapEmbedUrl} onChange={(event) => field('mapEmbedUrl', event.target.value)} /></Field></div>
-              <div className="sm:col-span-2"><Field label="Google Maps directions URL"><input className={adminInput} value={content.mapDirectionsUrl} onChange={(event) => field('mapDirectionsUrl', event.target.value)} /></Field></div>
-            </div>
-          </ContentSection>
-
-          <ContentSection icon={Share2} eyebrow="Social" title="Public profile links">
-            <div className="space-y-4">
-              <Field label="Facebook"><input className={adminInput} value={content.facebookUrl} onChange={(event) => field('facebookUrl', event.target.value)} /></Field>
-              <Field label="Instagram"><input className={adminInput} value={content.instagramUrl} onChange={(event) => field('instagramUrl', event.target.value)} /></Field>
-              <Field label="TikTok"><input className={adminInput} value={content.tiktokUrl} onChange={(event) => field('tiktokUrl', event.target.value)} /></Field>
-            </div>
-          </ContentSection>
-        </div>
-
-        <aside className="xl:col-span-5 xl:sticky xl:top-0 xl:self-start">
-          <section className={`${adminPanel} overflow-hidden`}>
-            <div className="border-b border-white/[0.08] p-5">
-              <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Live preview</p>
-              <h2 className="mt-1 text-base font-semibold">Public contact block</h2>
-            </div>
-            <div className="space-y-5 p-5">
-              <div>
-                <p className="text-lg font-semibold">{content.studioName || 'Studio name'}</p>
-                <p className="mt-2 text-sm text-white/55">{content.addressLine1 || 'Address'}</p>
-                {content.addressLine2 ? <p className="text-sm text-white/55">{content.addressLine2}</p> : null}
-                <p className="mt-3 text-sm font-medium text-white/80">{content.phoneNumber || 'Phone number'}</p>
-                {content.businessHours ? <p className="mt-1 text-caption text-white/40">{content.businessHours}</p> : null}
-              </div>
-              <div className="aspect-[16/9] overflow-hidden rounded-xl border border-white/10 bg-black/20">
-                {content.mapEmbedUrl ? <iframe title="Map preview" src={content.mapEmbedUrl} className="size-full border-0" loading="lazy" /> : null}
-              </div>
-              <a href={content.mapDirectionsUrl || '#'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-xs font-semibold text-[#C4CEFF]">
-                Check directions link <ExternalLink className="size-3.5" />
-              </a>
-            </div>
-          </section>
-        </aside>
+    <div className={`${adminPage} pb-[env(safe-area-inset-bottom,0px)]`}>
+      <AdminPageHeader title="Content Management" subtitle="Edit website text, contact details, footer, and legal pages. Publishing saves all your changes." />
+      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/70">
+        <Link className="underline underline-offset-4 hover:text-white" href="/admin/packages">Prices, packages & payment QR</Link>
+        <Link className="underline underline-offset-4 hover:text-white" href="/admin/media">Website photos & video</Link>
+        <a className="underline underline-offset-4 hover:text-white" href="https://www.ficomana.com" target="_blank" rel="noreferrer">View website</a>
       </div>
-
-      <div className="sticky bottom-0 z-10 -mx-5 border-t border-white/[0.08] bg-[#222222]/95 px-5 py-4 backdrop-blur-xl md:-mx-8 md:px-8">
-        <div className="flex justify-end">
-          <button type="button" onClick={() => void save()} disabled={loading || saving} className={`${adminBtnPrimary} inline-flex items-center gap-2 px-5 py-3`}>
-            <Save className="size-4" /> {saving ? 'Saving…' : 'Publish Content'}
-          </button>
+      {loadError ? <div role="alert" className={`${adminPanel} space-y-3 p-5`}><p>{loadError}</p><button type="button" onClick={() => void load()} className={`${adminBtnPrimary} px-5 py-3`}>Try again</button></div> : null}
+      {loading ? <div aria-label="Loading website content" className={`${adminPanel} h-80 animate-pulse bg-white/5`} /> : !loadError ? (
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+          <nav aria-label="Content sections" className="min-w-0">
+            <label className="block space-y-2 lg:hidden"><span className={adminLabel}>Edit section</span>
+              <select className={adminSelect} value={section} onChange={event => setSection(event.target.value)}>
+                {sections.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+            </label>
+            <div className="hidden space-y-1 lg:block">
+              {sections.map(item => <button type="button" key={item.id} onClick={() => setSection(item.id)} aria-current={section === item.id ? 'page' : undefined}
+                className={`min-h-11 w-full rounded-control px-4 py-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-[#C4CEFF] ${section === item.id ? 'bg-primary/15 font-semibold text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}>{item.title}</button>)}
+            </div>
+          </nav>
+          <form onSubmit={save} className={`${adminPanel} min-w-0 overflow-hidden`}>
+            <div className="border-b border-white/10 p-5 sm:p-6">
+              <h2 className="text-lg font-semibold">{activeSection?.title || 'Contact, location & links'}</h2>
+              <p className="mt-2 max-w-prose text-sm leading-relaxed text-white/70">
+                {section === 'privacy' || section === 'terms' ? 'Existing policy wording is preserved. Use blank lines between paragraphs. Review policy changes before publishing; this does not change booking or payment rules.' :
+                  section === 'details' ? 'These details appear in the public contact section, footer, and legal-page contact links.' :
+                  'Edit the current wording below. Text is displayed safely as plain text; HTML is not supported.'}
+              </p>
+            </div>
+            <fieldset disabled={saving} className="min-w-0 space-y-5 p-5 sm:p-6">
+              {section === 'details' ? <div className="grid min-w-0 gap-5 sm:grid-cols-2">{contactFields.map(item => <div key={item.key} className={item.type === 'url' ? 'sm:col-span-2' : ''}>
+                <Field label={item.label + (item.optional ? ' (optional)' : '')}>
+                  <input type={item.type || 'text'} required={!item.optional} maxLength={item.max} className={adminInput} value={content[item.key]} onChange={event => setContent(current => ({ ...current, [item.key]: event.target.value }))} />
+                </Field>
+              </div>)}</div> : activeSection?.fields.map(item => (
+                <Field key={item.key} label={item.label}>
+                  {item.multiline ? <textarea required rows={item.key.endsWith('Body') ? 14 : 6} maxLength={item.maxLength} className={`${adminInput} resize-y leading-relaxed`} value={content.copy[item.key]} onChange={event => copyField(item.key, event.target.value)} /> :
+                    <input required maxLength={item.maxLength} className={adminInput} value={content.copy[item.key]} onChange={event => copyField(item.key, event.target.value)} />}
+                </Field>
+              ))}
+            </fieldset>
+            <footer data-testid="cms-publish-footer" className="flex flex-col gap-4 border-t border-white/10 bg-white/[0.02] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <p role="status" className="text-sm text-white/70">{saving ? 'Publishing your changes…' : dirty ? 'You have unpublished changes.' : 'All changes are published.'}</p>
+              <button type="submit" disabled={!dirty || saving} className={`${adminBtnPrimary} inline-flex w-full shrink-0 items-center justify-center gap-2 px-5 py-3 sm:w-auto`}><Save className="size-4" />{saving ? 'Publishing…' : 'Publish Content'}</button>
+            </footer>
+          </form>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
 
-function ContentSection({ icon: Icon, eyebrow, title, children }: { icon: typeof Smartphone; eyebrow: string; title: string; children: React.ReactNode }) {
-  return <section className={`${adminPanel} p-5`}><div className="flex items-start gap-3"><div className="flex size-9 items-center justify-center rounded-lg border border-[#C4CEFF]/20 bg-[#C4CEFF]/[0.06] text-[#C4CEFF]"><Icon className="size-4" /></div><div><p className="text-caption font-semibold uppercase tracking-label text-white/35">{eyebrow}</p><h2 className="mt-1 text-sm font-semibold">{title}</h2></div></div><div className="mt-5">{children}</div></section>
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block space-y-2"><span className={adminLabel}>{label}</span>{children}</label>
+  return <label className="block min-w-0 space-y-2"><span className={adminLabel}>{label}</span>{children}</label>
 }

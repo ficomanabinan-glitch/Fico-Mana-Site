@@ -4,14 +4,20 @@ import { useEffect, useState } from 'react'
 import { DEFAULT_WEBSITE_CONTENT, type WebsiteContent } from '@/lib/website-content'
 
 let cachedContent: WebsiteContent | null = null
+let cachedAt = 0
 let pendingContent: Promise<WebsiteContent> | null = null
 
 async function fetchContent() {
-  if (cachedContent) return cachedContent
+  if (cachedContent && Date.now() - cachedAt < 60_000) return cachedContent
   if (!pendingContent) {
     pendingContent = fetch('/api/website-content', { cache: 'no-store' })
-      .then(async (response) => response.ok ? await response.json() as WebsiteContent : DEFAULT_WEBSITE_CONTENT)
-      .then((content) => { cachedContent = content; return content })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Content unavailable')
+        const body = await response.json() as WebsiteContent
+        return { ...DEFAULT_WEBSITE_CONTENT, ...body, copy: { ...DEFAULT_WEBSITE_CONTENT.copy, ...body.copy } }
+      })
+      .then((content) => { cachedContent = content; cachedAt = Date.now(); return content })
+      .catch(() => cachedContent ?? DEFAULT_WEBSITE_CONTENT)
       .finally(() => { pendingContent = null })
   }
   return pendingContent

@@ -44,20 +44,21 @@ function TikTokIcon({ className }: { className?: string }) {
 
 export default function Contact() {
   const content = useWebsiteContent()
+  const { copy } = content
   const contactMethods = [
-    { icon: FacebookIcon, label: 'Facebook', value: 'FICOMANA', href: content.facebookUrl },
-    { icon: InstagramIcon, label: 'Instagram', value: '@ficomanastudio', href: content.instagramUrl },
-    { icon: TikTokIcon, label: 'TikTok', value: '@ficomanastudio', href: content.tiktokUrl },
-    { icon: Mail, label: 'Email', value: content.publicEmail || 'ficomanaph@gmail.com', href: `mailto:${content.publicEmail || 'ficomanaph@gmail.com'}` },
+    { icon: FacebookIcon, label: 'Facebook', value: copy.facebookName, href: content.facebookUrl },
+    { icon: InstagramIcon, label: 'Instagram', value: copy.instagramName, href: content.instagramUrl },
+    { icon: TikTokIcon, label: 'TikTok', value: copy.tiktokName, href: content.tiktokUrl },
+    { icon: Mail, label: 'Email', value: content.publicEmail, href: content.publicEmail ? `mailto:${content.publicEmail}` : '' },
   ].filter((method) => Boolean(method.href))
   return (
     <SectionShell id="contact" variant="gradient">
       <div className="grid lg:grid-cols-2 gap-12 items-start max-w-6xl mx-auto">
         <div>
           <SectionHeader
-            eyebrow="Get In Touch"
-            title="Ready to Create?"
-            description="Connect with us and let's bring your vision to life."
+            eyebrow={copy.contactEyebrow}
+            title={copy.contactTitle}
+            description={copy.contactDescription}
           />
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -94,7 +95,7 @@ export default function Contact() {
             href="#booking"
             className="inline-flex mt-8 items-center justify-center bg-primary text-primary-foreground px-10 py-3.5 text-xs font-bold tracking-label uppercase hover:bg-[#03008F] transition-colors"
           >
-            Book Now
+            {copy.contactBookLabel}
           </a>
         </div>
 
@@ -114,7 +115,7 @@ export default function Contact() {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
           <div className="absolute bottom-6 left-6 right-6">
-            <p className="text-caption tracking-label uppercase text-white/70 mb-1">Visit Us</p>
+            <p className="text-caption tracking-label uppercase text-white/70 mb-1">{copy.visitLabel}</p>
             <p className="text-sm text-white font-medium">{content.addressLine1}, {content.addressLine2}</p>
           </div>
         </motion.div>

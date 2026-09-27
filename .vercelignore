@@ -5,6 +5,8 @@
 .next/
 .vercel/output/
 artifacts/
+/test-results/
+/playwright-report/
 .audit/
 .agents/
 .codex/

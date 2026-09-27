@@ -1,5 +1,7 @@
 'use client'
 
+import { useWebsiteContent } from '@/lib/website-content-client'
+
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -9,6 +11,7 @@ import { getBookingUrl } from '@/lib/booking-packages'
 import { usePublicPackages } from '@/lib/use-public-packages'
 
 export default function Pricing() {
+  const { copy } = useWebsiteContent()
   const catalog = usePublicPackages()
   const packages = catalog.filter((pkg) => pkg.category === 'graduation')
   const otherPackages = catalog.filter((pkg) => pkg.category === 'capping-pinning')
@@ -38,10 +41,10 @@ export default function Pricing() {
             className="text-center mb-10 md:mb-12"
           >
             <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
-              Graduation Packages
+              {copy.pricingEyebrow}
             </p>
             <h2 className="text-xl md:text-2xl font-normal tracking-[0.14em] uppercase text-white">
-              Choose Your Package
+              {copy.pricingTitle}
             </h2>
           </motion.div>
 
@@ -77,7 +80,7 @@ export default function Pricing() {
                 </div>
 
                 <p className="text-caption font-medium tracking-label uppercase text-white/35 mb-5 text-center md:text-left">
-                  Includes
+                  {copy.includesLabel}
                 </p>
 
                 <ul className="divide-y divide-white/6 flex-1">
@@ -106,7 +109,7 @@ export default function Pricing() {
                     )}
                     style={{ fontFamily: 'var(--font-aileron)' }}
                   >
-                    Book This Package
+                    {copy.bookPackageLabel}
                   </Button>
                 </div>
               </motion.div>
@@ -121,7 +124,7 @@ export default function Pricing() {
             className="mt-12 md:mt-14 text-center"
           >
             <p className="text-caption md:text-caption font-light text-white/45 tracking-[0.08em] mb-5">
-              Looking for solo, duo, family, or barkada sessions?
+              {copy.morePackagesDescription}
             </p>
             <Button
               nativeButton={false}
@@ -132,7 +135,7 @@ export default function Pricing() {
               )}
               style={{ fontFamily: 'var(--font-aileron)' }}
             >
-              View More Packages
+              {copy.morePackagesLabel}
             </Button>
           </motion.div>
         </div>
@@ -161,10 +164,10 @@ export default function Pricing() {
             className="text-center mb-10 md:mb-12"
           >
             <p className="text-caption md:text-caption font-light tracking-[0.4em] uppercase text-white/40 mb-3">
-              Other Services
+              {copy.servicesEyebrow}
             </p>
             <h2 className="text-xl md:text-2xl font-normal tracking-[0.14em] uppercase text-white">
-              Other Service
+              {copy.servicesTitle}
             </h2>
           </motion.div>
 
@@ -200,7 +203,7 @@ export default function Pricing() {
                 </div>
 
                 <p className="text-caption font-medium tracking-label uppercase text-white/35 mb-5 text-center md:text-left">
-                  Includes
+                  {copy.includesLabel}
                 </p>
 
                 <ul className="divide-y divide-white/6 flex-1">
@@ -229,7 +232,7 @@ export default function Pricing() {
                     )}
                     style={{ fontFamily: 'var(--font-aileron)' }}
                   >
-                    Book This Package
+                    {copy.bookPackageLabel}
                   </Button>
                 </div>
               </motion.div>

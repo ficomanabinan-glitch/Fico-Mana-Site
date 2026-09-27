@@ -6,20 +6,22 @@ import Link from 'next/link'
 import { MapPin, Phone, ExternalLink } from 'lucide-react'
 import { useWebsiteContent } from '@/lib/website-content-client'
 
-const navLinks = [
-  { href: '/#home', label: 'Home' },
-  { href: '/#gallery', label: 'Gallery' },
-  { href: '/#reels', label: 'Reels' },
-  { href: '/#pricing', label: 'Pricing' },
-  { href: '/packages', label: 'Packages' },
-  { href: '/#about', label: 'About' },
-  { href: '/#affiliations', label: 'Schools' },
-  { href: '/#contact', label: 'Contact' },
-]
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
   const content = useWebsiteContent()
+  const { copy } = content
+  const navLinks = [
+    { href: '/#home', label: copy.navHome },
+    { href: '/#gallery', label: copy.navGallery },
+    { href: '/#reels', label: copy.navReels },
+    { href: '/#pricing', label: copy.navPricing },
+    { href: '/packages', label: copy.navPackages },
+    { href: '/#about', label: copy.navAbout },
+    { href: '/#affiliations', label: copy.navSchools },
+    { href: '/#contact', label: copy.navContact },
+  ]
+
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -49,7 +51,7 @@ export default function Footer() {
       >
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-12 gap-12 md:gap-8 mb-16">
-            <motion.div variants={itemVariants} className="md:col-span-4">
+            <motion.div variants={itemVariants} className="min-w-0 break-words md:col-span-4">
               <Image
                 src="/fico_navbar.png?v=3"
                 alt="Fico Mana Self Portrait Studio"
@@ -58,17 +60,16 @@ export default function Footer() {
                 className="h-14 w-auto mb-4"
               />
               <p className="text-caption font-semibold tracking-label uppercase text-white/50 mb-3">
-                Cabuyao Retail Plaza Tenants Association
+                {copy.footerAssociation}
               </p>
               <p className="text-xs text-white/70 leading-relaxed max-w-xs">
-                A private self-portrait studio dedicated to capturing authentic moments
-                with professional lighting and a private, creative space.
+                {copy.footerDescription}
               </p>
             </motion.div>
 
             <motion.div variants={itemVariants} className="md:col-span-2">
               <h4 className="text-caption font-semibold tracking-label uppercase mb-5 text-white/40">
-                Navigate
+                {copy.footerNavigate}
               </h4>
               <ul className="space-y-3">
                 {navLinks.map((link) => (
@@ -87,7 +88,7 @@ export default function Footer() {
             <motion.div variants={itemVariants} className="md:col-span-3 space-y-5">
               <div>
                 <h4 className="text-caption font-semibold tracking-label uppercase mb-4 text-white/40">
-                  Find Us
+                  {copy.footerFindUs}
                 </h4>
                 <div className="space-y-3 text-xs text-white/80">
                   <div className="flex items-start gap-2">
@@ -95,6 +96,7 @@ export default function Footer() {
                     <span>
                       {content.addressLine1}<br />
                       {content.addressLine2}
+                      {content.businessHours && <span className="mt-2 block whitespace-pre-line">{content.businessHours}</span>}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -108,8 +110,9 @@ export default function Footer() {
 
               <div>
                 <h4 className="text-caption font-semibold tracking-label uppercase mb-3 text-white/40">
-                  Connect
+                  {copy.footerConnect}
                 </h4>
+                {content.publicEmail && <a href={`mailto:${content.publicEmail}`} className="mb-3 block break-all text-xs text-white/80 hover:underline">{content.publicEmail}</a>}
                 <div className="flex gap-2.5">
                   {content.facebookUrl && <a
                     href={content.facebookUrl}
@@ -152,11 +155,11 @@ export default function Footer() {
 
             <motion.div variants={itemVariants} className="md:col-span-3 space-y-4">
               <h4 className="text-caption font-semibold tracking-label uppercase text-white/40">
-                Directions
+                {copy.footerDirections}
               </h4>
               <div className="w-full h-[120px] border border-white/10 overflow-hidden">
                 <iframe
-                  title="Cabuyao Retail Plaza Map"
+                  title={content.studioName + " location"}
                   src={content.mapEmbedUrl}
                   className="w-full h-full border-0 opacity-90 hover:opacity-100 transition-opacity duration-300"
                   allowFullScreen
@@ -169,7 +172,7 @@ export default function Footer() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-caption font-medium tracking-wider uppercase text-white/80 hover:text-white transition-colors"
               >
-                Open in Google Maps <ExternalLink className="w-3 h-3" />
+                {copy.footerMapLabel} <ExternalLink className="w-3 h-3" />
               </a>
             </motion.div>
           </div>
@@ -178,13 +181,13 @@ export default function Footer() {
             variants={itemVariants}
             className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-white/50"
           >
-            <p>&copy; {currentYear} FICO MANA. All rights reserved.</p>
-            <div className="flex gap-6">
+            <p>&copy; {currentYear} {content.studioName}. {copy.footerCopyright}</p>
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-3">
               <Link href="/privacy" className="hover:text-white transition-colors">
-                Privacy Policy
+                {copy.privacyTitle}
               </Link>
               <Link href="/terms" className="hover:text-white transition-colors">
-                Terms of Service
+                {copy.termsTitle}
               </Link>
             </div>
           </motion.div>
