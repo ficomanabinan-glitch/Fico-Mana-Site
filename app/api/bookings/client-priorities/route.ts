@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireStaffAuth } from '@/lib/auth-api'
+import { requireStaffAuth, requireWorkflowAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { secureErrorResponse } from '@/lib/security/error-response'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { error: authError } = await requireStaffAuth()
+    // Editors need the shared order for Client Selections, not booking write access.
+    const { access, error: authError } = await requireWorkflowAuth('edit', request)
     if (authError) return authError
 
     const admin = getSupabaseAdmin()
@@ -18,6 +19,7 @@ export async function GET() {
       const { data, error } = await admin
         .from('bookings')
         .select('id, booking_date, client_priority')
+        .eq('workspace_id', access!.workspaceId)
         .not('client_priority', 'is', null)
         .order('id')
         .range(offset, offset + 999)
@@ -29,7 +31,7 @@ export async function GET() {
       })))
       if ((data ?? []).length < 1000) break
     }
-    return NextResponse.json(rows)
+    return NextResponse.json(rows, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
     console.error('GET /api/bookings/client-priorities', error)
     return NextResponse.json({ error: 'Failed to load client order.' }, { status: 500 })

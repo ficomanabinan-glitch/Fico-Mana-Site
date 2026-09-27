@@ -217,7 +217,7 @@ export default function SelfPortraitPackages({ showBackLink = true }: { showBack
         fill
         sizes="100vw"
         className="object-cover object-center opacity-[0.12]"
-        priority={false}
+        loading="eager"
       />
 
       <div className="relative z-10 max-w-5xl mx-auto px-6 md:px-8">

@@ -2,7 +2,8 @@
 
 import dynamic from 'next/dynamic'
 import { useEffect, useRef, useState } from 'react'
-import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
+
+const ReceiptUploadEnhancer = dynamic(() => import('@/components/receipt-upload-enhancer'), { ssr: false })
 
 const Booking = dynamic(() => import('@/components/booking'), {
   ssr: false,

@@ -258,7 +258,7 @@ function GalleryCarousel({
   )
 }
 
-export default function Gallery() {
+export default function Gallery({ headingLevel = 'h2' }: { headingLevel?: 'h1' | 'h2' }) {
   const { copy } = useWebsiteContent()
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null)
   const media = useWebsiteMedia()
@@ -283,6 +283,7 @@ export default function Gallery() {
   return (
     <SectionShell id="gallery" variant="elevated">
       <SectionHeader
+        headingLevel={headingLevel}
         eyebrow={copy.galleryEyebrow}
         title={copy.galleryTitle}
         description={copy.galleryDescription}

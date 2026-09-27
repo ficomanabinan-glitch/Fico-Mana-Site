@@ -7,6 +7,7 @@ interface SectionHeaderProps {
   title: string
   description?: string
   align?: 'left' | 'center'
+  headingLevel?: 'h1' | 'h2'
 }
 
 export default function SectionHeader({
@@ -14,6 +15,7 @@ export default function SectionHeader({
   title,
   description,
   align = 'left',
+  headingLevel: Heading = 'h2',
 }: SectionHeaderProps) {
   const isCenter = align === 'center'
 
@@ -30,7 +32,7 @@ export default function SectionHeader({
         <span className="label-premium text-white">{eyebrow}</span>
         {isCenter && <span className="h-px w-10 bg-white" />}
       </div>
-      <h2 className="heading-lg text-white mb-4">{title}</h2>
+      <Heading className="heading-lg text-white mb-4">{title}</Heading>
       {description && (
         <p
           className={`text-base md:text-lg text-white/70 leading-relaxed max-w-2xl ${

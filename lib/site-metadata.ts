@@ -101,9 +101,7 @@ export const rootMetadata: Metadata = {
     images: [{ url: defaultOgImage.url, alt: defaultOgImage.alt }],
   },
   robots: {
-    index: true,
-    follow: true,
-    googleBot: { index: true, follow: true, 'max-image-preview': 'large' },
+    googleBot: { 'max-image-preview': 'large' },
   },
 }
 

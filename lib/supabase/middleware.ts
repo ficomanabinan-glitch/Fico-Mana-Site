@@ -77,6 +77,7 @@ function isEditorHostPassThrough(pathname: string) {
     /^\/api\/bookings\/[^/]+\/(?:portal|provisioning(?:\/audit)?|portal-resources)$/.test(pathname)
   return (
     pathname.startsWith('/editor') ||
+    pathname === '/api/bookings/client-priorities' ||
     isClientPortalApi ||
     pathname.startsWith('/api/editor-workflow') ||
     pathname.startsWith('/api/editor-files') ||

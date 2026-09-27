@@ -1,5 +1,8 @@
 import { type NextRequest, type NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
+import { isAdminHost, isEditorHost } from '@/lib/auth/admin'
+import { isNewAdminHost } from '@/lib/new-admin/routing'
+import { isPrivatePagePath } from '@/lib/public-page-policy'
 
 function shouldDisableCaching(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -18,6 +21,10 @@ function shouldDisableCaching(request: NextRequest) {
 }
 
 function applyResponseHardening(request: NextRequest, response: NextResponse) {
+  const host = request.headers.get('host')
+  if (isAdminHost(host) || isEditorHost(host) || isNewAdminHost(host) || isPrivatePagePath(request.nextUrl.pathname)) {
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet')
+  }
   response.headers.set('X-Request-ID', request.headers.get('x-request-id') || crypto.randomUUID())
   // Only this exact GET delegates cache headers to its authorized file handler.
   // Middleware errors/redirects and all other private routes remain no-store.

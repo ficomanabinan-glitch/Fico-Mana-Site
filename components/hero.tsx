@@ -58,22 +58,28 @@ export default function Hero() {
         style={{ y: contentY, opacity: contentOpacity }}
         className="relative z-10 flex h-full min-h-[100svh] flex-col justify-end px-5 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] pt-20 sm:min-h-[100dvh] sm:items-start sm:justify-start sm:px-6 sm:pb-12 sm:pt-32 md:px-12 md:pb-14 md:pt-40 lg:px-16 xl:px-20"
       >
-        {/* Mobile — keep headline + CTAs inside the visible frame */}
+        {/* One semantic headline shared across both responsive layouts. */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          className="flex w-full flex-col items-start text-left sm:hidden"
+          className="flex w-full flex-col items-start text-left sm:max-w-md md:max-w-2xl"
         >
-          <motion.p
+          <motion.div variants={itemVariants} className="mb-5 hidden items-center gap-3 sm:flex md:mb-6">
+            <span className="h-px w-14 bg-gradient-to-r from-white/70 to-white/0" />
+            <span className="text-caption font-semibold uppercase tracking-label text-white/50" style={{ fontFamily: 'var(--font-neue)' }}>
+              {copy.heroTagline}
+            </span>
+          </motion.div>
+          <motion.h1
             variants={itemVariants}
-            className="mb-4 max-w-[15rem] text-[12px] font-bold uppercase leading-[1.5] tracking-label text-white"
+            className="mb-4 max-w-[15rem] text-[12px] font-bold uppercase leading-[1.5] tracking-label text-white sm:mb-5 sm:max-w-none sm:text-lg sm:font-semibold sm:drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)] md:text-xl lg:text-2xl"
             style={{ fontFamily: 'var(--font-sans)' }}
           >
             {copy.heroTitle}
-          </motion.p>
+          </motion.h1>
 
-          <motion.div variants={itemVariants} className="flex w-full flex-col items-start gap-3">
+          <motion.div variants={itemVariants} className="flex w-full flex-col items-start gap-3 sm:hidden">
             <Button
               nativeButton={false}
               render={<Link href="#booking" />}
@@ -93,42 +99,15 @@ export default function Hero() {
               {copy.galleryLabel}
             </Link>
           </motion.div>
-        </motion.div>
-
-        {/* Desktop */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="hidden w-full max-w-md flex-col items-start sm:flex md:max-w-2xl"
-        >
-          <motion.div variants={itemVariants} className="mb-5 flex items-center gap-3 md:mb-6">
-            <span className="h-px w-10 bg-gradient-to-r from-white/70 to-white/0 sm:w-14" />
-            <span
-              className="text-caption font-semibold uppercase tracking-label text-white/50 sm:text-caption"
-              style={{ fontFamily: 'var(--font-neue)' }}
-            >
-              {copy.heroTagline}
-            </span>
-          </motion.div>
-
           <motion.p
             variants={itemVariants}
-            className="mb-5 text-lg font-semibold uppercase tracking-label text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)] md:text-xl lg:text-2xl"
-            style={{ fontFamily: 'var(--font-neue)' }}
-          >
-            <span className="text-white">{copy.heroTitle}</span>
-          </motion.p>
-
-          <motion.p
-            variants={itemVariants}
-            className="mb-8 text-xl font-normal italic leading-snug text-white/95 md:mb-10 md:text-[1.75rem] lg:text-3xl"
+            className="mb-8 hidden text-xl font-normal italic leading-snug text-white/95 sm:block md:mb-10 md:text-[1.75rem] lg:text-3xl"
             style={{ fontFamily: "'Times New Roman', Times, serif" }}
           >
             {copy.heroDescription}
           </motion.p>
 
-          <motion.div variants={itemVariants} className="flex w-auto flex-row gap-4">
+          <motion.div variants={itemVariants} className="hidden w-auto flex-row gap-4 sm:flex">
             <Button
               nativeButton={false}
               render={<Link href="#booking" />}

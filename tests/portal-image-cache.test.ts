@@ -5,6 +5,9 @@ import { loadTs } from './helpers/load-ts.ts'
 import { memoryDb } from './helpers/memory-db.ts'
 import * as packageWorkflow from '../lib/package-workflow.ts'
 import * as storageKeys from '../lib/storage/storage-keys.ts'
+import * as hosts from '../lib/auth/admin.ts'
+import * as newAdmin from '../lib/new-admin/routing.ts'
+import * as publicPolicy from '../lib/public-page-policy.ts'
 
 class RawUploadError extends Error {}
 class PortalSelectionError extends Error {
@@ -207,6 +210,9 @@ test('database failure and rate limiting fail closed without signing an R2 URL',
 test('proxy delegates only exact portal file GETs and keeps private no-store on other requests and redirects', async () => {
   let next = true
   const middleware = loadTs<typeof import('../proxy.ts')>('proxy.ts', {
+    '@/lib/auth/admin': hosts,
+    '@/lib/new-admin/routing': newAdmin,
+    '@/lib/public-page-policy': publicPolicy,
     '@/lib/supabase/middleware': { updateSession: async () => new Response(null, { status: next ? 200 : 307, headers: next ? { 'x-middleware-next': '1' } : { location: '/admin' } }) },
   })
   const imagePath = `/api/editor-workflow/portal/${publicId}/file/own`

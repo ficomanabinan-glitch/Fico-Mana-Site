@@ -1,0 +1,33 @@
+.page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: max(1.5rem, env(safe-area-inset-top)) clamp(1.5rem, 5vw, 5rem) max(1.5rem, env(safe-area-inset-bottom));
+  background: #111110;
+  color: #f3f1e9;
+}
+.page ::selection { background: #949dff; color: #111110; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: .875rem; color: #b8b7b0; }
+.brand { font-weight: 700; color: #f3f1e9; text-decoration: none; }
+.layout { flex: 1; width: 100%; max-width: 72rem; margin: 0 auto; display: grid; grid-template-columns: 1.4fr 1fr; gap: clamp(2rem, 6vw, 6rem); align-items: center; padding-block: clamp(3.5rem, 9vh, 7rem); }
+.copy { min-width: 0; }
+.copy h1 { margin: 0 0 1.5rem; font-family: var(--font-sans); font-size: clamp(2.5rem, 5vw, 4.5rem); line-height: 1.08; font-weight: 600; letter-spacing: -.035em; text-wrap: balance; }
+.copy p { max-width: 46ch; font-size: 1rem; line-height: 1.7; color: #b8b7b0; }
+.action { display: inline-flex; align-items: center; justify-content: center; gap: .75rem; min-height: 3rem; padding: .875rem 1.25rem; margin-top: 2rem; border-radius: .75rem; background: #949dff; color: #131526; font-weight: 650; text-decoration: none; transition: background-color 160ms ease-out; }
+.action:hover { background: #adb4ff; }
+.page a:focus-visible { outline: 3px solid #c0c6ff; outline-offset: 5px; border-radius: .25rem; }
+.help { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #353532; }
+.help h2 { margin: 0 0 .5rem; font-family: var(--font-sans); font-size: 1rem; font-weight: 600; }
+.help p { margin: 0; font-size: .875rem; }
+.help a { color: #c0c6ff; text-decoration: underline; text-underline-offset: .2em; }
+.frame { aspect-ratio: 4 / 5; max-height: 28rem; display: grid; place-items: center; border: 1px solid #454540; border-radius: 1rem; background: #191917; }
+.frame span { font-size: clamp(4rem, 8vw, 6rem); line-height: 1; font-weight: 400; letter-spacing: -.04em; color: #b8b7b0; }
+.footer { color: #b8b7b0; font-size: .75rem; }
+@media (max-width: 639px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; padding-block: 3.5rem 2.5rem; }
+  .frame { aspect-ratio: auto; min-height: 8rem; }
+  .frame span { font-size: 4rem; }
+  .action { width: 100%; }
+  .help { margin-top: 2.5rem; }
+}
+@media (prefers-reduced-motion: reduce) { .action { transition: none; } }

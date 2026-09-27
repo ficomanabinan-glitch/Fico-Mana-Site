@@ -48,6 +48,7 @@ import { usePageBackgroundSync } from '@/components/use-cached-page-read'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import DownloadRequestsPanel from '@/components/download-requests-panel'
 import { useBookingQueue } from '@/components/use-booking-queue'
+import { useEditorSession } from '@/components/editor-portal-shell'
 
 export type FilteringDashTab = 'overview' | 'queue' | 'downloads' | 'calendar' | 'editor'
 
@@ -73,6 +74,7 @@ function workflowBookings(bookings: Booking[]) {
 
 export default function FilteringDashboard({ initialSearch = '', initialTab }: Props) {
   const toast = useAdminToast()
+  const canReorderQueue = Boolean(useEditorSession()?.capabilities.admin)
   const [bookings, setBookings] = useState<Booking[]>(() => peekFilteringBookings() ?? [])
   const [loading, setLoading] = useState(() => peekFilteringBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
@@ -246,6 +248,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
             priorityMap={dayPriorityMap}
             maxPriority={getDayPriorityCount(calendarBookings, selectedDate)}
             savingBookingId={savingBookingId}
+            canReorder={canReorderQueue}
             onMove={moveBooking}
             onReview={(id) => {
               setQueueSearch(id)
@@ -455,6 +458,7 @@ function FilteringDaySessions({
   priorityMap,
   maxPriority,
   savingBookingId,
+  canReorder,
   onMove,
   onReview,
 }: {
@@ -463,6 +467,7 @@ function FilteringDaySessions({
   priorityMap: Map<string, number>
   maxPriority: number
   savingBookingId: string | null
+  canReorder: boolean
   onMove: (bookingId: string, position: number) => void | Promise<void>
   onReview: (bookingId: string) => void
 }) {
@@ -518,13 +523,15 @@ function FilteringDaySessions({
                 <div key={b.id} className="p-4 space-y-3 hover:bg-white/[0.02] transition-colors">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex items-start gap-3">
-                      <BookingPrioritySelect
+                      {canReorder ? <BookingPrioritySelect
                         priority={priorityMap.get(b.id) ?? null}
                         maxPriority={maxPriority}
                         className="shrink-0 mt-0.5"
                         disabled={Boolean(savingBookingId)}
                         onChange={(position) => onMove(b.id, position)}
-                      />
+                      /> : <span className="shrink-0 mt-0.5 px-2 py-1.5 text-caption font-semibold uppercase text-white/70" title="Queue order is managed by an administrator">
+                        {priorityMap.has(b.id) ? `Client ${priorityMap.get(b.id)}` : 'No queue position'}
+                      </span>}
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{b.customerName}</p>
                         <p className="text-caption text-white/40 mt-1">

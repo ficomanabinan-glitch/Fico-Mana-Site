@@ -220,7 +220,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
           <aside className="hidden h-dvh w-[260px] shrink-0 flex-col overflow-hidden border-r border-white/[0.08] md:flex">
             <div className="shrink-0 border-b border-white/[0.08] p-6">
               <Link href="/editor" prefetch onClick={() => navigate('/editor', false)}>
-                <h1 className="font-serif text-xl font-bold">FICO MANA</h1>
+                <p className="font-serif text-xl font-bold">FICO MANA</p>
                 <p className="mt-1 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">
                   Editor Workspace
                 </p>

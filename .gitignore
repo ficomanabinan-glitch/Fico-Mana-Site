@@ -10,6 +10,7 @@ data/fico-spot-blocks.json
 previews/
 artifacts/
 .audit/
+.impeccable/
 .agents/
 .codex/
 .pnpm-store/

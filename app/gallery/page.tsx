@@ -15,7 +15,7 @@ export default function GalleryPage() {
     <main className="min-h-screen bg-black text-white">
       <Navbar />
       <div className="pt-20 md:pt-24">
-        <Gallery />
+        <Gallery headingLevel="h1" />
       </div>
       <Footer />
     </main>
