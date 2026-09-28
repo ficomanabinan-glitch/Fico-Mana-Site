@@ -172,7 +172,9 @@ async function handlePortal(request: NextRequest, path: string[]) {
         headers: {
           'content-type': file.mimeType,
           'content-disposition': `inline; filename="${safeDownloadName(file.fileName)}"`,
-          'cache-control': 'private, no-cache, must-revalidate',
+          // Only the client's browser may reuse a preview for this quota window.
+          // Portal page/metadata requests still re-check access on every refresh.
+          'cache-control': kind === 'gallery' ? 'private, max-age=300, must-revalidate' : 'private, no-cache, must-revalidate',
           'cdn-cache-control': 'no-store',
           'vercel-cdn-cache-control': 'no-store',
           'etag': file.etag,
@@ -185,8 +187,8 @@ async function handlePortal(request: NextRequest, path: string[]) {
     return new Response(null, {
       status: 304,
       headers: {
-        // The browser retains bytes but must re-check access and freshness on each reuse.
-        'cache-control': 'private, no-cache, must-revalidate',
+        // Gallery validators refresh the browser's short private cache after it expires.
+        'cache-control': kind === 'gallery' ? 'private, max-age=300, must-revalidate' : 'private, no-cache, must-revalidate',
         'cdn-cache-control': 'no-store',
         'vercel-cdn-cache-control': 'no-store',
         'etag': file.etag,

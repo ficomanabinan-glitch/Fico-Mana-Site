@@ -5,7 +5,7 @@ export function canPrefetchPortalPhotos(connection?: { saveData?: boolean; effec
   return !connection?.saveData && !['slow-2g', '2g', '3g'].includes(connection?.effectiveType || '')
 }
 
-/** Tab-memory only: never persist private images in localStorage, a service worker or public CDN. */
+/** Tab memory deduplicates active images; the browser's short private HTTP cache survives refreshes. */
 export class PortalPreviewCache {
   private entries = new Map<string, Entry>()
   private retained = new Map<string, number>()
@@ -15,6 +15,8 @@ export class PortalPreviewCache {
   private generation = 0
   private listeners = new Set<() => void>()
   private backgroundEnabled = true
+  private blockedUntil = 0
+  private resumeTimer: ReturnType<typeof setTimeout> | null = null
   private options: { maxEntries?: number; maxBytes?: number; maxConcurrent?: number; maxObjectBytes?: number; ttl?: number; fetcher?: typeof fetch }
   constructor(options: { maxEntries?: number; maxBytes?: number; maxConcurrent?: number; maxObjectBytes?: number; ttl?: number; fetcher?: typeof fetch } = {}) { this.options = options }
 
@@ -60,6 +62,11 @@ export class PortalPreviewCache {
     return promise
   }
   private pump() {
+    const wait = this.blockedUntil - Date.now()
+    if (wait > 0) {
+      if (!this.resumeTimer) this.resumeTimer = setTimeout(() => { this.resumeTimer = null; this.pump() }, wait)
+      return
+    }
     while (this.running < (this.options.maxConcurrent ?? 2)) {
       const index = this.queue.findIndex(task => task.urgent || this.backgroundEnabled)
       if (index < 0) return
@@ -72,11 +79,27 @@ export class PortalPreviewCache {
   private async run(task: Task, generation: number) {
     const timeout = setTimeout(() => task.controller.abort(), 20_000)
     const maxObjectBytes = this.options.maxObjectBytes ?? 4 * 1024 * 1024
+    let deferred = false
     try {
       const response = await (this.options.fetcher || fetch)(task.source, {
-        credentials: 'same-origin', cache: 'no-store', signal: task.controller.signal,
+        credentials: 'same-origin', cache: 'default', signal: task.controller.signal,
         priority: task.urgent ? 'high' : 'low',
       })
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('retry-after') || ''
+        const seconds = Number(retryAfter)
+        const delay = Number.isFinite(seconds) && retryAfter.trim()
+          ? seconds * 1_000 : Date.parse(retryAfter) - Date.now()
+        this.blockedUntil = Math.max(this.blockedUntil, Date.now() + Math.min(300_000, Math.max(1_000, Number.isFinite(delay) ? delay : 15_000)))
+        await response.body?.cancel().catch(() => {})
+        if (generation === this.generation && !task.controller.signal.aborted) {
+          this.queue.unshift(task)
+          deferred = true
+          return
+        }
+        task.resolve(null)
+        return
+      }
       if (!response.ok || !/^image\/(?:jpeg|png|webp|avif|gif)(?:;|$)/i.test(response.headers.get('content-type') || '') ||
         Number(response.headers.get('content-length') || 0) > maxObjectBytes) {
         await response.body?.cancel()
@@ -108,10 +131,12 @@ export class PortalPreviewCache {
       task.resolve(this.peek(task.source))
       this.listeners.forEach(listener => listener())
     } catch { task.resolve(null) }
-    finally { clearTimeout(timeout); if (this.tasks.get(task.source) === task) this.tasks.delete(task.source) }
+    finally { clearTimeout(timeout); if (!deferred && this.tasks.get(task.source) === task) this.tasks.delete(task.source) }
   }
   clear() {
     this.generation++
+    if (this.resumeTimer) clearTimeout(this.resumeTimer)
+    this.resumeTimer = null; this.blockedUntil = 0
     this.tasks.forEach(task => { task.controller.abort(); task.resolve(null) })
     this.tasks.clear(); this.queue = []
     this.retained.clear()

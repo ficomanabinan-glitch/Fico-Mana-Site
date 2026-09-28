@@ -56,7 +56,7 @@ test('homepage metadata is static and the old preview routes are preserved', asy
   assert.match(config, /source: '\/social\/:file\*'/)
   assert.match(config, /public, max-age=31536000, immutable/)
   assert.match(robots, /userAgent: '\*',[\s\S]*allow: '\/'/)
-  assert.match(proxy, /!isAuthCallback\) \{\s*return NextResponse.next\(\)/)
+  assert.match(proxy, /isPublicPortalApi \|\| \(!isAdminRoute[^\n]*!isAuthCallback\)\) \{\s*return NextResponse.next\(\)/)
   assert.ok((await readFile('public/preview.png')).length > 0)
   assert.ok((await readFile('app/social-preview-v3.png/route.tsx')).length > 0)
 })

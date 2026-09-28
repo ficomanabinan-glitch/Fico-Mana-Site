@@ -207,6 +207,9 @@ export async function updateSession(request: NextRequest) {
   const isEditorRoute = pathname === '/editor' || pathname.startsWith('/editor/')
   const isFilteringRoute = pathname === '/filtering' || pathname.startsWith('/filtering/')
   const isBookingApi = pathname === '/api/bookings' || pathname.startsWith('/api/bookings/')
+  // These link-scoped routes authorize against the live portal record themselves.
+  // Avoid a redundant Supabase Auth request for every gallery image.
+  const isPublicPortalApi = pathname.startsWith('/api/editor-workflow/portal/')
   const isSensitiveApi =
     isBookingApi ||
     pathname.startsWith('/api/notifications') ||
@@ -221,7 +224,7 @@ export async function updateSession(request: NextRequest) {
 
   // Broad matching is needed for admin.ficomana.com aliases. Avoid doing any
   // Supabase work for ordinary public-site requests.
-  if (!isAdminRoute && !isEditorRoute && !isFilteringRoute && !isSensitiveApi && !isAuthCallback) {
+  if (isPublicPortalApi || (!isAdminRoute && !isEditorRoute && !isFilteringRoute && !isSensitiveApi && !isAuthCallback)) {
     return NextResponse.next()
   }
 

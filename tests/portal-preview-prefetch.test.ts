@@ -10,7 +10,7 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 test('background and clicked preview share one request and reuse the completed private blob', async t => {
   let calls = 0, finish!: (response: Response) => void
   const cache = new PortalPreviewCache({ fetcher: async (_url, init) => {
-    calls++; assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'no-store')
+    calls++; assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'default')
     return new Promise<Response>(resolve => { finish = resolve })
   } })
   t.after(() => cache.clear())
@@ -126,4 +126,56 @@ test('a large portal gallery has a separate guarded image budget and a recoverab
   assert.match(provider, /usePortalCachedImage/)
   assert.match(privateImage, /usePortalCachedImage/)
   assert.match(privateImage, /Retrying photo/)
+})
+
+test('gallery previews can survive a page refresh in the private browser HTTP cache', async () => {
+  let originRequests = 0
+  const browserCache = new Map<string, Response>()
+  const fetcher: typeof fetch = async (input, init) => {
+    const key = String(input)
+    if (init?.cache !== 'no-store' && browserCache.has(key)) return browserCache.get(key)!.clone()
+    originRequests++
+    const response = image()
+    if (init?.cache !== 'no-store') browserCache.set(key, response.clone())
+    return response
+  }
+  const firstPage = new PortalPreviewCache({ fetcher })
+  assert.ok(await firstPage.load(photo(1), true))
+  firstPage.clear()
+  const refreshedPage = new PortalPreviewCache({ fetcher })
+  try {
+    assert.ok(await refreshedPage.load(photo(1), true))
+    assert.equal(originRequests, 1, 'a refresh must not request the same fresh preview again')
+    const route = readFileSync('app/api/editor-workflow/[...path]/route.ts', 'utf8')
+    assert.match(route, /private, max-age=300, must-revalidate/)
+    assert.match(route, /'cdn-cache-control': 'no-store'/)
+    assert.match(route, /'vercel-cdn-cache-control': 'no-store'/)
+  } finally { refreshedPage.clear() }
+})
+
+test('a 429 pauses queued previews instead of sending every image into the limit', async () => {
+  let requests = 0
+  const cache = new PortalPreviewCache({ maxConcurrent: 1, fetcher: async () => {
+    requests++
+    return requests === 1
+      ? new Response('rate limited', { status: 429, headers: { 'Retry-After': '1' } })
+      : image()
+  } })
+  try {
+    const first = cache.load(photo(1), true)
+    const second = cache.load(photo(2), true)
+    await tick()
+    assert.equal(requests, 1, 'the second image must wait while the first is rate limited')
+    assert.ok(await first)
+    assert.ok(await second)
+    assert.equal(requests, 3)
+  } finally { cache.clear() }
+})
+
+test('public portal photos do not validate a staff Supabase session on every request', () => {
+  const middleware = readFileSync('lib/supabase/middleware.ts', 'utf8')
+  const route = readFileSync('app/api/editor-workflow/[...path]/route.ts', 'utf8')
+  assert.match(middleware, /const isPublicPortalApi = pathname\.startsWith\('\/api\/editor-workflow\/portal\/'\)/)
+  assert.match(middleware, /isPublicPortalApi \|\|/)
+  assert.match(route, /if \(path\[0\] === 'portal'\) return await handlePortal\(request, path\)[\s\S]*?requireWorkflowAuth/)
 })

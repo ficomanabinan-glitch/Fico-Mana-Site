@@ -54,7 +54,7 @@ test('Admin reminder configuration runs against PostgreSQL with isolated externa
   `)
   const migration=await readFile('supabase/migrations/20260908070000_admin_shoot_reminder_controls.sql','utf8')
   await db.exec(migration.replace(/create extension if not exists (?:pg_cron|pg_net|supabase_vault);/g,''))
-  const expiryMigration=await readFile('supabase/migrations/20260928080910_expire_stale_shoot_reminder_checks.sql','utf8')
+  const expiryMigration=await readFile('supabase/migrations/20260928084103_expire_stale_shoot_reminder_checks.sql','utf8')
   await db.exec(expiryMigration)
   const workspace='00000000-0000-0000-0000-000000000001'
   const owner='10000000-0000-0000-0000-000000000001'
