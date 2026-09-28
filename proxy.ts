@@ -3,6 +3,7 @@ import { updateSession } from '@/lib/supabase/middleware'
 import { isAdminHost, isEditorHost } from '@/lib/auth/admin'
 import { isNewAdminHost } from '@/lib/new-admin/routing'
 import { isPrivatePagePath } from '@/lib/public-page-policy'
+import { PORTAL_DEVICE_COOKIE, validPortalDeviceId } from '@/lib/security/portal-device'
 
 function shouldDisableCaching(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -47,7 +48,17 @@ function applyResponseHardening(request: NextRequest, response: NextResponse) {
 }
 
 export async function proxy(request: NextRequest) {
-  return applyResponseHardening(request, await updateSession(request))
+  const response = applyResponseHardening(request, await updateSession(request))
+  // An HttpOnly random cookie distinguishes devices without fingerprinting.
+  // Direct image/API calls without it still fall back to the IP allowance.
+  if (request.method === 'GET' && /^\/portal\/[0-9a-f-]{36}\/?$/i.test(request.nextUrl.pathname) &&
+    !validPortalDeviceId(request.cookies.get(PORTAL_DEVICE_COOKIE)?.value)) {
+    response.cookies.set(PORTAL_DEVICE_COOKIE, crypto.randomUUID(), {
+      httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
+      path: '/', maxAge: 60 * 60 * 24 * 30,
+    })
+  }
+  return response
 }
 
 export const config = {

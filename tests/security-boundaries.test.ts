@@ -161,3 +161,37 @@ test('distributed rate limiting returns 429 and retains the extra aggregate buck
     assert.deepEqual(calls, ['booking-lookup-aggregate'])
   } finally { if (previous === undefined) delete process.env.SECURITY_HASH_SECRET; else process.env.SECURITY_HASH_SECRET = previous }
 })
+
+test('portal photo reads allow 500 per device while an aggregate IP ceiling remains', async () => {
+  const calls: Array<{ policy: string; key: string; limit: number }> = []
+  const limiter = loadTs<typeof import('../lib/security/api-rate-limit.ts')>('lib/security/api-rate-limit.ts', {
+    'next/server': json, '@/lib/security/request-security': noStore,
+    '@/lib/security/security-audit': { recordSecurityAuditEvent: async () => {} },
+    '@/lib/supabase/admin': { getSupabaseAdmin: () => ({ rpc: async (_name: string, args: Record<string, any>) => {
+      calls.push({ policy: args.p_policy, key: args.p_key_hash, limit: args.p_limit })
+      return { data: [{ allowed: true, remaining: 499, reset_at: new Date(Date.now() + 60_000).toISOString() }], error: null }
+    } }) },
+  })
+  const previous = process.env.SECURITY_HASH_SECRET
+  process.env.SECURITY_HASH_SECRET = 'synthetic-device-rate-key'
+  const idA = '638f9fac-d56e-4abd-951a-c6e6d073527b'
+  const idB = '324490b1-b6fb-4737-ab75-4285014c66d5'
+  const read = (ip: string, id: string) => limiter.enforceApiRateLimit(new Request('https://example.test/api/editor-workflow/portal/test/file/a', {
+    headers: { 'x-forwarded-for': ip, cookie: `fm_portal_device=${id}` },
+  }), limiter.API_RATE_LIMITS.portalPhotoRead, ['portal-id', 'file'])
+  try {
+    await read('192.0.2.1', idA)
+    await read('192.0.2.2', idA)
+    await read('192.0.2.1', idB)
+    assert.deepEqual(calls.map(call => call.policy), [
+      'portal-photo-read-aggregate', 'portal-photo-read',
+      'portal-photo-read-aggregate', 'portal-photo-read',
+      'portal-photo-read-aggregate', 'portal-photo-read',
+    ])
+    assert.equal(calls[1].limit, 500)
+    assert.equal(calls[0].limit, 1500)
+    assert.equal(calls[1].key, calls[3].key, 'one device keeps its allowance after switching networks')
+    assert.notEqual(calls[1].key, calls[5].key, 'a second device has a separate allowance')
+    assert.equal(calls[0].key, calls[4].key, 'devices on the same IP share the abuse ceiling')
+  } finally { if (previous === undefined) delete process.env.SECURITY_HASH_SECRET; else process.env.SECURITY_HASH_SECRET = previous }
+})

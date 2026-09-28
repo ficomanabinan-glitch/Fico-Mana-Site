@@ -127,6 +127,8 @@ async function handlePortal(request: NextRequest, path: string[]) {
       ? API_RATE_LIMITS.portalRawDownload
       : path[2] === 'deliverables.zip'
       ? API_RATE_LIMITS.portalDownload
+      : path[2] === 'file'
+      ? API_RATE_LIMITS.portalPhotoRead
       : API_RATE_LIMITS.portalRead
   const limited = await enforceApiRateLimit(request, policy, [publicId, path[2]])
   if (limited) return limited

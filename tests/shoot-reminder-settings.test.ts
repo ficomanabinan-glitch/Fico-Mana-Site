@@ -54,6 +54,8 @@ test('Admin reminder configuration runs against PostgreSQL with isolated externa
   `)
   const migration=await readFile('supabase/migrations/20260908070000_admin_shoot_reminder_controls.sql','utf8')
   await db.exec(migration.replace(/create extension if not exists (?:pg_cron|pg_net|supabase_vault);/g,''))
+  const expiryMigration=await readFile('supabase/migrations/20260928080910_expire_stale_shoot_reminder_checks.sql','utf8')
+  await db.exec(expiryMigration)
   const workspace='00000000-0000-0000-0000-000000000001'
   const owner='10000000-0000-0000-0000-000000000001'
   const query=async(sql:string,params:unknown[]=[]) => (await db.query<Record<string,unknown>>(sql,params)).rows
@@ -92,7 +94,9 @@ test('Admin reminder configuration runs against PostgreSQL with isolated externa
   await t.test('failed HTTP responses and malformed readiness content cannot unlock enable', async()=> {
     for (const [status,body] of [[503,'{"success":true,"dryRun":true}'],[200,'not json'],[200,'{"success":true}'],[200,'{"success":"true","dryRun":true}']] as const) {
       await respondToProbe(status,body)
-      assert.equal((await call('get_shoot_reminder_control')).canActivate,false)
+      const state=await call('get_shoot_reminder_control')
+      assert.equal(state.probeStatus,'failed')
+      assert.equal(state.canActivate,false)
       await assert.rejects(()=>setEnabled(true),/successful result/)
     }
   })
@@ -113,6 +117,7 @@ test('Admin reminder configuration runs against PostgreSQL with isolated externa
   await t.test('stale probes cannot enable the schedule; a new check preserves an existing enabled state', async()=> {
     await respondToProbe(200,'{"success":true,"dryRun":true}')
     await query("update shoot_reminder_settings set readiness_started_at=now()-interval '11 minutes'")
+    assert.equal((await call('get_shoot_reminder_control')).probeStatus,'expired')
     await assert.rejects(()=>setEnabled(true),/successful result/)
     await call('check_shoot_reminder_service')
     await respondToProbe(200,'{"success":true,"dryRun":true}')
@@ -152,5 +157,17 @@ test('Admin reminder configuration runs against PostgreSQL with isolated externa
     const disabled=await setEnabled(false)
     assert.equal(disabled.enabled,false)
     assert.equal(disabled.schedulerActive,false)
+  })
+  await t.test('a cleaned-up HTTP probe is expired, not a failed reminder service', async()=> {
+    await query("update shoot_reminder_settings set readiness_started_at=now()-interval '7 hours'")
+    await query('delete from net._http_response')
+    const expired=await call('get_shoot_reminder_control')
+    assert.equal(expired.probeStatus,'expired')
+    assert.equal(expired.problem,null)
+    assert.equal(expired.canActivate,false)
+    const checking=await call('check_shoot_reminder_service')
+    assert.equal(checking.probeStatus,'checking')
+    await respondToProbe(200,'{"success":true,"dryRun":true}')
+    assert.equal((await call('get_shoot_reminder_control')).probeStatus,'ready')
   })
 })

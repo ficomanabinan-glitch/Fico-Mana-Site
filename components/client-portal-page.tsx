@@ -66,7 +66,6 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   const [selectionProgress, setSelectionProgress] = useState<ClientSelectionProgress | null>(null)
   const [resetting, setResetting] = useState(false)
   const readSequence = useRef(0)
-  const previewSources = useMemo(() => data?.gallery.map(file => file.previewUrl) || [], [data?.gallery])
 
   const load = useCallback(async (offset = 0, silent = false) => {
     if (sampleMode) {
@@ -175,7 +174,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   if (error && !data) return <AccessMessage title="Portal unavailable" message={error} onRetry={() => void load(0)} />
   if (!data) return <AccessMessage title="Portal unavailable" message="This project could not be loaded. Try: refresh this page or ask FICO MANA staff to reopen your private portal link." onRetry={() => void load(0)} />
 
-  return <PortalPreviewProvider scope={`${publicId}:${data.selection?.rawUploadGeneration || 0}:${data.selection?.reopenedAt || ''}`} sources={previewSources} expiresAt={data.expiry?.expiresAt}><main className={`client-portal ${styles.clientPortal}`}>
+  return <PortalPreviewProvider scope={`${publicId}:${data.selection?.rawUploadGeneration || 0}:${data.selection?.reopenedAt || ''}`} expiresAt={data.expiry?.expiresAt}><main className={`client-portal ${styles.clientPortal}`}>
     <ClientPhotoSelection
       publicId={publicId} selection={data.selection} gallery={data.gallery} galleryTotal={data.galleryTotal}
       loadingMore={loadingMore} addons={data.addonCatalog} projectStatus={stageLabel(data.editingStatus)}

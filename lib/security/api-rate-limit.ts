@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
+import { portalDeviceId } from '@/lib/security/portal-device'
 
 export type ApiRateLimitPolicy = {
   name: string
@@ -20,6 +21,7 @@ export const API_RATE_LIMITS = {
   rawSubmit: { name: 'raw-submit', limit: 8, windowSeconds: 60 * 60, failClosed: true },
   portalSession: { name: 'portal-session', limit: 20, aggregateLimit: 100, windowSeconds: 15 * 60, failClosed: true },
   portalRead: { name: 'portal-read', limit: 240, windowSeconds: 5 * 60, failClosed: true },
+  portalPhotoRead: { name: 'portal-photo-read', limit: 500, aggregateLimit: 1500, windowSeconds: 5 * 60, failClosed: true },
   portalSelection: { name: 'portal-selection', limit: 10, windowSeconds: 10 * 60, failClosed: true },
   portalSubmissionPin: { name: 'portal-submission-pin', limit: 5, windowSeconds: 15 * 60, failClosed: true },
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
@@ -72,7 +74,11 @@ async function rateLimitKey(request: Request, policy: ApiRateLimitPolicy, dimens
   const secret = rateLimitSecret()
   if (!secret) throw new Error('API_RATE_LIMIT_NOT_CONFIGURED')
   const safeDimensions = dimensions.map((value) => value.trim().slice(0, 300)).filter(Boolean)
-  return sha256(`${secret}:${policy.name}:${requestClientIp(request)}:${safeDimensions.join(':')}`)
+  // The photo allowance belongs to a browser device, while its aggregate
+  // companion remains IP-scoped to bound cookie resets and automated abuse.
+  const device = policy.name === 'portal-photo-read' ? portalDeviceId(request.headers.get('cookie')) : null
+  const principal = device ? `device:${device}` : `ip:${requestClientIp(request)}`
+  return sha256(`${secret}:${policy.name}:${principal}:${safeDimensions.join(':')}`)
 }
 
 async function redisCommand<T>(command: Array<string | number>) {

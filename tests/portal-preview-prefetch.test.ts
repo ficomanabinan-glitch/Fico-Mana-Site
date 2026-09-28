@@ -10,7 +10,7 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 test('background and clicked preview share one request and reuse the completed private blob', async t => {
   let calls = 0, finish!: (response: Response) => void
   const cache = new PortalPreviewCache({ fetcher: async (_url, init) => {
-    calls++; assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'no-cache')
+    calls++; assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'no-store')
     return new Promise<Response>(resolve => { finish = resolve })
   } })
   t.after(() => cache.clear())
@@ -63,6 +63,19 @@ test('failed or oversized previews are not cached and can be retried', async () 
   assert.ok(await cache.load(photo(1))); cache.clear()
 })
 
+test('one device tab reuses 150 gallery images and refetches only an explicitly invalidated image', async () => {
+  let requests = 0
+  const cache = new PortalPreviewCache({ maxEntries: 160, maxBytes: 96 * 1024 * 1024, fetcher: async () => { requests++; return image() } })
+  try {
+    for (let id = 1; id <= 150; id++) assert.ok(await cache.load(photo(id), true))
+    for (let id = 1; id <= 150; id++) assert.ok(await cache.load(photo(id), true))
+    assert.equal(requests, 150, 'revisiting the gallery should use device memory instead of the server')
+    cache.invalidate(photo(1))
+    assert.ok(await cache.load(photo(1), true))
+    assert.equal(requests, 151)
+  } finally { cache.clear() }
+})
+
 test('an open preview survives background eviction but is refreshed after its cache lifetime', async t => {
   const cache = new PortalPreviewCache({ maxEntries: 2, ttl: 30, fetcher: async () => image() })
   t.after(() => cache.clear())
@@ -97,6 +110,20 @@ test('data saver and slow connections disable speculation; SSR and skeleton stay
   assert.match(readFileSync('components/client-portal-page.tsx', 'utf8'), /if \(initialData\) \{ queryClient.setQueryData\(queryKey, initialData\); return \}/)
   const privateImage = readFileSync('components/portal-private-image.tsx', 'utf8')
   assert.match(privateImage, /photo\?\.complete/)
-  assert.match(privateImage, /photo.naturalWidth > 0\) setLoadedSource\(src\)/)
+  assert.match(privateImage, /photo\?\.complete && photo\.naturalWidth > 0 && imageSource/)
   assert.match(privateImage, /<img ref=\{image\}/)
+})
+
+test('a large portal gallery has a separate guarded image budget and a recoverable failed image', () => {
+  const policies = readFileSync('lib/security/api-rate-limit.ts', 'utf8')
+  const route = readFileSync('app/api/editor-workflow/[...path]/route.ts', 'utf8')
+  const provider = readFileSync('components/portal-preview-cache.tsx', 'utf8')
+  const privateImage = readFileSync('components/portal-private-image.tsx', 'utf8')
+  assert.match(policies, /portalPhotoRead:\s*\{[^}]*limit:\s*500[^}]*windowSeconds:\s*5 \* 60/)
+  assert.match(policies, /portal-photo-read[^\n]*portalDeviceId/)
+  assert.match(route, /path\[2\] === 'file'\s*\? API_RATE_LIMITS\.portalPhotoRead/)
+  assert.doesNotMatch(provider, /sources\.slice\(0,\s*24\)/, 'visible images should not be fetched twice by initial speculative warming')
+  assert.match(provider, /usePortalCachedImage/)
+  assert.match(privateImage, /usePortalCachedImage/)
+  assert.match(privateImage, /Retrying photo/)
 })

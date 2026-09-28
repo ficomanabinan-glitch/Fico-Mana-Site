@@ -15,13 +15,18 @@ export class PortalPreviewCache {
   private generation = 0
   private listeners = new Set<() => void>()
   private backgroundEnabled = true
-  private options: { maxEntries?: number; maxBytes?: number; ttl?: number; fetcher?: typeof fetch }
-  constructor(options: { maxEntries?: number; maxBytes?: number; ttl?: number; fetcher?: typeof fetch } = {}) { this.options = options }
+  private options: { maxEntries?: number; maxBytes?: number; maxConcurrent?: number; maxObjectBytes?: number; ttl?: number; fetcher?: typeof fetch }
+  constructor(options: { maxEntries?: number; maxBytes?: number; maxConcurrent?: number; maxObjectBytes?: number; ttl?: number; fetcher?: typeof fetch } = {}) { this.options = options }
 
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   peek(source: string) {
     const entry = this.entries.get(source)
     return entry && (this.retained.has(source) || Date.now() - entry.touched < (this.options.ttl ?? 120_000)) ? entry.url : null
+  }
+  invalidate(source: string) {
+    const entry = this.entries.get(source)
+    if (entry) URL.revokeObjectURL(entry.url)
+    this.entries.delete(source)
   }
   /** Keep an open viewer's image valid while speculative entries rotate behind it. */
   retain(source: string) {
@@ -55,7 +60,7 @@ export class PortalPreviewCache {
     return promise
   }
   private pump() {
-    while (this.running < 2) {
+    while (this.running < (this.options.maxConcurrent ?? 2)) {
       const index = this.queue.findIndex(task => task.urgent || this.backgroundEnabled)
       if (index < 0) return
       const [task] = this.queue.splice(index, 1)
@@ -66,13 +71,14 @@ export class PortalPreviewCache {
   }
   private async run(task: Task, generation: number) {
     const timeout = setTimeout(() => task.controller.abort(), 20_000)
+    const maxObjectBytes = this.options.maxObjectBytes ?? 4 * 1024 * 1024
     try {
       const response = await (this.options.fetcher || fetch)(task.source, {
-        credentials: 'same-origin', cache: 'no-cache', signal: task.controller.signal,
+        credentials: 'same-origin', cache: 'no-store', signal: task.controller.signal,
         priority: task.urgent ? 'high' : 'low',
       })
       if (!response.ok || !/^image\/(?:jpeg|png|webp|avif|gif)(?:;|$)/i.test(response.headers.get('content-type') || '') ||
-        Number(response.headers.get('content-length') || 0) > 4 * 1024 * 1024) {
+        Number(response.headers.get('content-length') || 0) > maxObjectBytes) {
         await response.body?.cancel()
         task.resolve(null); return
       }
@@ -84,11 +90,11 @@ export class PortalPreviewCache {
         const { done, value } = await reader.read()
         if (done) break
         bytes += value.byteLength
-        if (bytes > 4 * 1024 * 1024) { await reader.cancel(); task.resolve(null); return }
+        if (bytes > maxObjectBytes) { await reader.cancel(); task.resolve(null); return }
         chunks.push(new Uint8Array(value))
       }
       const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/jpeg' })
-      if (generation !== this.generation || task.controller.signal.aborted || !blob.size || blob.size > 4 * 1024 * 1024) { task.resolve(null); return }
+      if (generation !== this.generation || task.controller.signal.aborted || !blob.size || blob.size > maxObjectBytes) { task.resolve(null); return }
       const old = this.entries.get(task.source)
       if (old) URL.revokeObjectURL(old.url)
       const url = URL.createObjectURL(blob)

@@ -9,7 +9,7 @@ export type ShootReminderControl = {
   enabled: boolean
   configured: boolean
   schedulerActive: boolean
-  probeStatus: 'not_checked' | 'checking' | 'ready' | 'failed'
+  probeStatus: 'not_checked' | 'checking' | 'ready' | 'failed' | 'expired'
   checkedAt: string | null
   lastVerifiedAt: string | null
   canActivate: boolean
