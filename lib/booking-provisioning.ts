@@ -4,7 +4,7 @@ import { mapDbBookingToModel } from '@/lib/booking-db'
 import { portalUrl } from '@/lib/client-portal'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
-import { assertGraduationBooking, packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
+import { assertOnsiteBooking, packageUsesOnsiteWorkflow } from '@/lib/package-workflow-server'
 import { bookingStoragePrefix } from '@/lib/storage/storage-keys'
 
 export type ProvisioningStatus = 'NOT_STARTED' | 'PROVISIONING' | 'ACTIVE' | 'PARTIAL_FAILURE' | 'FAILED'
@@ -126,7 +126,7 @@ export async function getProvisioningSnapshot(bookingId: string): Promise<Provis
   const booking = await loadBooking(admin, bookingId)
   const [confirmedPayments, usesWorkflow] = await Promise.all([
     totalConfirmedPayments(admin, booking),
-    packageUsesGraduationWorkflow(admin, booking.packageId),
+    packageUsesOnsiteWorkflow(admin, booking.packageId),
   ])
   if (!usesWorkflow) return {
     bookingId, required: false, status: 'NOT_STARTED', confirmedPayments,
@@ -164,7 +164,7 @@ export async function provisionBookingResources(bookingId: string, actor: Actor 
 
   const booking = await loadBooking(admin, bookingId)
   const [requiresPhotoWorkflow, confirmedPayments] = await Promise.all([
-    packageUsesGraduationWorkflow(admin, booking.packageId),
+    packageUsesOnsiteWorkflow(admin, booking.packageId),
     totalConfirmedPayments(admin, booking),
   ])
   const row = requiresPhotoWorkflow ? await getProvisioningRow(admin, bookingId) : null
@@ -266,7 +266,7 @@ export async function disableClientPortal(bookingId: string, actor: Actor = {}) 
 export async function enableClientPortal(bookingId: string, actor: Actor = {}) {
   const admin = getSupabaseAdmin()
   if (!admin) throw new Error('This service is temporarily unavailable. Try: refresh the page, or contact your administrator.')
-  await assertGraduationBooking(admin, bookingId)
+  await assertOnsiteBooking(admin, bookingId)
   const now = new Date()
   const { data: portal, error: portalError } = await admin
     .from('client_portals')

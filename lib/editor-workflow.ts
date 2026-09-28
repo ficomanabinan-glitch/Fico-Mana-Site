@@ -7,7 +7,8 @@ import { sendEditedPhotosEmail } from '@/lib/email'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { validateEditedPhotoMetadata } from '@/lib/security/file-validation'
 import { safeMetadata } from '@/lib/security/audit-metadata'
-import { assertGraduationBooking, graduationBookingIds, graduationPackageIds } from '@/lib/package-workflow-server'
+import { assertGraduationBooking, assertOnsiteBooking, graduationBookingIds, graduationPackageIds, onsitePackageIds } from '@/lib/package-workflow-server'
+import { includedPrintCategories, usesGraduationWorkflow } from '@/lib/package-workflow'
 import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { buildPrintManifest, type PrintManifest } from '@/lib/print-manifest'
 import { fulfillBookingPrints } from '@/lib/print-workflow'
@@ -197,13 +198,26 @@ async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
 export async function syncEditorWorkflow(workspaceId: string) {
   const admin = adminClient()
   const bookings = await loadActiveBookings(admin, workspaceId)
+  const onsiteIds = await onsitePackageIds(admin)
+  const onsiteBookings: Array<{ id: string; booking_date: string }> = []
+  if (onsiteIds.length) {
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await admin.from('bookings').select('id,booking_date,booking_status')
+        .eq('workspace_id', workspaceId).in('package_id', onsiteIds)
+        .order('booking_date', { ascending: false }).range(offset, offset + 999)
+      if (error) throw new Error(error.message)
+      onsiteBookings.push(...(data || []).filter(row => !ACTIVE_BOOKING_EXCLUSIONS.has(String(row.booking_status || '')))
+        .map(row => ({ id: String(row.id), booking_date: String(row.booking_date) })))
+      if (!data || data.length < 1000) break
+    }
+  }
   const { data: existingBatches, error: batchReadError } = await admin
     .from('editing_batches')
     .select('id,shoot_date,location_key,batch_sequence,display_id')
     .eq('workspace_id', workspaceId)
   if (batchReadError) throw new Error(batchReadError.message)
   const batchByDate = new Map((existingBatches || []).map((batch) => [String(batch.shoot_date), batch]))
-  const missingDates = [...new Set(bookings.map((booking) => String(booking.booking_date)))].filter(
+  const missingDates = [...new Set(onsiteBookings.map((booking) => booking.booking_date))].filter(
     (date) => date && !batchByDate.has(date),
   )
   if (missingDates.length) {
@@ -245,7 +259,7 @@ export async function syncEditorWorkflow(workspaceId: string) {
         booking_id: booking.id,
         status: booking.raw_photo_status === 'Approved' ? 'SUBMITTED' : 'OPEN',
         required_count: Math.max(0, Number(booking.selection_limit || 5)),
-        included_limit: Math.min(5, Math.max(0, Number(booking.selection_limit || 5))),
+        included_limit: Math.min(200, Math.max(0, Number(booking.selection_limit || 5))),
         submitted_at:
           booking.raw_photo_status === 'Approved'
             ? booking.raw_photo_approved_at || booking.raw_photo_submitted_at || nowIso()
@@ -350,7 +364,7 @@ export async function getOnsiteBatchSummary(
 ) {
   const admin = adminClient()
   if (synchronize) await syncEditorWorkflow(workspaceId)
-  const eligiblePackageIds = await graduationPackageIds(admin)
+  const eligiblePackageIds = await onsitePackageIds(admin)
   if (!eligiblePackageIds.length) return null
 
   const { data: batches, error: batchesError } = await admin
@@ -363,25 +377,21 @@ export async function getOnsiteBatchSummary(
   if (!batches?.length) return null
 
   const batchIds = batches.map((batch) => String(batch.id))
-  const { data: jobs, error: jobsError } = await admin
-    .from('editing_jobs')
-    .select('booking_id,last_error')
-    .eq('workspace_id', workspaceId)
-    .in('batch_id', batchIds)
+  const { data: bookings, error: bookingsError } = await admin.from('bookings')
+    .select('id,customer_name,customer_email,package_name,booking_time,booking_status')
+    .eq('workspace_id', workspaceId).eq('booking_date', shootDate)
+    .in('package_id', eligiblePackageIds)
+  if (bookingsError) throw new Error(bookingsError.message)
+  const bookingIds = (bookings || []).filter(row => !ACTIVE_BOOKING_EXCLUSIONS.has(String(row.booking_status || '')))
+    .map(row => String(row.id))
+  if (!bookingIds.length) return { id: String(batches[0].display_id), shootDate, jobs: [] }
+
+  const { data: jobs, error: jobsError } = await admin.from('editing_jobs')
+    .select('booking_id,last_error').eq('workspace_id', workspaceId).in('batch_id', batchIds)
   if (jobsError) throw new Error(jobsError.message)
+  const jobsByBooking = new Map((jobs || []).map(job => [String(job.booking_id), job]))
 
-  const bookingIds = [...new Set((jobs || []).map((job) => String(job.booking_id)))]
-  if (!bookingIds.length) {
-    return { id: String(batches[0].display_id), shootDate, jobs: [] }
-  }
-
-  const [bookingsResult, galleryResult, storageResult, resetResult, emailResult, portalResult] = await Promise.all([
-    admin
-      .from('bookings')
-      .select('id,customer_name,customer_email,package_name,booking_time,booking_status')
-      .eq('workspace_id', workspaceId)
-      .in('package_id', eligiblePackageIds)
-      .in('id', bookingIds),
+  const [galleryResult, storageResult, resetResult, emailResult, portalResult] = await Promise.all([
     admin
       .from('gallery_files')
       .select('booking_id,created_at')
@@ -397,7 +407,6 @@ export async function getOnsiteBatchSummary(
     admin.from('client_portals').select('booking_id,public_id,status,expires_at')
       .eq('workspace_id', workspaceId).in('booking_id', bookingIds),
   ])
-  if (bookingsResult.error) throw new Error(bookingsResult.error.message)
   if (galleryResult.error) {
     console.error('Onsite summary gallery read failed:', galleryResult.error.message)
   }
@@ -406,7 +415,7 @@ export async function getOnsiteBatchSummary(
   }
 
   const bookingMap = new Map(
-    (bookingsResult.data || []).map((booking) => [String(booking.id), booking]),
+    (bookings || []).map((booking) => [String(booking.id), booking]),
   )
   const galleryByBooking = new Map<string, { count: number; lastUploadAt: string | null }>()
   for (const file of galleryResult.error ? [] : galleryResult.data || []) {
@@ -429,9 +438,9 @@ export async function getOnsiteBatchSummary(
     (portalResult.error ? [] : portalResult.data || []).map((portal) => [String(portal.booking_id), portal]),
   )
 
-  const onsiteJobs = (jobs || [])
-    .map((job) => {
-      const bookingId = String(job.booking_id)
+  const onsiteJobs = bookingIds
+    .map((bookingId) => {
+      const job = jobsByBooking.get(bookingId)
       const booking = bookingMap.get(bookingId)
       if (!booking || ACTIVE_BOOKING_EXCLUSIONS.has(String(booking.booking_status || ''))) return null
       const gallery = galleryByBooking.get(bookingId)
@@ -450,7 +459,7 @@ export async function getOnsiteBatchSummary(
         portalEmailStatus: emailAttempts.some(row => row.status === 'SENT') ? 'SENT' : emailAttempts.some(row => row.status === 'FAILED') ? 'FAILED' : null,
         portalUrl: portalReady && portal?.public_id ? portalUrl(String(portal.public_id)) : null,
         storageReady: storageByBooking.get(bookingId) === 'ready',
-        lastError: job.last_error ? String(job.last_error) : null,
+        lastError: job?.last_error ? String(job.last_error) : null,
         resetId: resetResult.data?.find(row => row.booking_id === bookingId)?.raw_reset_id || null,
       }
     })
@@ -796,7 +805,7 @@ export async function resolveMatchReview(
 }
 
 async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingId: string) {
-  await assertGraduationBooking(admin, bookingId, workspaceId)
+  await assertOnsiteBooking(admin, bookingId, workspaceId)
   const { data: existing, error } = await admin
     .from('client_portals')
     .select('*')
@@ -814,7 +823,7 @@ async function ensurePortal(admin: SupabaseClient, workspaceId: string, bookingI
 }
 
 export async function ensureBookingStorage(admin: SupabaseClient, workspaceId: string, bookingId: string) {
-  await assertGraduationBooking(admin, bookingId, workspaceId)
+  await assertOnsiteBooking(admin, bookingId, workspaceId)
   try {
     return await prepareBookingStorage(admin, workspaceId, bookingId)
   } catch (error) {
@@ -829,7 +838,7 @@ export async function activateClientPortalAfterOnsiteUpload(
   workspaceId: string,
   bookingId: string,
 ) {
-  await assertGraduationBooking(admin, bookingId, workspaceId)
+  await assertOnsiteBooking(admin, bookingId, workspaceId)
   const { data: uploaded, error: uploadedError } = await admin.from('gallery_files').select('id')
     .eq('workspace_id', workspaceId).eq('booking_id', bookingId)
     .eq('storage_status', 'available').limit(1)
@@ -837,14 +846,17 @@ export async function activateClientPortalAfterOnsiteUpload(
   if (!uploaded?.length) throw new Error('A verified onsite photo is required before the client portal can be created.')
 
   const { data: booking, error: bookingError } = await admin.from('bookings')
-    .select('selection_limit').eq('workspace_id', workspaceId).eq('id', bookingId).single()
+    .select('selection_limit,package_id').eq('workspace_id', workspaceId).eq('id', bookingId).single()
   if (bookingError || !booking) throw new Error(bookingError?.message || 'Booking not found.')
+  const { data: packageRow, error: packageError } = await admin.from('packages').select('category')
+    .eq('id', booking.package_id).single()
+  if (packageError || !packageRow) throw new Error(packageError?.message || 'Package rules could not be checked.')
 
   const portal = await ensurePortal(admin, workspaceId, bookingId)
   const { data: selection, error: selectionError } = await admin.from('photo_selections').select('id')
     .eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle()
   if (selectionError) throw new Error(selectionError.message)
-  if (!selection) {
+  if (!selection && usesGraduationWorkflow(packageRow.category)) {
     const requiredCount = Math.max(0, Number(booking.selection_limit || 5))
     const { error: createSelectionError } = await admin.from('photo_selections').insert({
       workspace_id: workspaceId,
@@ -852,7 +864,7 @@ export async function activateClientPortalAfterOnsiteUpload(
       status: 'OPEN',
       client_status: 'Not Started',
       required_count: requiredCount,
-      included_limit: Math.min(5, requiredCount),
+      included_limit: Math.min(200, requiredCount),
     })
     if (createSelectionError && createSelectionError.code !== '23505') throw new Error(createSelectionError.message)
   }
@@ -880,7 +892,7 @@ export async function reconcileBookingStorage(
   repair = false,
 ) {
   const admin = adminClient()
-  await assertGraduationBooking(admin, bookingId, workspaceId)
+  await assertOnsiteBooking(admin, bookingId, workspaceId)
   if (repair) {
     const provisioningReset = await admin
       .from('booking_provisioning')
@@ -1109,6 +1121,9 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         .catch((error: unknown) => ({ data: null, error: error instanceof Error ? error : new Error('Download access could not be checked.') })),
     ])
   if (bookingResult.error || !bookingResult.data) throw new Error('Booking not found.')
+  const { data: packageRow, error: packageError } = await admin.from('packages').select('category')
+    .eq('id', bookingResult.data.package_id).single()
+  if (packageError || !packageRow) throw new Error('Package rules could not be checked.')
   const warnings: string[] = []
   for (const [label, result] of [
     ['photo selection', selectionResult],
@@ -1165,6 +1180,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
       id: String(booking.id),
       customerName: String(booking.customer_name),
       packageName: String(booking.package_name || ''),
+      packageCategory: String(packageRow.category),
       bookingDate: String(booking.booking_date),
       bookingTime: String(booking.booking_time || ''),
       bookingStatus: String(booking.booking_status || ''),
@@ -1187,7 +1203,7 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
           id: String(selectionResult.data.id),
           status: String(selectionResult.data.status),
           requiredCount: Number(selectionResult.data.required_count),
-          includedLimit: Number(selectionResult.data.included_limit ?? Math.min(5, Number(selectionResult.data.required_count || 5))),
+          includedLimit: Number(selectionResult.data.included_limit ?? Math.min(200, Number(selectionResult.data.required_count || 5))),
           clientStatus: String(selectionResult.data.client_status || 'Not Started'),
           noRevisionAcknowledged: Boolean(selectionResult.data.no_revision_acknowledged),
           submittedAt: selectionResult.data.submitted_at || null,
@@ -1405,7 +1421,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
   if (!selection) throw new PortalSelectionError('This selection is already submitted and locked. Try: refresh the portal to see its latest status.', 'SELECTION_LOCKED')
   let submitted = false
   try {
-    const includedLimit = Math.min(5, Math.max(0, Number(selection.included_limit ?? selection.required_count ?? 5)))
+    const includedLimit = Math.min(200, Math.max(0, Number(selection.included_limit ?? selection.required_count ?? 5)))
     const included = [...new Set(input.includedFileIds?.length ? input.includedFileIds : input.fileIds.slice(0, includedLimit))]
     const extras = [...new Set(input.extraEditFileIds?.length ? input.extraEditFileIds : input.fileIds.filter((id) => !included.includes(id)))]
     if (included.length !== includedLimit || included.some((id) => extras.includes(id))) {
@@ -1417,9 +1433,19 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     }
     const preferenceMap = new Map((input.preferences || []).map((item) => [item.fileId, item.preference]))
     const printAllocations = input.printAllocations || []
-    const standardCategories = ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R'] as const
+    const { data: bookingForPrints, error: bookingForPrintsError } = await admin.from('bookings')
+      .select('package_id').eq('workspace_id', workspaceId).eq('id', bookingId).single()
+    if (bookingForPrintsError || !bookingForPrints) throw new Error('Package rules could not be checked.')
+    const { data: packageForPrints, error: packageForPrintsError } = await admin.from('packages')
+      .select('category').eq('id', bookingForPrints.package_id).single()
+    if (packageForPrintsError || !packageForPrints) throw new Error('Package rules could not be checked.')
+    const expectedPrintCategories = includedPrintCategories(packageForPrints.category)
+    if (!expectedPrintCategories.length) throw new PortalSelectionError('This package does not require photo selection.', 'SELECTION_INVALID', 409)
+    const standardCategories = expectedPrintCategories.filter(category => category !== 'WALLET_SIZE')
+    const requiresWallet = expectedPrintCategories.some(category => category === 'WALLET_SIZE')
     const walletAllocations = printAllocations.filter(allocation => allocation.category === 'WALLET_SIZE')
-    if (printAllocations.length < Object.keys(PRINT_CATEGORY_LIMITS).length || printAllocations.length > 7 || walletAllocations.length < 1 || walletAllocations.length > 4) {
+    if (printAllocations.length < expectedPrintCategories.length || printAllocations.length > standardCategories.length + (requiresWallet ? 4 : 0) ||
+      (requiresWallet && (walletAllocations.length < 1 || walletAllocations.length > 4)) || (!requiresWallet && walletAllocations.length)) {
       throw new PortalSelectionError('Choose a photo for every free print category.', 'SELECTION_INVALID', 400)
     }
     for (const category of standardCategories) {
@@ -1429,6 +1455,9 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
     }
     const allocationKeys = new Set<string>()
     for (const allocation of printAllocations) {
+      if (!expectedPrintCategories.some(category => category === allocation.category)) {
+        throw new PortalSelectionError('This print is not included in the selected package.', 'SELECTION_INVALID', 400)
+      }
       const allocationKey = `${allocation.category}:${allocation.fileId}`
       if (allocationKeys.has(allocationKey)) {
         throw new PortalSelectionError('The same photo cannot be assigned twice in one print category.', 'SELECTION_INVALID', 400)
@@ -1443,7 +1472,7 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       allocationKeys.add(allocationKey)
     }
     const walletCopyCount = walletAllocations.reduce((sum, allocation) => sum + allocation.quantity, 0)
-    if (walletCopyCount < 1 || walletCopyCount > PRINT_CATEGORY_LIMITS.WALLET_SIZE) {
+    if (requiresWallet && (walletCopyCount < 1 || walletCopyCount > PRINT_CATEGORY_LIMITS.WALLET_SIZE)) {
       throw new PortalSelectionError('Wallet Size allows one to four photos.', 'SELECTION_INVALID', 400)
     }
     const { data: gallery, error: galleryError } = await admin
@@ -1533,7 +1562,10 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
         gallery_file_id: file.id,
         category: allocation.category,
         quantity: allocation.quantity,
-        label_snapshot: PRINT_CATEGORY_LABELS[allocation.category],
+        label_snapshot: packageForPrints.category === 'graduation' ? PRINT_CATEGORY_LABELS[allocation.category]
+          : allocation.category === 'TOGA_PICTURE_4R' ? '4R PRINT - PHOTO 1'
+          : allocation.category === 'ALAMPAY_BARONG_4R' ? '4R PRINT - PHOTO 2'
+          : PRINT_CATEGORY_LABELS[allocation.category],
         storage_provider: 'r2',
         storage_status: 'unavailable',
       })
@@ -1839,13 +1871,17 @@ export async function prepareBatchDownload(
   if (lockError) throw new Error(lockError.message)
   const bookingIds = jobs.map((job) => String(job.booking_id))
   const [{ data: bookings }, { data: portals }, { data: selections }] = await Promise.all([
-    admin.from('bookings').select('id,customer_name').in('id', bookingIds),
+    admin.from('bookings').select('id,customer_name,package_id').in('id', bookingIds),
     admin.from('client_portals').select('booking_id,public_id').in('booking_id', bookingIds),
     admin.from('photo_selections').select('id,booking_id').in('booking_id', bookingIds),
   ])
   const names = uniqueClientFolderNames(
     (bookings || []).map((booking) => ({ id: String(booking.id), name: String(booking.customer_name) })),
   )
+  const packageIds = [...new Set((bookings || []).map(booking => String(booking.package_id)))]
+  const { data: packageRows, error: packageRowsError } = await admin.from('packages').select('id,category').in('id', packageIds)
+  if (packageRowsError) throw new Error('Package rules could not be checked.')
+  const categoryByPackage = new Map((packageRows || []).map(row => [String(row.id), String(row.category)]))
   const selectionIds = (selections || []).map((selection) => selection.id)
   const { data: items, error: itemsError } = await admin
     .from('photo_selection_items')
@@ -1874,7 +1910,9 @@ export async function prepareBatchDownload(
     const selectionId = selectionMap.get(bookingId)
     if (!selectionId) throw new Error('A client selection is missing. Try: refresh the editing queue, then download again.')
     printManifests.set(bookingId, buildPrintManifest({
-      bookingId, selectionId, allocations: (savedPrints || []).filter(row => String(row.selection_id) === selectionId),
+      bookingId, selectionId,
+      packageCategory: categoryByPackage.get(String((bookings || []).find(row => String(row.id) === bookingId)?.package_id)) || '',
+      allocations: (savedPrints || []).filter(row => String(row.selection_id) === selectionId),
       gallery: (gallery || []).filter(file => (items || []).some(item => item.selection_id === selectionId && item.gallery_file_id === file.id)),
     }))
   }
@@ -2561,10 +2599,16 @@ export async function preparePortalDeliverables(publicId: string) {
 
 export async function preparePortalRawPhotos(publicId: string) {
   const { admin, portal } = await portalRecord(publicId)
+  const { data: booking, error: bookingError } = await admin.from('bookings').select('package_id')
+    .eq('workspace_id', portal.workspace_id).eq('id', portal.booking_id).single()
+  if (bookingError || !booking) throw new Error('Booking not found.')
+  const { data: packageRow, error: packageError } = await admin.from('packages').select('category')
+    .eq('id', booking.package_id).single()
+  if (packageError || !packageRow) throw new Error('Package rules could not be checked.')
   const selection = await admin.from('photo_selections').select('status')
     .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id).maybeSingle()
   if (selection.error) throw new Error(selection.error.message)
-  if (!selection.data || selection.data.status !== 'SUBMITTED') {
+  if (packageRow.category !== 'self-portrait' && (!selection.data || selection.data.status !== 'SUBMITTED')) {
     throw new PortalSelectionError('Submit your photo selection before downloading all original photos.', 'SELECTION_REQUIRED', 409)
   }
   const { data, error } = await admin.from('gallery_files').select('storage_key,file_name,file_size')

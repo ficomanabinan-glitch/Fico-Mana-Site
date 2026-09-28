@@ -30,7 +30,7 @@ export async function rawUploadGeneration(admin: SupabaseClient, workspaceId: st
       status: 'OPEN',
       client_status: 'Not Started',
       required_count: requiredCount,
-      included_limit: Math.min(5, requiredCount),
+      included_limit: Math.min(200, requiredCount),
     })
     if (created.error && created.error.code !== '23505') throw settingsUnavailable()
     const reread = await selectionState(admin, workspaceId, bookingId)

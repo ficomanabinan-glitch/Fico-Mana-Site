@@ -20,7 +20,7 @@ test('provisioning reads only displayed status fields and keeps responses privat
     '@/lib/supabase/admin': { getSupabaseAdmin: () => admin },
     '@/lib/portal-expiry': { hasPortalExpired: () => false },
     '@/lib/security/error-response': { secureErrorResponse: () => Response.json({ error: 'Could not load provisioning overview.' }, { status: 503 }) },
-    '@/lib/package-workflow-server': { graduationPackageIds: async () => ['graduation'] },
+    '@/lib/package-workflow-server': { onsitePackageIds: async () => ['graduation'] },
     '@/lib/storage/r2-client': { isR2Configured: () => true },
   })
   const successful = await route.GET()

@@ -8,7 +8,10 @@ import * as drafts from '../lib/portal-selection-draft.ts'
 import * as navigation from '../lib/selection-step-navigation.ts'
 import type { ClientSelection, ClientAddon, ClientGalleryFile } from '../components/client-photo-selection.tsx'
 
-const Photos = () => null, Prints = () => null, Addons = () => null, Review = () => null, Preview = () => null
+const Photos = () => null, Prints = Object.assign(() => null, { portalPrintOptions: () => [
+  { category: 'TOGA_PICTURE_4R', max: 1 }, { category: 'ALAMPAY_BARONG_4R', max: 1 },
+  { category: 'FRAME_8R', max: 1 }, { category: 'WALLET_SIZE', max: 4 },
+] }), Addons = () => null, Review = () => null, Preview = () => null
 const addons: ClientAddon[] = [
   { id: 'extra', name: 'Extra Edit', price: 400, pricingType: 'per_photo', maxQuantity: 200, description: '' },
   { id: 'frame', name: '8R Frame', price: 1000, pricingType: 'fixed', maxQuantity: 1, photoLimit: 1, description: '' },

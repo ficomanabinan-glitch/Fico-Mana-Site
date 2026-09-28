@@ -5,6 +5,16 @@ import worker from '../workers/private-downloads/src/index.js'
 test('private download worker authorizes, streams R2 bytes, and records completion', async () => {
   const manifestId = '11111111-1111-4111-8111-111111111111'
   const originalFetch = globalThis.fetch
+  const runtime = globalThis as typeof globalThis & { FixedLengthStream?: typeof TransformStream }
+  const originalFixedLengthStream = runtime.FixedLengthStream
+  let fixedLengthRequested = BigInt(0)
+  class TestFixedLengthStream extends TransformStream<Uint8Array, Uint8Array> {
+    constructor(length: bigint) {
+      super()
+      fixedLengthRequested = length
+    }
+  }
+  runtime.FixedLengthStream = TestFixedLengthStream as typeof TransformStream
   const calls: Array<{ url: string; body: Record<string, unknown> }> = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -44,6 +54,7 @@ test('private download worker authorizes, streams R2 bytes, and records completi
     assert.ok(Number(response.headers.get('content-length')) > 51)
     const archive = new Uint8Array(await response.arrayBuffer())
     assert.equal(archive.byteLength, Number(response.headers.get('content-length')))
+    assert.equal(fixedLengthRequested, BigInt(archive.byteLength))
     assert.ok(archive.byteLength > 100)
     assert.equal(String.fromCharCode(...archive.slice(0, 2)), 'PK')
     await Promise.all(backgroundTasks)
@@ -53,6 +64,8 @@ test('private download worker authorizes, streams R2 bytes, and records completi
     assert.equal(calls[1].body.p_success, true)
   } finally {
     globalThis.fetch = originalFetch
+    if (originalFixedLengthStream) runtime.FixedLengthStream = originalFixedLengthStream
+    else delete runtime.FixedLengthStream
   }
 })
 

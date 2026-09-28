@@ -4,7 +4,7 @@ import { isPlaceholderCustomerEmail, isValidCustomerEmail } from '@/lib/customer
 import { sendEmail } from '@/lib/email'
 import { escapeEmailText } from '@/lib/email-templates'
 import { portalUrl } from '@/lib/client-portal'
-import { packageUsesGraduationWorkflow } from '@/lib/package-workflow-server'
+import { packageUsesGraduationWorkflow, packageUsesOnsiteWorkflow } from '@/lib/package-workflow-server'
 
 export const onsitePortalEmailSubject = (bookingId: string) => `Your photos are ready to select — FICO MANA ${bookingId}`
 
@@ -36,9 +36,10 @@ export async function sendPortalAccessIfNeeded(
   if (['Cancelled', 'Rejected', 'No Show'].includes(String(booking.booking_status))) {
     return { sent: false, error: 'This booking is not available for photo selection.' }
   }
-  if (!await packageUsesGraduationWorkflow(admin, String(booking.package_id))) {
+  if (!await packageUsesOnsiteWorkflow(admin, String(booking.package_id))) {
     return { sent: false, error: 'This package does not use a client selection portal.' }
   }
+  const requiresSelection = await packageUsesGraduationWorkflow(admin, String(booking.package_id))
   const recipient = String(booking.customer_email || '').trim()
   if (!isValidCustomerEmail(recipient) || isPlaceholderCustomerEmail(recipient)) {
     return { sent: false, error: 'The client email is missing or invalid. Try: update it in Booking Management, then retry the email.' }
@@ -71,9 +72,11 @@ export async function sendPortalAccessIfNeeded(
   const url = portalUrl(String(portal.public_id))
   const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;border:2px solid #0500D0;border-radius:16px;background:#fff;color:#171717;">
     <h2 style="color:#0500D0;text-align:center;">FICO MANA</h2>
-    <h3>Your photos are ready to select</h3>
+    <h3>Your photos are ready ${requiresSelection ? 'to select' : 'to download'}</h3>
     <p>Hello ${escapeEmailText(booking.customer_name)},</p>
-    <p>Your photos are now available in your Client Portal. Open your portal to review your photos, choose your included edits, and select your prints and add-ons.</p>
+    <p>${requiresSelection
+      ? 'Your photos are now available in your Client Portal. Open your portal to review your photos, choose your included edits, and select your prints and add-ons.'
+      : 'Your photos are now available in your Client Portal. Open your private link to preview and download the full set. No photo selection is needed.'}</p>
     <p>Booking: <strong>${escapeEmailText(bookingId)}</strong></p>
     <p style="text-align:center;margin:28px 0;"><a href="${escapeEmailText(url)}" style="background:#0500D0;color:#fff;padding:14px 28px;border-radius:14px;text-decoration:none;font-weight:bold;display:inline-block;">Open Client Portal</a></p>
     <p style="font-size:12px;color:#5A5A8A;">Keep this private link for your own use.</p>

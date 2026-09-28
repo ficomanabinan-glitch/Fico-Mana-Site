@@ -18,7 +18,7 @@ test('file management and client previews stream through authorized application 
   assert.doesNotMatch(workflow, /redirectUrl:\s*await createDownloadUrl\(\{ key: storageKey/)
 })
 
-test('all original photos unlock only after a submitted selection and remain rate limited', async () => {
+test('all original photos require a submitted selection except download-only self portraits, and remain rate limited', async () => {
   const [workflow, route, payload, portal] = await Promise.all([
     readFile('lib/editor-workflow.ts', 'utf8'),
     readFile('app/api/editor-workflow/[...path]/route.ts', 'utf8'),
@@ -31,7 +31,8 @@ test('all original photos unlock only after a submitted selection and remain rat
   assert.match(workflow, /storage_provider', 'r2'\)\.eq\('storage_status', 'available'/)
   assert.match(route, /API_RATE_LIMITS\.portalRawDownload/)
   assert.match(route, /raw-photos\.zip/)
-  assert.match(payload, /rawDownloadAllUrl: data\.selection\?\.status === 'SUBMITTED' && data\.rawDownloadAccess\?\.allowed/)
+  assert.match(payload, /data\.booking\.packageCategory === 'self-portrait' \|\| data\.selection\?\.status === 'SUBMITTED'/)
+  assert.match(payload, /rawDownloadAllUrl: canDownload && data\.rawDownloadAccess\?\.allowed/)
   assert.match(payload, /rawDownloadRequestUrl/)
   assert.match(portal, /PortalOriginalDownload/)
 })

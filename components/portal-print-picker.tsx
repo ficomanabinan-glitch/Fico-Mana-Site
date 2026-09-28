@@ -4,6 +4,7 @@ import { Check } from 'lucide-react'
 import PortalPrivateImage from '@/components/portal-private-image'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
 import styles from './portal-workspace.module.css'
+import { includedPrintCategories } from '@/lib/package-workflow'
 
 export type PortalPrintCategory = 'TOGA_PICTURE_4R' | 'ALAMPAY_BARONG_4R' | 'FRAME_8R' | 'WALLET_SIZE'
 export const PORTAL_PRINT_OPTIONS: Array<{ category: PortalPrintCategory; title: string; subtitle: string; max: number }> = [
@@ -12,6 +13,15 @@ export const PORTAL_PRINT_OPTIONS: Array<{ category: PortalPrintCategory; title:
   { category: 'FRAME_8R', title: 'Frame', subtitle: '8R Size Printed / FREE', max: 1 },
   { category: 'WALLET_SIZE', title: 'Wallet size', subtitle: '4 Copies / FREE · Choose one to four different included photos', max: 4 },
 ]
+export function portalPrintOptions(category: string) {
+  const included = includedPrintCategories(category)
+  return PORTAL_PRINT_OPTIONS.filter(option => included.some(value => value === option.category)).map(option => {
+    if (category === 'graduation') return option
+    if (option.category === 'TOGA_PICTURE_4R') return { ...option, title: '4R print · Photo 1' }
+    if (option.category === 'ALAMPAY_BARONG_4R') return { ...option, title: '4R print · Photo 2' }
+    return option
+  })
+}
 
 export function PortalChoiceGrid({ files, selected, locked, label, onToggle }: {
   files: ClientGalleryFile[]; selected: string[]; locked: boolean; label: string; onToggle: (id: string) => void
@@ -24,15 +34,16 @@ export function PortalChoiceGrid({ files, selected, locked, label, onToggle }: {
   </button>)}</div>
 }
 
-export default function PortalPrintPicker({ files, printSelections, walletSelections, locked, complete, onPrint, onWallet, onBack, onContinue, onWarning }: {
+export default function PortalPrintPicker({ files, options = PORTAL_PRINT_OPTIONS, printSelections, walletSelections, locked, complete, onPrint, onWallet, onBack, onContinue, onWarning }: {
   files: ClientGalleryFile[]; printSelections: Partial<Record<PortalPrintCategory, string>>; walletSelections: string[]
+  options?: typeof PORTAL_PRINT_OPTIONS
   locked: boolean; complete: boolean; onPrint: (category: PortalPrintCategory, id: string) => void; onWallet: (ids: string[]) => void
   onBack: () => void; onContinue: () => void; onWarning: (message: string) => void
 }) {
   return <>
     <div className={styles.heading}><div className={styles.headingCopy}><h1>Choose your free prints</h1><p className={styles.description}>Pick a photo for each print. You can reuse the same photo.</p></div></div>
     <div className={styles.printLayout}>
-      <div className={styles.printStack}>{PORTAL_PRINT_OPTIONS.map(option => {
+      <div className={styles.printStack}>{options.map(option => {
         const selected = option.max === 4 ? walletSelections : printSelections[option.category] ? [printSelections[option.category]!] : []
         return <fieldset key={option.category} className={styles.printGroup}>
           <legend className={styles.printLegend}><span><span className={styles.printTitle}>{option.title}</span><span className={styles.printSubtitle}>{option.subtitle}</span></span><span className={styles.printCounter}>{selected.length} / {option.max}</span></legend>
@@ -45,7 +56,7 @@ export default function PortalPrintPicker({ files, printSelections, walletSelect
           }} />
         </fieldset>
       })}</div>
-      <aside className={styles.rail} aria-label="Print summary"><h2>Print selections</h2><dl>{PORTAL_PRINT_OPTIONS.map(option => {
+      <aside className={styles.rail} aria-label="Print summary"><h2>Print selections</h2><dl>{options.map(option => {
         const ids = option.max === 4 ? walletSelections : [printSelections[option.category]].filter((id): id is string => Boolean(id))
         return <div className={styles.summaryRow} key={option.category}><dt>{option.title}</dt><dd>{ids.length ? ids.map(id => files.find(file => file.id === id)?.fileName || 'Selected photo').join(', ') : 'Choose a photo'}</dd></div>
       })}</dl>{!complete && !locked ? <p className={styles.validation}>Choose a photo for every free print category.</p> : null}<button type="button" className={styles.primary} disabled={!complete && !locked} onClick={onContinue}><span>Continue to Add-ons</span><span className={styles.buttonIcon} aria-hidden="true">→</span></button></aside>

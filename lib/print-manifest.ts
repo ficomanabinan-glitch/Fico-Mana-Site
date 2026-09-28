@@ -1,4 +1,5 @@
 /** Print instructions are derived from saved selections, never trusted from an uploaded JSON file. */
+import { includedPrintCategories } from '@/lib/package-workflow'
 const PRINTS = {
   TOGA_PICTURE_4R: { prefix: 'TOGA PICTURE', quantity: 1, size: '4R' },
   ALAMPAY_BARONG_4R: { prefix: 'ALAMBAY BARONG', quantity: 1, size: '4R' },
@@ -49,20 +50,23 @@ function stem(value: string) {
 export function buildPrintManifest(input: {
   bookingId: string
   selectionId: string
+  packageCategory?: string
   allocations: SavedPrintAllocation[]
   gallery: PrintGalleryFile[]
 }) {
   const outputs: PrintOutput[] = []
   const seen = new Set<string>()
+  const expectedCategories = includedPrintCategories(input.packageCategory || 'graduation')
   const walletAllocations = input.allocations.filter(allocation => allocation.category === 'WALLET_SIZE')
   const walletFiles = new Set(walletAllocations.map(allocation => allocation.gallery_file_id))
-  if (input.allocations.length && (walletAllocations.length < 1 || walletAllocations.length > 4 || walletFiles.size !== walletAllocations.length)) {
+  if (input.allocations.length && expectedCategories.some(category => category === 'WALLET_SIZE') &&
+    (walletAllocations.length < 1 || walletAllocations.length > 4 || walletFiles.size !== walletAllocations.length)) {
     throw new Error('The saved Wallet Size choices are invalid. Try: ask the administrator to review the client selection.')
   }
   let walletCopy = 0
   for (const allocation of input.allocations) {
     const isWallet = allocation.category === 'WALLET_SIZE'
-    if (!Object.hasOwn(PRINTS, allocation.category) || (!isWallet && seen.has(allocation.category))) {
+    if (!expectedCategories.some(category => category === allocation.category) || (!isWallet && seen.has(allocation.category))) {
       throw new Error('The saved print choices are invalid. Try: ask the administrator to review the client selection.')
     }
     seen.add(allocation.category)
@@ -83,7 +87,9 @@ export function buildPrintManifest(input: {
         copy_number: copyNumber,
         source_gallery_file_id: file.id,
         source_file_name: file.file_name,
-        name_prefix: isWallet ? `${rule.prefix} ${copyNumber}` : rule.prefix,
+        name_prefix: isWallet ? `${rule.prefix} ${copyNumber}` : input.packageCategory && input.packageCategory !== 'graduation' &&
+          allocation.category === 'TOGA_PICTURE_4R' ? '4R PRINT 1' : input.packageCategory && input.packageCategory !== 'graduation' &&
+          allocation.category === 'ALAMPAY_BARONG_4R' ? '4R PRINT 2' : rule.prefix,
         status: 'awaiting_enhanced_upload',
         enhanced_storage_key: null,
         enhanced_checksum: null,
@@ -93,7 +99,7 @@ export function buildPrintManifest(input: {
     }
   }
   // Older selections without any print allocation remain valid; a partially saved set does not.
-  if (seen.size && seen.size !== Object.keys(PRINTS).length) {
+  if (seen.size && seen.size !== expectedCategories.length) {
     throw new Error('Some print choices are missing. Try: ask the administrator to review the client selection.')
   }
   return {

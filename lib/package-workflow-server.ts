@@ -1,5 +1,30 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { GraduationWorkflowOnlyError, usesGraduationWorkflow } from './package-workflow.ts'
+import { GraduationWorkflowOnlyError, PHOTO_WORKFLOW_CATEGORIES, usesGraduationWorkflow, usesOnsiteWorkflow } from './package-workflow.ts'
+
+export async function packageUsesOnsiteWorkflow(admin: SupabaseClient, packageId: string) {
+  const { data, error } = await admin.from('packages').select('category').eq('id', packageId).maybeSingle()
+  if (error) throw new Error('Package rules could not be checked. Try: refresh and check Package Manager.')
+  return usesOnsiteWorkflow(data?.category)
+}
+
+export async function onsitePackageIds(admin: SupabaseClient) {
+  const ids: string[] = []
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await admin.from('packages').select('id').in('category', [...PHOTO_WORKFLOW_CATEGORIES])
+      .order('id').range(offset, offset + 999)
+    if (error) throw new Error('Package rules could not be checked. Try: refresh and check Package Manager.')
+    ids.push(...(data || []).map(row => String(row.id)))
+    if (!data || data.length < 1000) return ids
+  }
+}
+
+export async function assertOnsiteBooking(admin: SupabaseClient, bookingId: string, workspaceId?: string) {
+  let query = admin.from('bookings').select('package_id').eq('id', bookingId)
+  if (workspaceId) query = query.eq('workspace_id', workspaceId)
+  const { data, error } = await query.single()
+  if (error || !data) throw new Error('Booking not found in this workspace.')
+  if (!await packageUsesOnsiteWorkflow(admin, String(data.package_id))) throw new Error('This package is not eligible for onsite photo upload.')
+}
 
 export async function packageUsesGraduationWorkflow(admin: SupabaseClient, packageId: string) {
   const { data, error } = await admin.from('packages').select('category').eq('id', packageId).maybeSingle()
@@ -10,7 +35,7 @@ export async function packageUsesGraduationWorkflow(admin: SupabaseClient, packa
 export async function graduationPackageIds(admin: SupabaseClient) {
   const ids: string[] = []
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await admin.from('packages').select('id').eq('category', 'graduation')
+    const { data, error } = await admin.from('packages').select('id').in('category', ['graduation', 'capping-pinning', 'creative'])
       .order('id').range(offset, offset + 999)
     if (error) throw new Error('Package rules could not be checked. Try: refresh and check Package Manager.')
     ids.push(...(data || []).map(row => String(row.id)))

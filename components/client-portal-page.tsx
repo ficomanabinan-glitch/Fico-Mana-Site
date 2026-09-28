@@ -29,7 +29,7 @@ import type { PortalRawDownloadAccess } from '@/lib/portal-raw-downloads'
 
 type PortalResource={id:string;resource_type:string;title:string;url?:string|null;content?:string|null;created_at:string}
 export type PortalData={
-  booking:{id:string;customerName:string;packageName:string;bookingDate:string;bookingTime:string;bookingStatus:string;paymentStatus:string;price:number;depositAmount:number;amountPaid:number}
+  booking:{id:string;customerName:string;packageName:string;packageCategory?:string;bookingDate:string;bookingTime:string;bookingStatus:string;paymentStatus:string;price:number;depositAmount:number;amountPaid:number}
   portalId:string
   shareUrl:string
   expiry:PortalExpiry|null
@@ -119,7 +119,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
     const access = (await response.json()) as PortalRawDownloadAccess
     setData((previous) => {
       if (!previous) return previous
-      const rawDownloadAllUrl = previous.selection?.status === 'SUBMITTED' && access.allowed
+      const rawDownloadAllUrl = (previous.booking.packageCategory === 'self-portrait' || previous.selection?.status === 'SUBMITTED') && access.allowed
         ? `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-photos.zip`
         : null
       const next = { ...previous, rawDownloadAccess: access, rawDownloadAllUrl }
@@ -174,9 +174,24 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   if (error && !data) return <AccessMessage title="Portal unavailable" message={error} onRetry={() => void load(0)} />
   if (!data) return <AccessMessage title="Portal unavailable" message="This project could not be loaded. Try: refresh this page or ask FICO MANA staff to reopen your private portal link." onRetry={() => void load(0)} />
 
+  if (data.booking.packageCategory === 'self-portrait') return <PortalPreviewProvider scope={`${publicId}:download-only`} expiresAt={data.expiry?.expiresAt}>
+    <main className={`client-portal ${styles.clientPortal}`}>
+      <div className={`${styles.shell} py-8 sm:py-12`}>
+        <p className={styles.brand}>FICO MANA CLIENT PORTAL</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-heading text-white sm:text-5xl">Your photos are ready</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/55">{data.booking.customerName} · {data.booking.packageName}</p>
+        <p className="mt-2 text-sm leading-relaxed text-white/55">This is a download-only session. No photo selection or editor submission is needed.</p>
+        {data.expiry ? <PortalExpiryNotice expiry={data.expiry} className="mt-6" /> : null}
+        {error ? <div className={`${styles.notice} mt-6`} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}
+        <div className="mt-8"><PortalOriginalDownload total={data.galleryTotal} totalBytes={data.rawDownloadBytes} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /></div>
+        {data.gallery.length > 0 ? <section className="mt-8 fico-card border border-white/10 bg-white/[0.02]"><h2 className="text-card-title font-semibold tracking-heading">Photo preview</h2><div className="mt-4"><PortalDeliverableGallery files={data.gallery} /></div>{data.gallery.length < data.galleryTotal ? <button type="button" className={`${portalPrimaryAction} mt-5 px-5`} disabled={loadingMore} onClick={() => void load(data.gallery.length)}>{loadingMore ? 'Loading…' : `Show more photos (${data.gallery.length} of ${data.galleryTotal})`}</button> : null}</section> : null}
+      </div>
+    </main>
+  </PortalPreviewProvider>
+
   return <PortalPreviewProvider scope={`${publicId}:${data.selection?.rawUploadGeneration || 0}:${data.selection?.reopenedAt || ''}`} expiresAt={data.expiry?.expiresAt}><main className={`client-portal ${styles.clientPortal}`}>
     <ClientPhotoSelection
-      publicId={publicId} selection={data.selection} gallery={data.gallery} galleryTotal={data.galleryTotal}
+      publicId={publicId} packageCategory={data.booking.packageCategory} selection={data.selection} gallery={data.gallery} galleryTotal={data.galleryTotal}
       loadingMore={loadingMore} addons={data.addonCatalog} projectStatus={stageLabel(data.editingStatus)}
       sampleMode={sampleMode}
       paymentSummary={{ packageAmount: data.booking.price, amountPaid: data.booking.amountPaid }}

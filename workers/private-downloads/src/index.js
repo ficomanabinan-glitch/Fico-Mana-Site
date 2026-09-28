@@ -181,7 +181,17 @@ const privateDownloadWorker = {
     }
     const sourceBytes = entries.reduce((total, entry) => total + BigInt(entry.byteSize), 0n)
 
-    const { readable, writable } = new TransformStream()
+    // Cloudflare ignores a manually supplied Content-Length for ordinary
+    // streams. A FixedLengthStream makes the measured ZIP size part of the
+    // response body contract, so browsers can show total download progress.
+    const archiveBytes = BigInt(zipContentLength(entries))
+    if (archiveBytes > BigInt(Number.MAX_SAFE_INTEGER)) {
+      await complete(env, manifestId, hash, false)
+      return json('This download is too large to prepare safely.', 413)
+    }
+    const { readable, writable } = typeof FixedLengthStream === 'function'
+      ? new FixedLengthStream(archiveBytes)
+      : new TransformStream()
     const archive = new ZipWriter(writable, { level: 0, zip64: true, useWebWorkers: false })
     const streamTask = (async () => {
       let success = false
@@ -222,7 +232,7 @@ const privateDownloadWorker = {
         'content-disposition': `attachment; filename="${cleanDownloadName(manifest.fileName)}"`,
         'cache-control': 'private, no-store',
         'content-security-policy': "default-src 'none'; sandbox",
-        'content-length': zipContentLength(entries),
+        'content-length': archiveBytes.toString(),
         'referrer-policy': 'no-referrer',
         'x-ficomana-source-bytes': sourceBytes.toString(),
         'x-content-type-options': 'nosniff',

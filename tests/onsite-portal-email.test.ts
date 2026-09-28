@@ -28,7 +28,7 @@ function fixture(options: { foreign?: boolean; inactive?: boolean; empty?: boole
     '@/lib/email': { sendEmail: async (input: any) => { sends.push(input); return { success: !options.failure } } },
     '@/lib/email-templates': { escapeEmailText: (text: string) => text.replaceAll('<', '&lt;').replaceAll('>', '&gt;') },
     '@/lib/client-portal': { portalUrl: () => 'https://www.ficomana.com/portal/private?sig=test' },
-    '@/lib/package-workflow-server': { packageUsesGraduationWorkflow: async () => true },
+    '@/lib/package-workflow-server': { packageUsesOnsiteWorkflow: async () => true, packageUsesGraduationWorkflow: async () => true },
   })
   return { calls, sends, expiryCalls, run: () => portalEmailModule.sendPortalAccessIfNeeded(admin as never, 'ONE', { workspaceId: 'studio', type: 'staff', id: 'staff' }) }
 }

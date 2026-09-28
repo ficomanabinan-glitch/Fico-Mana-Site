@@ -66,7 +66,7 @@ test('first upload creates only the missing selection control row', async () => 
     status: 'OPEN',
     client_status: 'Not Started',
     required_count: 8,
-    included_limit: 5,
+    included_limit: 8,
   })
 })
 

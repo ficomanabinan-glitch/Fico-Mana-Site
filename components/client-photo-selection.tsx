@@ -10,6 +10,7 @@ import { calculateClientAddons, initialEditingPreference, portalPaymentSummary, 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import PortalPhotoContactSheet from '@/components/portal-photo-contact-sheet'
 import PortalPrintPicker from '@/components/portal-print-picker'
+import { portalPrintOptions } from '@/components/portal-print-picker'
 import PortalAddonPicker from '@/components/portal-addon-picker'
 import PortalReview from '@/components/portal-review'
 import { useAdminToast } from '@/components/admin-toast-provider'
@@ -60,20 +61,24 @@ const PREFERENCES: Array<{ id: Preference; label: string; note?: string }> = [
   { id: 'less', label: 'Less Softness / Enhancement', note: 'A lighter enhancement with less softness than the standard style.' },
   { id: 'raw', label: 'RAW', note: 'Unedited photographs as they come from the camera.' },
 ]
-const PRINTS: Array<{ category: PrintCategory; label: string; quantity: number }> = [
-  { category: 'TOGA_PICTURE_4R', label: 'TOGA PICTURE — 4R Size Printed / FREE', quantity: 1 },
-  { category: 'ALAMPAY_BARONG_4R', label: 'ALAMPAY / BARONG — 4R Size Printed / FREE', quantity: 1 },
-  { category: 'FRAME_8R', label: 'FRAME — 8R Size Printed / FREE', quantity: 1 },
-  { category: 'WALLET_SIZE', label: 'WALLET SIZE — 4 Copies / FREE', quantity: 4 },
-]
 const PHOTO_TIP_DURATION_MS = 8_000
 
 function money(value: number) {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value)
 }
 
+function printsAreComplete(
+  choices: { included: string[]; printSelections: Partial<Record<PrintCategory, string>>; walletSelections: string[] },
+  printOptions: ReturnType<typeof portalPrintOptions>,
+) {
+  const requiresWallet = printOptions.some(option => option.category === 'WALLET_SIZE')
+  return printOptions.filter(option => option.category !== 'WALLET_SIZE').every(option => choices.included.includes(choices.printSelections[option.category] || '')) &&
+    (!requiresWallet || (choices.walletSelections.length >= 1 && choices.walletSelections.length <= 4 && choices.walletSelections.every(id => choices.included.includes(id))))
+}
+
 export function ClientPhotoSelection({
   publicId,
+  packageCategory = 'graduation',
   selection,
   gallery,
   galleryTotal,
@@ -93,6 +98,7 @@ export function ClientPhotoSelection({
   footerContent,
 }: {
   publicId: string
+  packageCategory?: string
   selection: ClientSelection | null
   gallery: ClientGalleryFile[]
   galleryTotal: number
@@ -113,7 +119,9 @@ export function ClientPhotoSelection({
 }) {
   const toast = useAdminToast()
   const locked = selection?.status === 'SUBMITTED' || selection?.status === 'SUBMITTING'
-  const includedLimit = Math.min(5, Math.max(0, selection?.includedLimit || 5))
+  const includedLimit = Math.min(200, Math.max(0, selection?.includedLimit || 5))
+  const printOptions = useMemo(() => portalPrintOptions(packageCategory), [packageCategory])
+  const requiresWallet = printOptions.some(option => option.category === 'WALLET_SIZE')
   const initialItems = selection?.selectedItems || []
   const [step, updateStep] = useState<Step>(locked ? 'review' : 'photos')
   const [included, setIncluded] = useState<string[]>(() => initialItems.filter((item) => !item.extraEdit).map((item) => item.fileId))
@@ -194,12 +202,12 @@ export function ClientPhotoSelection({
     setAcknowledged(choices.acknowledged)
     updateStep(locked ? choices.step : availableSelectionStep(choices.step,
       choices.included.length === includedLimit && Boolean(choices.editingPreference),
-      PRINTS.filter(item => item.category !== 'WALLET_SIZE').every(item => choices.included.includes(choices.printSelections[item.category] || '')) && choices.walletSelections.length >= 1 && choices.walletSelections.length <= 4 && choices.walletSelections.every(id => choices.included.includes(id)),
+      printsAreComplete(choices, printOptions),
       Object.values(choices.addonQuantities).filter(quantity => quantity > 0).length + (choices.extras.length > 0 ? 1 : 0) <= 4))
     setDraftExpiresAt(saved?.expiresAt || null)
     setDraftFinished(false)
     setHydratedDraftKey(hydrationKey)
-  }, [selection, locked, draftKey, hydratedDraftKey, includedLimit])
+  }, [selection, locked, draftKey, hydratedDraftKey, includedLimit, printOptions])
 
   useEffect(() => {
     if (!selection?.id || locked || draftFinished || hydratedDraftKey !== draftKey) return
@@ -224,7 +232,7 @@ export function ClientPhotoSelection({
   const chosenAddonIds = Object.entries(addonQuantities).filter(([, quantity]) => quantity > 0).map(([id]) => id)
   const addonTypeCount = chosenAddonIds.length + (extras.length > 0 ? 1 : 0)
   const photosComplete = included.length === includedLimit && Boolean(editingPreference)
-  const printsComplete = PRINTS.filter(item => item.category !== 'WALLET_SIZE').every((item) => included.includes(printSelections[item.category] || '')) && walletSelections.length >= 1 && walletSelections.length <= 4 && walletSelections.every(id => included.includes(id))
+  const printsComplete = printsAreComplete({ included, printSelections, walletSelections }, printOptions)
   const addonsComplete = addonTypeCount <= 4 && chosenAddonIds.every(id => {
     const addon = addons.find(item => item.id === id)
     return Boolean(addon && !addonPhotoError(addon, addonPhotos[id] || [], [...included, ...extras]))
@@ -350,8 +358,8 @@ export function ClientPhotoSelection({
           extraEditFileIds: extras,
           preferences: selectedAll.map((fileId) => ({ fileId, preference: editingPreference })),
           printAllocations: [
-            ...PRINTS.filter(item => item.category !== 'WALLET_SIZE').map((item) => ({ category: item.category, fileId: printSelections[item.category], quantity: item.quantity })),
-            ...walletSelections.map(fileId => ({ category: 'WALLET_SIZE' as const, fileId, quantity: 1 })),
+            ...printOptions.filter(item => item.category !== 'WALLET_SIZE').map((item) => ({ category: item.category, fileId: printSelections[item.category], quantity: 1 })),
+            ...(requiresWallet ? walletSelections.map(fileId => ({ category: 'WALLET_SIZE' as const, fileId, quantity: 1 })) : []),
           ],
           addons: requestedAddons,
           acknowledgeNoRevision: acknowledged,
@@ -437,11 +445,11 @@ export function ClientPhotoSelection({
         </div>
         <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} showPhotoTip={showPhotoTip} onDismissPhotoTip={() => setShowPhotoTip(false)} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
       </> : null}
-      {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
+      {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} options={printOptions} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
 
       {step === 'addons' ? <PortalAddonPicker addons={optionalAddons} files={selectedAll.map(selectedPhoto)} quantities={addonQuantities} assignments={addonPhotos} locked={locked || submitting || draftFinished} typeCount={addonTypeCount} extraCount={extras.length} extraPrice={extraEditAddon?.price || 0} total={addonTotal} complete={addonsComplete} onToggle={toggleAddon} onQuantity={(id, quantity) => setAddonQuantities(current => ({ ...current, [id]: quantity }))} onPhotos={(id, photos) => setAddonPhotos(current => ({ ...current, [id]: photos }))} onWarning={setMessage} onBack={() => setStep('prints')} onContinue={() => setStep('review')} /> : null}
 
-      {step === 'review' ? <PortalReview included={included} extras={extras} preference={PREFERENCES.find(item => item.id === editingPreference)?.label || 'Previously saved mixed preferences'} printSelections={printSelections} walletSelections={walletSelections} orders={pricing.lines.map(order => ({ ...order, photoIds: addonPhotos[order.id] || [] }))} selectedPhoto={selectedPhoto} packageAmount={paymentSummary.packageAmount} amountPaid={paymentSummary.amountPaid} total={payment.total} remaining={payment.remaining} acknowledged={acknowledged} locked={locked || draftFinished} submitting={submitting} canSubmit={canSubmit} sampleMode={sampleMode} onAcknowledge={setAcknowledged} onBack={() => setStep('addons')} onSubmit={requestSubmission} onPreview={setPreviewFile} onEdit={setStep} /> : null}
+      {step === 'review' ? <PortalReview included={included} extras={extras} preference={PREFERENCES.find(item => item.id === editingPreference)?.label || 'Previously saved mixed preferences'} printOptions={printOptions} printSelections={printSelections} walletSelections={walletSelections} orders={pricing.lines.map(order => ({ ...order, photoIds: addonPhotos[order.id] || [] }))} selectedPhoto={selectedPhoto} packageAmount={paymentSummary.packageAmount} amountPaid={paymentSummary.amountPaid} total={payment.total} remaining={payment.remaining} acknowledged={acknowledged} locked={locked || draftFinished} submitting={submitting} canSubmit={canSubmit} sampleMode={sampleMode} onAcknowledge={setAcknowledged} onBack={() => setStep('addons')} onSubmit={requestSubmission} onPreview={setPreviewFile} onEdit={setStep} /> : null}
       {footerContent}
     </div>
     <Sheet open={confirmationOpen} onOpenChange={(next) => { if (!submitting) { setConfirmationOpen(next); if (!next) setSubmissionPin('') } }}>

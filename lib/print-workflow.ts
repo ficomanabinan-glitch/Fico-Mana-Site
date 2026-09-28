@@ -7,6 +7,12 @@ import { copyObject, getObjectMetadata, hashObjectSha256 } from '@/lib/storage/s
 import { createStorageKey, parseStorageKey } from '@/lib/storage/storage-keys'
 
 export async function loadBookingPrintManifest(admin: SupabaseClient, workspaceId: string, bookingId: string) {
+  const { data: booking, error: bookingError } = await admin.from('bookings').select('package_id')
+    .eq('workspace_id', workspaceId).eq('id', bookingId).single()
+  if (bookingError || !booking) throw new Error('Package rules could not be checked.')
+  const { data: packageRow, error: packageError } = await admin.from('packages').select('category')
+    .eq('id', booking.package_id).single()
+  if (packageError || !packageRow) throw new Error('Package rules could not be checked.')
   const { data: selection, error } = await admin.from('photo_selections').select('id,status')
     .eq('workspace_id', workspaceId).eq('booking_id', bookingId).maybeSingle()
   if (error) throw new Error('The print choices could not be loaded. Try: retry this client upload.')
@@ -20,7 +26,7 @@ export async function loadBookingPrintManifest(admin: SupabaseClient, workspaceI
     : { data: [], error: null }
   if (galleryError) throw new Error('The print choices could not be loaded. Try: retry this client upload.')
   return { selectionStatus: String(selection.status), manifest: buildPrintManifest({
-    bookingId, selectionId: String(selection.id), allocations: allocations || [], gallery: gallery || [],
+    bookingId, selectionId: String(selection.id), packageCategory: String(packageRow.category), allocations: allocations || [], gallery: gallery || [],
   }) }
 }
 

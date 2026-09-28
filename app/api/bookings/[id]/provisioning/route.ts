@@ -7,7 +7,7 @@ import {
   provisionBookingResources,
 } from '@/lib/booking-provisioning'
 import { secureErrorResponse } from '@/lib/security/error-response'
-import { assertGraduationBooking } from '@/lib/package-workflow-server'
+import { assertOnsiteBooking } from '@/lib/package-workflow-server'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { GraduationWorkflowOnlyError } from '@/lib/package-workflow'
 import { privateNoStoreHeaders } from '@/lib/security/request-security'
@@ -58,7 +58,7 @@ export async function POST(
     if (!booking) return NextResponse.json({ error: 'Client portal not found.' }, { status: 404 })
 
     if (action !== 'disable_portal') {
-      await assertGraduationBooking(admin, id)
+      await assertOnsiteBooking(admin, id)
     }
 
     if (action === 'disable_portal') await disableClientPortal(id, actor)

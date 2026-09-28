@@ -3,7 +3,7 @@ import { requireWorkflowAuth } from '@/lib/auth-api'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 import { hasPortalExpired } from '@/lib/portal-expiry'
 import { secureErrorResponse } from '@/lib/security/error-response'
-import { graduationPackageIds } from '@/lib/package-workflow-server'
+import { onsitePackageIds } from '@/lib/package-workflow-server'
 import { isR2Configured } from '@/lib/storage/r2-client'
 
 export async function GET() {
@@ -12,12 +12,12 @@ export async function GET() {
   try {
     const admin = getSupabaseAdmin()
     if (!admin) return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
-    const eligiblePackageIds = await graduationPackageIds(admin)
+    const eligiblePackageIds = await onsitePackageIds(admin)
     const [{ data: bookings, error: bookingsError }, { data: states, error: statesError }, { data: portals, error: portalsError }, { data: settings, error: settingsError }] = await Promise.all([
       admin.from('bookings')
         .select('id,customer_name,customer_email,booking_date,package_name,booking_status,payment_status,deposit_amount,price,created_at')
         .eq('workspace_id', access.workspaceId)
-        .in('package_id', eligiblePackageIds.length ? eligiblePackageIds : ['__no_graduation_packages__'])
+        .in('package_id', eligiblePackageIds.length ? eligiblePackageIds : ['__no_photo_packages__'])
         .order('booking_date', { ascending: true }),
       admin.from('booking_provisioning').select('booking_id,status,storage_provider,storage_status,storage_prefix,last_error,provisioned_at,last_retry_at').eq('workspace_id', access.workspaceId),
       admin.from('client_portals').select('id,public_id,booking_id,status,expires_at,created_at,last_accessed_at').eq('workspace_id', access.workspaceId),

@@ -1,17 +1,27 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { GraduationWorkflowOnlyError, usesGraduationWorkflow } from '../lib/package-workflow.ts'
-import { assertGraduationBooking, graduationBookingIds, graduationPackageIds, packageUsesGraduationWorkflow } from '../lib/package-workflow-server.ts'
+import { GraduationWorkflowOnlyError, includedPrintCategories, usesGraduationWorkflow, usesOnsiteWorkflow } from '../lib/package-workflow.ts'
+import { assertGraduationBooking, assertOnsiteBooking, graduationBookingIds, graduationPackageIds, onsitePackageIds, packageUsesGraduationWorkflow, packageUsesOnsiteWorkflow } from '../lib/package-workflow-server.ts'
 import * as packageWorkflowServer from '../lib/package-workflow-server.ts'
 import * as bookingDb from '../lib/booking-db.ts'
 import { loadTs } from './helpers/load-ts.ts'
 
-test('only the explicit Graduation category uses the remote photo workflow', () => {
-  assert.equal(usesGraduationWorkflow('graduation'), true)
-  for (const category of ['self-portrait', 'creative', 'capping-pinning', 'FICO PACKAGE', 'fico-package', 'Graduation', '', null, undefined]) {
+test('all managed package categories use onsite delivery; self-portrait skips editor selection', () => {
+  for (const category of ['graduation', 'capping-pinning', 'creative']) {
+    assert.equal(usesOnsiteWorkflow(category), true)
+    assert.equal(usesGraduationWorkflow(category), true)
+  }
+  assert.equal(usesOnsiteWorkflow('self-portrait'), true)
+  assert.equal(usesGraduationWorkflow('self-portrait'), false)
+  for (const category of ['FICO PACKAGE', 'fico-package', 'Graduation', '', null, undefined]) {
+    assert.equal(usesOnsiteWorkflow(category), false)
     assert.equal(usesGraduationWorkflow(category), false)
   }
+  assert.deepEqual([...includedPrintCategories('graduation')], ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R', 'WALLET_SIZE'])
+  assert.deepEqual([...includedPrintCategories('capping-pinning')], ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R'])
+  assert.deepEqual([...includedPrintCategories('creative')], ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R'])
+  assert.deepEqual([...includedPrintCategories('self-portrait')], [])
 })
 
 type Row = Record<string, unknown>
@@ -20,7 +30,7 @@ function mockAdmin(tables: Record<string, Row[]>, failedTable = '') {
   const writes: { table: string; action: string }[] = []
   const client = { from(table: string) {
     reads.push(table)
-    let rows = tables[table] || [], start = 0, end = Infinity
+    let rows = (tables[table] ||= []), start = 0, end = Infinity
     let mutation: { action: 'update' | 'insert'; value: Row } | null = null
     const result = () => {
       if (mutation) {
@@ -40,8 +50,8 @@ function mockAdmin(tables: Record<string, Row[]>, failedTable = '') {
       insert: (value: Row) => { mutation = { action: 'insert', value }; return query },
       order: (_column: string) => { assert.ok(_column); return query },
       range: (from: number, to: number) => { start = from; end = to; return query },
-      maybeSingle: async () => ({ data: rows[0] || null, error: failedTable === table ? { message: 'Synthetic failure' } : null }),
-      single: async () => ({ data: rows[0] || null, error: failedTable === table || rows.length !== 1 ? { message: 'Synthetic failure' } : null }),
+      maybeSingle: async () => { const current = result(); return { data: current.data[0] || null, error: current.error } },
+      single: async () => { const current = result(); return { data: current.data[0] || null, error: current.error || current.data.length !== 1 ? { message: 'Synthetic failure' } : null } },
       then: (resolve: (value: unknown) => void) => resolve(result()),
     }
     return query
@@ -55,12 +65,14 @@ const tables = {
     { id: 'archived-grad', category: 'graduation', is_active: false },
     { id: 'fico-package', category: 'self-portrait', is_active: true },
     { id: 'creative-package', category: 'creative', is_active: true },
+    { id: 'pinning-package', category: 'capping-pinning', is_active: true },
   ],
   bookings: [
     { id: 'B1', package_id: 'custom-grad', workspace_id: 'studio' },
     { id: 'B2', package_id: 'fico-package', workspace_id: 'studio' },
     { id: 'B3', package_id: 'archived-grad', workspace_id: 'studio' },
     { id: 'B4', package_id: 'custom-grad', workspace_id: 'other' },
+    { id: 'B5', package_id: 'pinning-package', workspace_id: 'studio' },
   ],
 }
 
@@ -69,9 +81,13 @@ test('managed categories override seeded IDs, support custom packages, and retai
   assert.equal(await packageUsesGraduationWorkflow(admin, 'custom-grad'), true)
   assert.equal(await packageUsesGraduationWorkflow(admin, 'archived-grad'), true)
   assert.equal(await packageUsesGraduationWorkflow(admin, 'fico-package'), false)
+  assert.equal(await packageUsesGraduationWorkflow(admin, 'pinning-package'), true)
+  assert.equal(await packageUsesOnsiteWorkflow(admin, 'fico-package'), true)
   assert.equal(await packageUsesGraduationWorkflow(admin, 'unknown'), false)
-  assert.deepEqual(await graduationPackageIds(admin), ['custom-grad', 'archived-grad'])
-  assert.deepEqual([...(await graduationBookingIds(admin, 'studio', ['B1', 'B2', 'B3', 'B4']))], ['B1', 'B3'])
+  assert.deepEqual(await graduationPackageIds(admin), ['custom-grad', 'archived-grad', 'creative-package', 'pinning-package'])
+  assert.deepEqual(await onsitePackageIds(admin), ['custom-grad', 'archived-grad', 'fico-package', 'creative-package', 'pinning-package'])
+  assert.deepEqual([...(await graduationBookingIds(admin, 'studio', ['B1', 'B2', 'B3', 'B4', 'B5']))], ['B1', 'B3', 'B5'])
+  await assertOnsiteBooking(admin, 'B2', 'studio')
 })
 
 test('manual generation requires a matching workspace booking and a graduation category', async () => {
@@ -94,33 +110,29 @@ test('graduation package lookup paginates rather than dropping custom packages a
   assert.equal((await graduationPackageIds(admin)).length, 1005)
 })
 
-test('real self-portrait provisioning confirms payment without creating a portal or photo-storage state', async () => {
+test('self-portrait provisioning prepares storage but not a client portal before upload', async () => {
   const booking = { id: 'SELF-TEST', workspace_id: 'studio', package_id: 'self-custom', package_name: 'Sample Self Portrait',
     customer_name: 'Synthetic client', booking_date: '2026-09-09', booking_status: 'Pending Payment', payment_status: 'Unpaid', price: 350, deposit_amount: 0 }
   const { admin, writes, reads } = mockAdmin({
     packages: [{ id: 'self-custom', category: 'self-portrait' }], bookings: [booking],
     payments: [{ booking_id: booking.id, status: 'confirmed', amount: 350 }],
   })
-  let externalWrites = 0
   const provisioning = loadTs<typeof import('../lib/booking-provisioning.ts')>('lib/booking-provisioning.ts', {
     '@/lib/booking-db': bookingDb,
-    '@/lib/storage/storage-keys': { bookingStoragePrefix: () => { externalWrites++; throw new Error('Unexpected storage creation') } },
-    '@/lib/client-portal': {}, '@/lib/portal-expiry': {},
-    '@/lib/portal-email': { sendPortalAccessIfNeeded: async () => { externalWrites++; throw new Error('Unexpected portal email') } },
+    '@/lib/storage/storage-keys': { bookingStoragePrefix: () => 'studio/self-test' },
+    '@/lib/client-portal': {}, '@/lib/portal-expiry': { hasPortalExpired: () => false },
+    '@/lib/portal-email': { sendPortalAccessIfNeeded: async () => { throw new Error('Unexpected portal email') } },
     '@/lib/supabase/admin': { getSupabaseAdmin: () => admin },
     '@/lib/package-workflow-server': packageWorkflowServer,
   })
-  assert.equal(await provisioning.provisionBookingResources(booking.id), null)
+  assert.ok(await provisioning.provisionBookingResources(booking.id))
   assert.equal(booking.booking_status, 'Confirmed')
   assert.equal(booking.payment_status, 'Paid Full')
-  assert.equal(externalWrites, 0)
-  assert.deepEqual(writes, [{ table: 'bookings', action: 'update' }, { table: 'provisioning_audit', action: 'insert' }])
-  assert.equal(reads.includes('booking_provisioning'), false)
-  assert.equal(reads.includes('client_portals'), false)
+  assert.equal(reads.includes('booking_provisioning'), true)
   const snapshot = await provisioning.getProvisioningSnapshot(booking.id)
-  assert.equal(snapshot?.required, false)
+  assert.equal(snapshot?.storageStatus, 'ready')
   assert.equal(snapshot?.confirmedPayments, 350)
-  assert.equal(reads.includes('client_portals'), false)
+  assert.equal(writes.some(write => write.table === 'client_portals'), false)
 })
 
 test('all resource creation paths are guarded while ordinary payment confirmation remains before the skip', async () => {
@@ -136,14 +148,14 @@ test('all resource creation paths are guarded while ordinary payment confirmatio
   assert.match(provision, /first completed onsite upload activates the portal/i)
   assert.match(provision, /requiresPhotoWorkflow \? await getProvisioningRow\(admin, bookingId\) : null/)
   const snapshot = provisioning.slice(provisioning.indexOf('export async function getProvisioningSnapshot'), provisioning.indexOf('export async function provisionBookingResources'))
-  assert.ok(snapshot.indexOf('packageUsesGraduationWorkflow') < snapshot.indexOf('getProvisioningRow('))
-  assert.match(editor, /async function ensurePortal\([^]+?\{\s*await assertGraduationBooking\(admin, bookingId, workspaceId\)/)
-  assert.match(editor, /export async function ensureBookingStorage\([^]+?\{\s*await assertGraduationBooking\(admin, bookingId, workspaceId\)/)
+  assert.ok(snapshot.indexOf('packageUsesOnsiteWorkflow') < snapshot.indexOf('getProvisioningRow('))
+  assert.match(editor, /async function ensurePortal\([^]+?\{\s*await assertOnsiteBooking\(admin, bookingId, workspaceId\)/)
+  assert.match(editor, /export async function ensureBookingStorage\([^]+?\{\s*await assertOnsiteBooking\(admin, bookingId, workspaceId\)/)
   const repair = editor.slice(editor.indexOf('export async function reconcileBookingStorage'), editor.indexOf('export async function saveRawFile'))
-  assert.ok(repair.indexOf('assertGraduationBooking') < repair.indexOf('if (repair)'))
+  assert.ok(repair.indexOf('assertOnsiteBooking') < repair.indexOf('if (repair)'))
   assert.match(editor, /\.in\('package_id', eligiblePackageIds\)/)
   assert.match(editor, /bookingMap.has\(String\(job.booking_id\)\)/)
-  assert.match(overview, /graduationPackageIds\(admin\)/)
+  assert.match(overview, /onsitePackageIds\(admin\)/)
   assert.match(overview, /\.in\('package_id', eligiblePackageIds/)
-  assert.ok(email.indexOf('packageUsesGraduationWorkflow(admin') < email.indexOf('await sendEmail('))
+  assert.ok(email.indexOf('packageUsesOnsiteWorkflow(admin') < email.indexOf('await sendEmail('))
 })
