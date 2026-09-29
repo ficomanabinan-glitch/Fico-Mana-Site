@@ -107,6 +107,7 @@ try {
     assertPrivateResponse(hostile, `hostile raw ${action}`)
   }
   assert.match(home.headers.get('content-security-policy') || '', /connect-src[^;]*https:\/\/\*\.r2\.cloudflarestorage\.com/i)
+  assert.match(home.headers.get('content-security-policy') || '', /connect-src[^;]*https:\/\/ficomana-private-downloads\.ficomana-downloads\.workers\.dev/i)
 
   console.log('Production HTTP security checks passed.')
 } finally {

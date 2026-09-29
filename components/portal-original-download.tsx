@@ -113,7 +113,7 @@ export default function PortalOriginalDownload({
         <div className="max-w-2xl">
           <h2 className="text-card-title font-semibold tracking-heading">Your original photos</h2>
           <p className="mt-1 text-caption leading-relaxed text-white/45">
-            Save all {total} originals{downloadSize ? ` (about ${downloadSize})` : ''} as “{folderName}” in desktop Chrome or Edge. To save in Downloads, create and select a folder inside it—Chrome blocks selecting Downloads itself. Up to {access.limit} transfers every 7 days.
+            Save all {total} originals{downloadSize ? ` (about ${downloadSize})` : ''} as “{folderName}” in desktop Chrome or Edge. To save in Downloads, create and select a folder inside it—Chrome blocks selecting Downloads itself. Chrome’s “allow editing files” prompt gives us permission to save your photos in the folder you choose. Up to {access.limit} transfers every 7 days.
           </p>
           <p className="mt-2 text-caption text-white/35">{usedDownloads} of {access.limit} downloads used{access.activeDownloads > 0 ? ' · Finalizing current transfer' : ''}</p>
         </div>

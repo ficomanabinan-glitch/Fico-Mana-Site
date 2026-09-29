@@ -506,7 +506,7 @@ export function ClientPhotoSelection({
       {downloadPromptOpen ? <SheetContent side="bottom" className="client-portal gap-0 rounded-t-[20px] border-white/[0.12] bg-[#181819] p-5 text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
         <SheetHeader className="pr-10 text-left">
           <SheetTitle className="text-lg font-semibold text-white">Selection submitted</SheetTitle>
-          <SheetDescription className="mt-2 text-sm leading-relaxed text-white/65">Save the originals as a folder named for you and your booking. In desktop Chrome or Edge, create and select a folder inside Downloads—Chrome blocks selecting Downloads itself. Or choose Maybe Later.</SheetDescription>
+          <SheetDescription className="mt-2 text-sm leading-relaxed text-white/65">Save the originals as a folder named for you and your booking. In desktop Chrome or Edge, create and select a folder inside Downloads—Chrome blocks selecting Downloads itself. Chrome’s “allow editing files” prompt gives us permission to save your photos in the folder you choose. Or choose Maybe Later.</SheetDescription>
         </SheetHeader>
         {!downloadUrl ? <p role="status" className="mt-5 text-sm text-white/65">Your download is being prepared. It will appear below your selection when available.</p> : null}
         {downloadPromptProgress && downloadPromptSaving ? <p role="status" className="mt-5 text-sm text-white/65">{downloadPromptProgress.savedFiles} of {downloadPromptProgress.totalFiles} photos saved · {Math.round((downloadPromptProgress.writtenBytes / Math.max(1, downloadPromptProgress.totalBytes)) * 100)}%</p> : null}
