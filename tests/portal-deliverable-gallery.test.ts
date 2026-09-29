@@ -13,8 +13,8 @@ function setup() {
   const preview = { PhotoSelectButton: () => null, PortalPhotoPreview: () => null }
   const PrivateImage = () => null
   const { default: Gallery } = loadTs<typeof import('../components/portal-deliverable-gallery.tsx')>(
-    'components/portal-deliverable-gallery.tsx', { react: hooks.react, './portal-photo-preview': preview, './portal-private-image': PrivateImage, './portal-workspace.module.css': {} })
-  return { preview, PrivateImage, unmount: hooks.unmount, render: (photos = files) => hooks.render(() => Gallery({ files: photos })) }
+    'components/portal-deliverable-gallery.tsx', { react: hooks.react, './portal-photo-preview': preview, './portal-private-image': PrivateImage, './portal-single-photo-download': () => null, './portal-workspace.module.css': {} })
+  return { preview, PrivateImage, unmount: hooks.unmount, render: (photos = files) => hooks.render(() => Gallery({ files: photos, publicId: 'test', kind: 'deliverable' })) }
 }
 
 test('published hero and filmstrip reuse private URLs and open the existing preview without selection or new tabs', t => {

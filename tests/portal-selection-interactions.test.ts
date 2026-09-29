@@ -32,7 +32,7 @@ function setup(initial = selection, photos = gallery, sampleMode = false, select
     '@/components/portal-workspace.module.css': {},
     '@/components/admin-toast-provider': { useAdminToast: () => ({ success() {} }) },
     '@/lib/client-selection-summary':summary, '@/lib/portal-selection-draft':drafts, '@/lib/selection-step-navigation':navigation,
-    '@/lib/portal-folder-transfer': { downloadPortalPhotoFolder: async () => null },
+    '@/lib/private-attachment-download': { startPrivateAttachmentDownload: async () => undefined },
     '@/components/ui/sheet': { Sheet:()=>null, SheetContent:()=>null, SheetHeader:()=>null, SheetTitle:()=>null, SheetDescription:()=>null },
   })
   let pricing: summary.AddonPreview = { total:0, lines:[] }, submitted = 0

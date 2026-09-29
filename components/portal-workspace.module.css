@@ -1174,6 +1174,10 @@
 
 .thumbMeta .filename {
   font-weight: 450;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
 }
 
 .photoStatus,

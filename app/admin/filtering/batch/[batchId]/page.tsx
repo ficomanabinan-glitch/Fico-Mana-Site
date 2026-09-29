@@ -12,7 +12,7 @@ import {
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
-import { downloadPrivateFolder } from '@/lib/portal-folder-transfer'
+import { startPrivateAttachmentDownload } from '@/lib/private-attachment-download'
 import { uploadWithPresignedPlan, type BrowserUploadPlan } from '@/lib/storage/browser-upload'
 
 type JobStatus = 'WAITING_FOR_SELECTION' | 'READY_FOR_EDITING' | 'DOWNLOADED' | 'EDITING' | 'READY_TO_UPLOAD' | 'UPLOADING' | 'DELIVERED' | 'UPLOAD_FAILED'
@@ -163,8 +163,8 @@ export default function BatchDetailPage() {
   }
 
   const downloadBatch=async()=>{
-    try{const result=await downloadPrivateFolder(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/download`,batchId,()=>{});if(result){toast.success('Day batch folder saved',`${result.savedFiles} files saved in “${result.folderName}”.`);void load()}}
-    catch(error){toast.error('Folder download failed',error instanceof Error?error.message:'Try again.')}
+    try{await startPrivateAttachmentDownload(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/download`);toast.success('Day batch ZIP started','Check your browser downloads, then extract the ZIP before uploading edits.');void load()}
+    catch(error){toast.error('ZIP download failed',error instanceof Error?error.message:'Try again.')}
   }
   const chooseUploadFolder=(mode:'all'|'failed')=>{setUploadMode(mode);directoryInputRef.current?.click()}
 
@@ -176,7 +176,7 @@ export default function BatchDetailPage() {
     const resolved=new Map((detail.needsReview||[]).filter((item)=>item.status==='RESOLVED'&&item.resolvedBookingId).map((item)=>[item.sourceFolderName.toLowerCase(),String(item.resolvedBookingId)]))
     let manifest:BatchManifest
     if(manifestFile){
-      try{manifest=JSON.parse(await manifestFile.text()) as BatchManifest}catch{toast.error('Folder could not be read','Try: save the batch folder again, then select that folder.');return}
+      try{manifest=JSON.parse(await manifestFile.text()) as BatchManifest}catch{toast.error('Folder could not be read','Try: extract the downloaded ZIP again, then select that folder.');return}
       if(manifest.batch_id!==batchId||!Array.isArray(manifest.clients)){toast.error('Wrong batch folder',`Expected ${batchId}.`);return}
     }else{
       const clients=folderNames.map((folderName)=>{const bookingId=resolved.get(folderName.toLowerCase());const job=detail.jobs.find((item)=>item.bookingId===bookingId);return job?{booking_id:job.bookingId,client_id:job.clientId,folder_name:folderName,customer_name:job.customerName,expected_output_count:job.expectedOutputCount}:null}).filter((item):item is ManifestClient=>Boolean(item))

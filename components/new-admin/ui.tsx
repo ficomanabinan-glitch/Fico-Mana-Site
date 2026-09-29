@@ -4,7 +4,7 @@ import { useState, type ReactNode, type ComponentProps } from 'react'
 import { Circle, CircleCheck, CircleAlert, Clock3, ExternalLink, Inbox } from 'lucide-react'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import styles from './new-admin.module.css'
-import { downloadPrivateFolder } from '@/lib/portal-folder-transfer'
+import { startPrivateAttachmentDownload } from '@/lib/private-attachment-download'
 
 export function Button({ className = '', primary = false, ...props }: ComponentProps<typeof ShadcnButton> & { primary?: boolean }) {
   return <ShadcnButton {...props} className={`${styles.button} ${primary ? styles.primary : ''} ${className}`} />
@@ -21,17 +21,13 @@ function FolderAction({ href, children, primary }: { href: string; children: Rea
     if (saving) return
     setSaving(true)
     setMessage('')
-    const url = new URL(href, window.location.origin)
-    const folderName = url.pathname.includes('/collections/')
-      ? `FICO-MANA-${(url.searchParams.get('scope') || 'DAY').toUpperCase()}-${url.searchParams.get('key') || 'BATCH'}`
-      : decodeURIComponent(url.pathname.split('/')[4] || 'FICO-MANA-BATCH')
     try {
-      const result = await downloadPrivateFolder(href, folderName, () => {})
-      if (result) setMessage(`${result.savedFiles} files saved in “${result.folderName}”.`)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'The folder could not be saved.') }
+      await startPrivateAttachmentDownload(href)
+      setMessage('ZIP download started. Check your browser downloads.')
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'The ZIP could not be downloaded.') }
     finally { setSaving(false) }
   }
-  return <span className="inline-flex flex-col items-start gap-1"><button type="button" disabled={saving} className={`${styles.action} ${primary ? styles.primary : ''}`} onClick={() => void save()}>{saving ? 'Saving folder…' : children}</button>{message ? <small role="status" className={styles.muted}>{message}</small> : null}</span>
+  return <span className="inline-flex flex-col items-start gap-1"><button type="button" disabled={saving} className={`${styles.action} ${primary ? styles.primary : ''}`} onClick={() => void save()}>{saving ? 'Preparing ZIP…' : children}</button>{message ? <small role="status" className={styles.muted}>{message}</small> : null}</span>
 }
 export function Panel({ title, action, children, body = false }: { title?: string; action?: ReactNode; children: ReactNode; body?: boolean }) {
   return <section className={styles.panel}>{title && <header className={styles.panelHeader}><h2>{title}</h2>{action}</header>}<div className={body ? styles.panelBody : undefined}>{children}</div></section>

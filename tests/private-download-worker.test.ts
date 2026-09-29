@@ -1,11 +1,116 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { BlobReader, Uint8ArrayWriter, ZipReader } from '@zip.js/zip.js'
 import worker from '../workers/private-downloads/src/index.js'
 
-test('legacy ZIP links cannot create a new archive', async () => {
+test('download links require a live private manifest', async () => {
   const response = await worker.fetch(new Request(`https://downloads.example/download/11111111-1111-4111-8111-111111111111?token=${'a'.repeat(43)}`), {}, {})
   assert.equal(response.status, 410)
-  assert.match(await response.text(), /ZIP downloads are no longer available/)
+  assert.match(await response.text(), /link is unavailable/)
+})
+
+test('ZIP download streams originals with a verified total and records success', async () => {
+  const manifestId = '55555555-5555-4555-8555-555555555555'
+  const originalFetch = globalThis.fetch
+  const completions: boolean[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith('/resolve_private_download_manifest')) return Response.json({
+      kind: 'PORTAL_ORIGINALS', fileName: 'Client - FM-123456 - Originals', entries: [
+        { name: 'First.JPG', storageKey: 'one', byteSize: 3 },
+        { name: 'Second.JPG', storageKey: 'two', byteSize: 2 },
+      ],
+    })
+    completions.push(Boolean(JSON.parse(String(init?.body || '{}')).p_success))
+    return Response.json(true)
+  }) as typeof fetch
+  try {
+    const tasks: Promise<unknown>[] = []
+    const response = await worker.fetch(new Request(`https://downloads.example/download/${manifestId}?token=${'a'.repeat(43)}`), {
+      SUPABASE_URL: 'https://example.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'public-key',
+      PRIVATE_PHOTOS: {
+        head: async (key: string) => ({ size: key === 'one' ? 3 : 2 }),
+        get: async (key: string) => ({ body: new Blob([key === 'one' ? 'abc' : 'de']).stream() }),
+      },
+    }, { waitUntil: (task: Promise<unknown>) => tasks.push(task) })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('content-type'), 'application/zip')
+    assert.match(response.headers.get('content-disposition') || '', /Client - FM-123456 - Originals\.zip/)
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    await Promise.all(tasks)
+    assert.equal(bytes.byteLength, Number(response.headers.get('content-length')))
+    const reader = new ZipReader(new BlobReader(new Blob([bytes])))
+    const entries = await reader.getEntries()
+    assert.deepEqual(entries.map(entry => entry.filename), ['First.JPG', 'Second.JPG'])
+    assert.ok('getData' in entries[0] && 'getData' in entries[1])
+    const first = await entries[0].getData(new Uint8ArrayWriter())
+    const second = await entries[1].getData(new Uint8ArrayWriter())
+    assert.equal(new TextDecoder().decode(first), 'abc')
+    assert.equal(new TextDecoder().decode(second), 'de')
+    await reader.close()
+    assert.deepEqual(completions, [true])
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('single-photo download is a normal attachment and does not use a weekly slot', async () => {
+  const manifestId = '66666666-6666-4666-8666-666666666666'
+  const originalFetch = globalThis.fetch
+  const completions: boolean[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith('/resolve_private_download_manifest')) return Response.json({
+      kind: 'PORTAL_ORIGINAL_SINGLE', fileName: 'Portrait.JPG', entries: [{ name: 'Portrait.JPG', storageKey: 'one', byteSize: 3 }],
+    })
+    completions.push(Boolean(JSON.parse(String(init?.body || '{}')).p_success))
+    return Response.json(true)
+  }) as typeof fetch
+  try {
+    const tasks: Promise<unknown>[] = []
+    const response = await worker.fetch(new Request(`https://downloads.example/file/${manifestId}?token=${'a'.repeat(43)}`), {
+      SUPABASE_URL: 'https://example.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'public-key',
+      PRIVATE_PHOTOS: {
+        head: async () => ({ size: 3 }),
+        get: async () => ({ body: new Blob(['abc']).stream() }),
+      },
+    }, { waitUntil: (task: Promise<unknown>) => tasks.push(task) })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('content-length'), '3')
+    assert.match(response.headers.get('content-disposition') || '', /Portrait\.JPG/)
+    assert.equal(await response.text(), 'abc')
+    await Promise.all(tasks)
+    assert.deepEqual(completions, [true])
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('editor ZIP preserves nested folders and empty EDITED directory', async () => {
+  const manifestId = '77777777-7777-4777-8777-777777777777'
+  const originalFetch = globalThis.fetch
+  const completions: boolean[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith('/resolve_private_download_manifest')) return Response.json({
+      kind: 'EDITOR_BATCH', fileName: 'FICO-MANA-DAY', entries: [
+        { name: 'manifest.json', inlineBase64: Buffer.from('{"batch":true}').toString('base64') },
+        { name: 'CLIENT/SELECTED/EDITED/', inlineBase64: '' },
+      ],
+    })
+    completions.push(Boolean(JSON.parse(String(init?.body || '{}')).p_success))
+    return Response.json(true)
+  }) as typeof fetch
+  try {
+    const tasks: Promise<unknown>[] = []
+    const response = await worker.fetch(new Request(`https://downloads.example/download/${manifestId}?token=${'a'.repeat(43)}`), {
+      SUPABASE_URL: 'https://example.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'public-key',
+      PRIVATE_PHOTOS: { head: async () => { throw new Error('no R2 needed') }, get: async () => { throw new Error('no R2 needed') } },
+    }, { waitUntil: (task: Promise<unknown>) => tasks.push(task) })
+    assert.equal(response.status, 200)
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    await Promise.all(tasks)
+    assert.equal(bytes.byteLength, Number(response.headers.get('content-length')))
+    const reader = new ZipReader(new BlobReader(new Blob([bytes])))
+    const entries = await reader.getEntries()
+    assert.deepEqual(entries.map(entry => entry.filename), ['CLIENT/SELECTED/EDITED/', 'manifest.json'])
+    assert.equal(entries[0].directory, true)
+    await reader.close()
+    assert.deepEqual(completions, [true])
+  } finally { globalThis.fetch = originalFetch }
 })
 
 test('private download worker authorizes, streams R2 bytes, and records completion', async () => {

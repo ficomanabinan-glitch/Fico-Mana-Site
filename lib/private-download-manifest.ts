@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { getSupabaseAdmin } from '@/lib/supabase/admin'
 
 type DownloadEntry = { name: string; storageKey?: string; data?: Buffer; byteSize?: number }
-type DownloadKind = 'PORTAL_ORIGINALS' | 'PORTAL_DELIVERABLES' | 'EDITOR_BATCH'
+type DownloadKind = 'PORTAL_ORIGINALS' | 'PORTAL_ORIGINAL_SINGLE' | 'PORTAL_DELIVERABLES' | 'EDITOR_BATCH'
 
 function safeFileName(value: string) {
   return value.replace(/["\r\n]/g, '').slice(0, 180) || 'FICO-MANA-PHOTOS'
@@ -44,19 +44,32 @@ export async function createPortalDownloadRedirect(input: {
   entries: DownloadEntry[]
   fileName: string
   rawAttemptId?: string
+  format?: 'zip' | 'file'
 }) {
   const admin = getSupabaseAdmin()
   if (!admin) throw new Error('This service is temporarily unavailable.')
   const entries = cleanEntries(input.entries)
   if (!entries.length || entries.length > 2000) throw new Error('No downloadable photos are available.')
+  if (input.format === 'file' && (entries.length !== 1 || !entries[0].storageKey)) {
+    throw new Error('Choose one stored photo to download.')
+  }
   const { data: portal, error: portalError } = await admin
     .from('client_portals')
-    .select('id,workspace_id,public_id,bookings!inner(workspace_id),workspaces!inner(slug,status)')
+    .select('id,workspace_id,public_id,bookings!inner(id,customer_name,workspace_id),workspaces!inner(slug,status)')
     .eq('public_id', input.publicId)
     .eq('workspaces.slug', 'fico-mana')
     .eq('workspaces.status', 'active')
     .maybeSingle()
   if (portalError || !portal) throw new Error('Portal not found.')
+  const booking = Array.isArray(portal.bookings) ? portal.bookings[0] : portal.bookings
+  if (!booking || String(booking.workspace_id) !== String(portal.workspace_id)) throw new Error('Portal booking not found.')
+  const clientLabel = String(booking.customer_name || 'Client').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim()
+  const reference = String(booking.id || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').trim()
+  const archiveName = input.kind === 'PORTAL_ORIGINALS'
+    ? `${clientLabel} - ${reference} - Originals`
+    : input.kind === 'PORTAL_DELIVERABLES' && input.format !== 'file'
+      ? `${clientLabel} - ${reference} - Edited`
+      : input.fileName
   const token = randomBytes(32).toString('base64url')
   const tokenHash = createHash('sha256').update(token).digest('hex')
   const { data: manifest, error } = await admin.from('private_download_manifests').insert({
@@ -65,11 +78,11 @@ export async function createPortalDownloadRedirect(input: {
     raw_attempt_id: input.rawAttemptId || null,
     kind: input.kind,
     token_hash: tokenHash,
-    file_name: safeFileName(input.fileName),
+    file_name: safeFileName(archiveName),
     entries,
   }).select('id').single()
   if (error || !manifest) throw new Error(error?.message || 'The download could not be prepared.')
-  return `${workerBaseUrl()}/folder/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
+  return `${workerBaseUrl()}/${input.format === 'file' ? 'file' : 'download'}/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
 }
 
 export async function createEditorBatchDownloadRedirect(input: {
@@ -106,5 +119,5 @@ export async function createEditorBatchDownloadRedirect(input: {
     completion_payload: completionPayload,
   }).select('id').single()
   if (error || !manifest) throw new Error(error?.message || 'The batch download could not be prepared.')
-  return `${workerBaseUrl()}/folder/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
+  return `${workerBaseUrl()}/download/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
 }

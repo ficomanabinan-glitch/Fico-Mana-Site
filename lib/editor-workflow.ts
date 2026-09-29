@@ -2605,6 +2605,8 @@ export async function preparePortalDeliverables(publicId: string) {
     .eq('workspace_id', portal.workspace_id)
     .eq('booking_id', portal.booking_id)
     .eq('storage_status', 'available')
+    .eq('storage_provider', 'r2')
+    .not('published_at', 'is', null)
     .order('published_at', { ascending: true })
   if (error) throw new Error(error.message)
   return (data || []).map((file) => ({
@@ -2614,7 +2616,7 @@ export async function preparePortalDeliverables(publicId: string) {
   }))
 }
 
-export async function preparePortalRawPhotos(publicId: string) {
+async function portalOriginalsReady(publicId: string) {
   const { admin, portal } = await portalRecord(publicId)
   const { data: booking, error: bookingError } = await admin.from('bookings').select('package_id')
     .eq('workspace_id', portal.workspace_id).eq('id', portal.booking_id).single()
@@ -2628,6 +2630,11 @@ export async function preparePortalRawPhotos(publicId: string) {
   if (packageRow.category !== 'self-portrait' && (!selection.data || selection.data.status !== 'SUBMITTED')) {
     throw new PortalSelectionError('Submit your photo selection before downloading all original photos.', 'SELECTION_REQUIRED', 409)
   }
+  return { admin, portal }
+}
+
+export async function preparePortalRawPhotos(publicId: string) {
+  const { admin, portal } = await portalOriginalsReady(publicId)
   const { data, error } = await admin.from('gallery_files').select('storage_key,file_name,file_size')
     .eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id)
     .eq('storage_provider', 'r2').eq('storage_status', 'available').order('created_at', { ascending: true })
@@ -2640,6 +2647,25 @@ export async function preparePortalRawPhotos(publicId: string) {
     const duplicateSafeName = count === 1 ? baseName : baseName.replace(/(\.[^.]+)?$/, `-${count}$1`)
     return { name: duplicateSafeName, storageKey: String(file.storage_key), byteSize: Number(file.file_size || 0) }
   })
+}
+
+export async function preparePortalSinglePhoto(publicId: string, fileId: string, kind: 'original' | 'deliverable') {
+  const { admin, portal } = kind === 'original' ? await portalOriginalsReady(publicId) : await portalRecord(publicId)
+  const table = kind === 'original' ? 'gallery_files' : 'deliverable_files'
+  let query = admin.from(table).select('storage_key,file_name,file_size')
+    .eq('id', fileId).eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id)
+    .eq('storage_provider', 'r2').eq('storage_status', 'available')
+  if (kind === 'deliverable') query = query.not('published_at', 'is', null)
+  const { data, error } = await query.maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data?.storage_key) throw new PortalSelectionError('This photo is unavailable.', 'FILE_UNAVAILABLE', 404)
+  const storageKey = String(data.storage_key)
+  assertStorageKeyOwnership(storageKey, String(portal.workspace_id), String(portal.booking_id))
+  return {
+    name: safeSegment(String(data.file_name)) || fileId,
+    storageKey,
+    byteSize: Number(data.file_size || 0),
+  }
 }
 
 export function storageDownloadBuffer(storageKey: string) {

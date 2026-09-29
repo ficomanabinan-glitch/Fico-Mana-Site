@@ -25,6 +25,7 @@ export const API_RATE_LIMITS = {
   portalSelection: { name: 'portal-selection', limit: 10, windowSeconds: 10 * 60, failClosed: true },
   portalSubmissionPin: { name: 'portal-submission-pin', limit: 5, windowSeconds: 15 * 60, failClosed: true },
   portalDownload: { name: 'portal-download', limit: 12, windowSeconds: 60 * 60, failClosed: true },
+  portalSingleDownload: { name: 'portal-single-download', limit: 60, aggregateLimit: 240, windowSeconds: 60 * 60, failClosed: true },
   // Abuse control only. The completed-download business allowance is enforced
   // atomically in the database so interrupted transfers do not consume access.
   portalRawDownload: { name: 'portal-raw-download', limit: 10, windowSeconds: 60 * 60, failClosed: true },
@@ -76,7 +77,7 @@ async function rateLimitKey(request: Request, policy: ApiRateLimitPolicy, dimens
   const safeDimensions = dimensions.map((value) => value.trim().slice(0, 300)).filter(Boolean)
   // The photo allowance belongs to a browser device, while its aggregate
   // companion remains IP-scoped to bound cookie resets and automated abuse.
-  const device = policy.name === 'portal-photo-read' ? portalDeviceId(request.headers.get('cookie')) : null
+  const device = ['portal-photo-read', 'portal-single-download'].includes(policy.name) ? portalDeviceId(request.headers.get('cookie')) : null
   const principal = device ? `device:${device}` : `ip:${requestClientIp(request)}`
   return sha256(`${secret}:${policy.name}:${principal}:${safeDimensions.join(':')}`)
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Download, Send } from 'lucide-react'
 import type { PortalRawDownloadAccess } from '@/lib/portal-raw-downloads'
-import { clientPhotoFolderName, downloadPortalPhotoFolder, type FolderTransferProgress } from '@/lib/portal-folder-transfer'
+import { startPrivateAttachmentDownload } from '@/lib/private-attachment-download'
 
 const primary = 'min-h-11 rounded-control bg-primary px-4 py-2.5 text-caption font-semibold text-white transition-[background-color,transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:bg-[#0903e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 disabled:pointer-events-none disabled:opacity-45'
 const secondary = 'min-h-11 rounded-control border border-white/12 bg-white/[0.035] px-4 py-2.5 text-caption font-semibold text-white/80 transition-colors hover:border-white/20 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/60 disabled:pointer-events-none disabled:opacity-45'
@@ -19,8 +19,6 @@ export function formatDownloadSize(bytes: number) {
 export default function PortalOriginalDownload({
   total,
   totalBytes,
-  customerName,
-  bookingReference,
   access,
   downloadUrl,
   requestUrl,
@@ -30,8 +28,6 @@ export default function PortalOriginalDownload({
 }: {
   total: number
   totalBytes: number
-  customerName: string
-  bookingReference: string
   access: PortalRawDownloadAccess | null
   downloadUrl: string | null
   requestUrl: string | null
@@ -43,7 +39,6 @@ export default function PortalOriginalDownload({
   const [reason, setReason] = useState('')
   const [sending, setSending] = useState(false)
   const [starting, setStarting] = useState(false)
-  const [progress, setProgress] = useState<FolderTransferProgress | null>(null)
   const [message, setMessage] = useState('')
   if (!access || !requestUrl) return null
 
@@ -52,20 +47,17 @@ export default function PortalOriginalDownload({
   const retrying = access.requestStatus === 'RESERVED' || access.activeDownloads > 0
   const usedDownloads = Math.min(access.limit, access.completedInWindow + access.activeDownloads)
   const downloadSize = formatDownloadSize(totalBytes)
-  const folderName = clientPhotoFolderName(customerName, bookingReference)
 
-  async function saveFolder() {
+  async function downloadAll() {
     if (!downloadUrl || starting) return
     if (onDemoDownload) { onDemoDownload(); return }
     setStarting(true)
-    setProgress(null)
     setMessage('')
     try {
-      const result = await downloadPortalPhotoFolder(downloadUrl, customerName, bookingReference, setProgress)
-      if (!result) return
-      setMessage(`${result.savedFiles} photos saved in “${folderName}” (${formatDownloadSize(result.totalBytes)}).`)
+      await startPrivateAttachmentDownload(downloadUrl)
+      setMessage('Your ZIP download has started. Check your browser downloads.')
     } catch (error) {
-      setMessage(`${error instanceof Error ? error.message : 'The photo transfer stopped.'} Some photos may already be in “${folderName}”. Choose the same save location to retry.`)
+      setMessage(error instanceof Error ? error.message : 'The download could not be started. Please try again.')
     } finally {
       setStarting(false)
       await onAccessChanged().catch(() => undefined)
@@ -112,15 +104,13 @@ export default function PortalOriginalDownload({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="max-w-2xl">
           <h2 className="text-card-title font-semibold tracking-heading">Your original photos</h2>
-          <p className="mt-1 text-caption leading-relaxed text-white/45">
-            Save all {total} originals{downloadSize ? ` (about ${downloadSize})` : ''} as “{folderName}” in desktop Chrome or Edge. To save in Downloads, create and select a folder inside it—Chrome blocks selecting Downloads itself. Chrome’s “allow editing files” prompt gives us permission to save your photos in the folder you choose. Up to {access.limit} transfers every 7 days.
-          </p>
-          <p className="mt-2 text-caption text-white/35">{usedDownloads} of {access.limit} downloads used{access.activeDownloads > 0 ? ' · Finalizing current transfer' : ''}</p>
+          <p className="mt-2 text-caption text-white/45">{total} originals{downloadSize ? ` · about ${downloadSize}` : ''} · ZIP</p>
+          <p className="mt-1 text-caption text-white/35">{usedDownloads} of {access.limit} weekly download slots used{access.activeDownloads > 0 ? ' · A transfer is still reserved' : ''}</p>
         </div>
         {downloadUrl ? (
-          <button type="button" disabled={starting} className={`${primary} inline-flex shrink-0 items-center justify-center gap-2`} onClick={() => void saveFolder()}>
+          <button type="button" disabled={starting} className={`${primary} inline-flex shrink-0 items-center justify-center gap-2`} onClick={() => void downloadAll()}>
             <Download className="size-3.5" strokeWidth={1.5} />
-            {starting ? 'Saving photos…' : retrying ? 'Save folder again' : granted ? 'Use granted download' : 'Save photo folder'}
+            {starting ? 'Preparing ZIP…' : retrying ? 'Download all again' : granted ? 'Use granted download' : 'Download all photos'}
           </button>
         ) : pending ? (
           <button type="button" className={secondary} disabled>
@@ -132,7 +122,6 @@ export default function PortalOriginalDownload({
           </button>
         )}
       </div>
-      {progress && starting ? <div className="mt-4" role="status" aria-live="polite"><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#929fff] transition-[width]" style={{ width: `${Math.min(100, (progress.writtenBytes / Math.max(1, progress.totalBytes)) * 100)}%` }} /></div><p className="mt-2 text-caption text-white/55">{formatDownloadSize(progress.writtenBytes)} of {formatDownloadSize(progress.totalBytes)} · {progress.savedFiles} of {progress.totalFiles} photos saved</p></div> : null}
 
       {requestOpen ? (
         <div className="mt-5 rounded-control border border-white/10 bg-black/20 p-4">

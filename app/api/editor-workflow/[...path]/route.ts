@@ -27,6 +27,7 @@ import {
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
   preparePortalRawPhotos,
+  preparePortalSinglePhoto,
   reconcileBookingStorage,
   recordMatchReviews,
   resolveMatchReview,
@@ -113,6 +114,8 @@ async function handlePortal(request: NextRequest, path: string[]) {
       ? API_RATE_LIMITS.portalRawDownloadRequest
     : path[2] === 'raw-photos-folder'
       ? API_RATE_LIMITS.portalRawDownload
+      : path[2] === 'single-photo'
+      ? API_RATE_LIMITS.portalSingleDownload
       : path[2] === 'deliverables-folder'
       ? API_RATE_LIMITS.portalDownload
       : path[2] === 'file'
@@ -197,6 +200,22 @@ async function handlePortal(request: NextRequest, path: string[]) {
     })
     return json({ url })
   }
+  if (path.length === 4 && path[2] === 'single-photo' && method === 'POST') {
+    const fileId = decodeURIComponent(path[3])
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId)) {
+      return json({ error: 'Choose a valid photo.' }, 400)
+    }
+    const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'original'
+    const file = await preparePortalSinglePhoto(publicId, fileId, kind)
+    const url = await createPortalDownloadRedirect({
+      publicId,
+      kind: kind === 'original' ? 'PORTAL_ORIGINAL_SINGLE' : 'PORTAL_DELIVERABLES',
+      entries: [file],
+      fileName: file.name,
+      format: 'file',
+    })
+    return json({ url })
+  }
   if (path.length === 3 && path[2] === 'raw-download-request' && method === 'POST') {
     const parsed = portalRawDownloadRequestSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return json({ error: 'Add a reason between 5 and 500 characters.' }, 400)
@@ -237,7 +256,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
     }
   }
   if (path.length === 3 && (path[2] === 'raw-photos.zip' || path[2] === 'deliverables.zip')) {
-    return json({ error: 'ZIP downloads are no longer available. Use Save Folder in the portal.' }, 410)
+    return json({ error: 'This old download link has expired. Use Download all in the portal.' }, 410)
   }
   return json({ error: 'Unknown client portal workflow endpoint.' }, 404)
 }

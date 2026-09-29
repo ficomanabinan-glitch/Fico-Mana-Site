@@ -4,13 +4,15 @@ import { memo } from 'react'
 import { Check, ChevronLeft, ChevronRight, X, ZoomIn } from 'lucide-react'
 import { PhotoSelectButton } from '@/components/portal-photo-preview'
 import PortalPrivateImage from '@/components/portal-private-image'
+import PortalSinglePhotoDownload from '@/components/portal-single-photo-download'
 import type { ClientGalleryFile } from '@/components/client-photo-selection'
 import styles from './portal-workspace.module.css'
 
 const money = (value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value)
 
-const ContactPhoto = memo(function ContactPhoto({ file, included, extra, focused, locked, extraPrice, selectionOrder, onFocus, onToggle, onPreview }: {
+const ContactPhoto = memo(function ContactPhoto({ file, included, extra, focused, locked, extraPrice, selectionOrder, publicId, canDownloadIndividual, onFocus, onToggle, onPreview }: {
   file: ClientGalleryFile; included: boolean; extra: boolean; focused: boolean; locked: boolean; extraPrice: number; selectionOrder?: number
+  publicId: string; canDownloadIndividual: boolean
   onFocus: (id: string) => void; onToggle: (id: string) => void; onPreview: (file: ClientGalleryFile) => void
 }) {
   return <article className={styles.thumb}>
@@ -24,10 +26,12 @@ const ContactPhoto = memo(function ContactPhoto({ file, included, extra, focused
       <button type="button" className={styles.zoom} aria-label={`Zoom ${file.fileName}`} onClick={() => onPreview(file)}><ZoomIn size={17} strokeWidth={1.5} /></button>
     </div>
     <div className={styles.thumbMeta}><span className={styles.filename}>{file.fileName}</span>{included || extra ? <span className={`${styles.photoStatus} ${extra ? styles.extraStatus : ''}`}>{extra ? `Extra ${money(extraPrice)}` : 'Included'}</span> : null}</div>
+    {canDownloadIndividual ? <div className="mt-2"><PortalSinglePhotoDownload publicId={publicId} fileId={file.id} kind="original" fileName={file.fileName} compact /></div> : null}
   </article>
 })
 
-export default function PortalPhotoContactSheet({ gallery, galleryTotal, selectedFiles, filter, onFilter, included, extras, includedLimit, extraPrice, activeFile, locked, photosComplete, loadingMore, showPhotoTip, onDismissPhotoTip, onFocus, onToggle, onPreview, onLoadMore, onContinue }: {
+export default function PortalPhotoContactSheet({ publicId, canDownloadIndividual, gallery, galleryTotal, selectedFiles, filter, onFilter, included, extras, includedLimit, extraPrice, activeFile, locked, photosComplete, loadingMore, showPhotoTip, onDismissPhotoTip, onFocus, onToggle, onPreview, onLoadMore, onContinue }: {
+  publicId: string; canDownloadIndividual: boolean
   gallery: ClientGalleryFile[]; galleryTotal: number; included: string[]; extras: string[]; includedLimit: number; extraPrice: number
   selectedFiles: ClientGalleryFile[]; filter: 'all' | 'selected'; onFilter: (filter: 'all' | 'selected') => void
   activeFile: ClientGalleryFile | null; locked: boolean; photosComplete: boolean; loadingMore: boolean
@@ -53,7 +57,7 @@ export default function PortalPhotoContactSheet({ gallery, galleryTotal, selecte
         <div className={styles.filters}><button type="button" className={styles.chip} aria-pressed={filter === 'all'} onClick={() => onFilter('all')}>All</button><button type="button" className={styles.chip} aria-pressed={filter === 'selected'} onClick={() => onFilter('selected')}>Selected {selectedFiles.length}</button></div>
       </div>
       {files.length ? <div className={styles.gallery} data-testid="portal-contact-sheet">{files.map(file => <ContactPhoto key={file.id} file={file}
-        included={included.includes(file.id)} extra={extras.includes(file.id)} focused={activeFile?.id === file.id} locked={locked} extraPrice={extraPrice} selectionOrder={selectionOrder.get(file.id)}
+        included={included.includes(file.id)} extra={extras.includes(file.id)} focused={activeFile?.id === file.id} locked={locked} extraPrice={extraPrice} selectionOrder={selectionOrder.get(file.id)} publicId={publicId} canDownloadIndividual={canDownloadIndividual}
         onFocus={onFocus} onToggle={onToggle} onPreview={onPreview} />)}</div> : <p className={styles.empty}>{filter === 'selected' ? 'Your selected photos will appear here.' : 'Your studio gallery is still being prepared.'}</p>}
       {filter === 'all' && gallery.length < galleryTotal ? <button type="button" className={`${styles.secondary} ${styles.loadMore}`} onClick={onLoadMore} disabled={loadingMore}>{loadingMore ? 'Loading more…' : `Load more photos (${gallery.length} of ${galleryTotal})`}</button> : null}
     </div>
@@ -62,6 +66,7 @@ export default function PortalPhotoContactSheet({ gallery, galleryTotal, selecte
       {activeFile ? <>
         <button type="button" className={styles.previewCanvas} onClick={() => onPreview(activeFile)} aria-label={`Zoom ${activeFile.fileName}`}><PortalPrivateImage key={activeFile.id} src={activeFile.previewUrl} alt={activeFile.fileName} fit="contain" eager /></button>
         <div className={styles.previewFooter}><p className={styles.filename}>{activeFile.fileName}</p><p className={styles.description}>{extras.includes(activeFile.id) ? `Extra enhancement, ${money(extraPrice)}` : included.includes(activeFile.id) ? 'Included in your selection' : 'Use the button below to select this photo.'}</p>
+          {canDownloadIndividual ? <div className="mb-3"><PortalSinglePhotoDownload publicId={publicId} fileId={activeFile.id} kind="original" fileName={activeFile.fileName} /></div> : null}
           <div className={styles.previewActions}>
             <button type="button" className={styles.iconButton} disabled={activeIndex <= 0} aria-label="Previous photo" onClick={() => onFocus(files[activeIndex - 1].id)}><ChevronLeft size={17} strokeWidth={1.5} /></button>
             <button type="button" className={styles.previewChoice} disabled={locked} aria-pressed={selected.has(activeFile.id)} onClick={() => onToggle(activeFile.id)}>{selected.has(activeFile.id) ? <><Check size={15} strokeWidth={1.5} />Deselect photo</> : included.length >= includedLimit ? `Add for ${money(extraPrice)}` : 'Select photo'}</button>

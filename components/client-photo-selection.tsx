@@ -17,7 +17,7 @@ import { useAdminToast } from '@/components/admin-toast-provider'
 import { addonPhotoError } from '@/lib/addon-photo-rules'
 import styles from '@/components/portal-workspace.module.css'
 import { clearPortalDraft, portalDraftKey, readPortalDraftState, writePortalDraft, type PortalDraftChoices } from '@/lib/portal-selection-draft'
-import { downloadPortalPhotoFolder, type FolderTransferProgress } from '@/lib/portal-folder-transfer'
+import { startPrivateAttachmentDownload } from '@/lib/private-attachment-download'
 
 export type ClientGalleryFile = { id: string; fileName: string; mimeType: string; previewUrl: string }
 export type ClientAddon = { id: string; name: string; description: string; price: number; pricingType: 'fixed' | 'per_photo' | 'per_piece'; maxQuantity: number; photoLimit?: number }
@@ -79,8 +79,6 @@ function printsAreComplete(
 
 export function ClientPhotoSelection({
   publicId,
-  customerName = 'Client',
-  bookingReference = publicId,
   packageCategory = 'graduation',
   selection,
   gallery,
@@ -102,8 +100,6 @@ export function ClientPhotoSelection({
   footerContent,
 }: {
   publicId: string
-  customerName?: string
-  bookingReference?: string
   packageCategory?: string
   selection: ClientSelection | null
   gallery: ClientGalleryFile[]
@@ -156,7 +152,6 @@ export function ClientPhotoSelection({
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const [downloadPromptOpen, setDownloadPromptOpen] = useState(false)
   const [downloadPromptSaving, setDownloadPromptSaving] = useState(false)
-  const [downloadPromptProgress, setDownloadPromptProgress] = useState<FolderTransferProgress | null>(null)
   const [downloadPromptError, setDownloadPromptError] = useState('')
   const workspaceRoot = useRef<HTMLElement>(null)
   const workspaceHeader = useRef<HTMLElement>(null)
@@ -418,14 +413,12 @@ export function ClientPhotoSelection({
     if (!downloadUrl || downloadPromptSaving) return
     setDownloadPromptSaving(true)
     setDownloadPromptError('')
-    setDownloadPromptProgress(null)
     try {
-      const result = await downloadPortalPhotoFolder(downloadUrl, customerName, bookingReference, setDownloadPromptProgress)
-      if (!result) return
+      await startPrivateAttachmentDownload(downloadUrl)
       setDownloadPromptOpen(false)
       onDownloadStarted?.()
     } catch (error) {
-      setDownloadPromptError(error instanceof Error ? error.message : 'The transfer stopped. Choose the same save location to retry.')
+      setDownloadPromptError(error instanceof Error ? error.message : 'The ZIP could not be started. Please try again.')
     } finally {
       setDownloadPromptSaving(false)
     }
@@ -470,7 +463,7 @@ export function ClientPhotoSelection({
         <div className={styles.photoHeading}><div><h1>Your photos</h1><p className={styles.description}>Pick {includedLimit} favorites.{extraEditAddon ? ` Extra enhancements cost ${money(extraEditAddon.price)} per photo.` : ''}</p></div>
           <div className={styles.editingMenu}><label htmlFor="portal-editing-preference" className={styles.label}>Editing preference</label><select id="portal-editing-preference" aria-describedby="portal-preference-help" className={styles.select} value={editingPreference} disabled={locked || submitting || draftFinished} onChange={event => setEditingPreference(event.target.value as Preference)}>{!editingPreference ? <option value="">{locked ? 'Previously saved mixed preferences' : 'Choose one editing preference…'}</option> : null}{PREFERENCES.map(preference => <option key={preference.id} value={preference.id}>{preference.label}</option>)}</select><p id="portal-preference-help" className={styles.preferenceHelp}>{PREFERENCES.find(preference => preference.id === editingPreference)?.note || 'Choose your preferred editing style.'}{editingPreference === 'standard' ? <> <a href="https://www.facebook.com/stories/998067669519381/?source=profile_highlight" target="_blank" rel="noopener noreferrer" aria-label="See the approved samples on Facebook (opens in a new tab)">See the approved samples</a>.</> : null}</p></div>
         </div>
-        <PortalPhotoContactSheet gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} showPhotoTip={showPhotoTip} onDismissPhotoTip={() => setShowPhotoTip(false)} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
+        <PortalPhotoContactSheet publicId={publicId} canDownloadIndividual={locked && !sampleMode} gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} showPhotoTip={showPhotoTip} onDismissPhotoTip={() => setShowPhotoTip(false)} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
       </> : null}
       {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} options={printOptions} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
 
@@ -506,13 +499,12 @@ export function ClientPhotoSelection({
       {downloadPromptOpen ? <SheetContent side="bottom" className="client-portal gap-0 rounded-t-[20px] border-white/[0.12] bg-[#181819] p-5 text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
         <SheetHeader className="pr-10 text-left">
           <SheetTitle className="text-lg font-semibold text-white">Selection submitted</SheetTitle>
-          <SheetDescription className="mt-2 text-sm leading-relaxed text-white/65">Save the originals as a folder named for you and your booking. In desktop Chrome or Edge, create and select a folder inside Downloads—Chrome blocks selecting Downloads itself. Chrome’s “allow editing files” prompt gives us permission to save your photos in the folder you choose. Or choose Maybe Later.</SheetDescription>
+          <SheetDescription className="mt-2 text-sm leading-relaxed text-white/65">Download all originals as a ZIP now, or choose Maybe Later. You can also download individual photos from your portal.</SheetDescription>
         </SheetHeader>
         {!downloadUrl ? <p role="status" className="mt-5 text-sm text-white/65">Your download is being prepared. It will appear below your selection when available.</p> : null}
-        {downloadPromptProgress && downloadPromptSaving ? <p role="status" className="mt-5 text-sm text-white/65">{downloadPromptProgress.savedFiles} of {downloadPromptProgress.totalFiles} photos saved · {Math.round((downloadPromptProgress.writtenBytes / Math.max(1, downloadPromptProgress.totalBytes)) * 100)}%</p> : null}
         {downloadPromptError ? <p role="alert" className="mt-5 text-sm text-red-200">{downloadPromptError}</p> : null}
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {downloadUrl ? <button type="button" disabled={downloadPromptSaving} onClick={() => void saveAfterSubmission()} className="flex min-h-11 items-center justify-center gap-2 rounded-control bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-[#0903e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 disabled:opacity-50"><Download className="size-4" aria-hidden="true"/>{downloadPromptSaving ? 'Saving Photos…' : 'Download Photos'}</button> : <button type="button" disabled className="min-h-11 rounded-control bg-primary px-4 py-3 text-sm font-semibold text-white opacity-45">Download Photos</button>}
+          {downloadUrl ? <button type="button" disabled={downloadPromptSaving} onClick={() => void saveAfterSubmission()} className="flex min-h-11 items-center justify-center gap-2 rounded-control bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-[#0903e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 disabled:opacity-50"><Download className="size-4" aria-hidden="true"/>{downloadPromptSaving ? 'Preparing ZIP…' : 'Download Photos'}</button> : <button type="button" disabled className="min-h-11 rounded-control bg-primary px-4 py-3 text-sm font-semibold text-white opacity-45">Download Photos</button>}
           <button type="button" disabled={downloadPromptSaving} onClick={() => setDownloadPromptOpen(false)} className="min-h-11 rounded-control border border-white/15 px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 disabled:opacity-50">Maybe Later</button>
         </div>
       </SheetContent> : null}

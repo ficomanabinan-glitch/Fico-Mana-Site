@@ -14,9 +14,10 @@ test('editor batch folders are handed to the private R2 worker', async () => {
   assert.doesNotMatch(route, /archiver\('zip'/)
   assert.match(manifest, /kind: 'EDITOR_BATCH'/)
   assert.match(manifest, /inlineBase64/)
-  assert.match(worker, /handleFolderDownload/)
+  assert.match(worker, /handleAttachment/)
   assert.match(worker, /entry\.inlineBase64/)
-  assert.doesNotMatch(worker, /application\/zip|ZipWriter/)
+  assert.match(worker, /application\/zip|ZipWriter/)
+  assert.match(worker, /FixedLengthStream\(archiveBytes\)/)
 })
 
 test('automatic retention starts seven full days after portal expiry', async () => {

@@ -139,7 +139,7 @@ export default function EditorUploadPhotos({
     try {
       const batches = await detectBatchFolders(files)
       if (!batches.length) {
-        throw new Error('This folder could not be matched to a batch. Try: use the folder saved from the Editing Queue.')
+        throw new Error('This folder could not be matched to a batch. Try: extract the ZIP from the Editing Queue, then select its batch folder.')
       }
       const selected = initialBatchId
         ? batches.filter((batch) => batch.manifest.batch_id === initialBatchId)
