@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { Readable } from 'node:stream'
 import test from 'node:test'
-import archiver from 'archiver'
 import { portalExpiryNotice } from '../lib/portal-expiry.ts'
 import { trackCompletedPortalDownload } from '../lib/portal-download-stream.ts'
 import { loadTs } from './helpers/load-ts.ts'
@@ -49,11 +47,10 @@ test('cancelled and failed download streams do not record completion', async () 
   assert.equal(records, 0)
 })
 
-test('actual portal ZIP route creates a private Cloudflare handoff only for nonempty deliverables', async () => {
+test('portal folder route prepares a private Cloudflare handoff only for nonempty deliverables', async () => {
   let manifests = 0
   let available = true
   const code = loadTs<typeof import('../app/api/editor-workflow/[...path]/route.ts')>('app/api/editor-workflow/[...path]/route.ts', {
-    archiver,
     'next/server': { NextResponse: { json: Response.json, redirect: (url: string, init: ResponseInit) => new Response(null, { ...init, headers: { ...init.headers, location: url } }) } },
     '@/lib/selection-review': { SelectionReviewError: class SelectionReviewError extends Error {}, reviewSelection: async () => ({ success: true }) },
     '@/lib/portal-download-stream': { trackCompletedPortalDownload },
@@ -66,7 +63,7 @@ test('actual portal ZIP route creates a private Cloudflare handoff only for none
         assert.equal(input.kind, 'PORTAL_DELIVERABLES')
         assert.equal(input.entries.length, 1)
         manifests++
-        return 'https://ficomana-private-downloads.example/download/manifest?token=private'
+        return 'https://ficomana-private-downloads.example/folder/manifest?token=private'
       },
     },
     '@/lib/portal-raw-downloads': {},
@@ -74,20 +71,20 @@ test('actual portal ZIP route creates a private Cloudflare handoff only for none
     '@/lib/security/api-rate-limit': { API_RATE_LIMITS: {}, enforceApiRateLimit: async () => null },
     '@/lib/package-workflow': {}, '@/lib/auth-api': {}, '@/lib/auth/workflow': {},
     '@/lib/security/file-validation': {}, '@/lib/security/schemas': {}, '@/lib/security/security-audit': {},
-    '@/lib/security/upload-scanner': {}, '@/lib/security/request-security': {},
+    '@/lib/security/upload-scanner': {}, '@/lib/security/request-security': { rejectUntrustedMutation: () => null },
     '@/lib/raw-upload-server': {}, '@/lib/raw-upload-contract': {}, '@/lib/onsite-photo-reset': {},
     '@/lib/portal-page-payload': {},
   })
   const request = () => {
-    const url = new URL(`https://www.ficomana.com/api/editor-workflow/portal/${publicId}/deliverables.zip`)
-    return code.GET(Object.assign(new Request(url), { nextUrl: url }) as never, {
-      params: Promise.resolve({ path: ['portal', publicId, 'deliverables.zip'] }),
+    const url = new URL(`https://www.ficomana.com/api/editor-workflow/portal/${publicId}/deliverables-folder`)
+    return code.POST(Object.assign(new Request(url, { method: 'POST' }), { nextUrl: url }) as never, {
+      params: Promise.resolve({ path: ['portal', publicId, 'deliverables-folder'] }),
     })
   }
-  const redirect = await request()
-  assert.equal(redirect.status, 307)
-  assert.match(redirect.headers.get('location') || '', /^https:\/\/ficomana-private-downloads\.example\//)
-  assert.match(redirect.headers.get('cache-control') || '', /no-store/)
+  const prepared = await request()
+  assert.equal(prepared.status, 200)
+  assert.match((await prepared.json()).url, /^https:\/\/ficomana-private-downloads\.example\/folder\//)
+  assert.match(prepared.headers.get('cache-control') || '', /no-store/)
   assert.equal(manifests, 1)
   available = false
   assert.equal((await request()).status, 404)

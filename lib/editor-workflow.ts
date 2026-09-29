@@ -1173,6 +1173,18 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
     preference: String(row.enhancement_preference || 'standard'),
     extraEdit: Boolean(row.is_extra_edit),
   }))
+  const loadedGalleryIds = new Set((galleryResult.data || []).map((file) => String(file.id)))
+  const missingSelectedIds = [...new Set(selectedItems.map((item) => item.fileId))]
+    .filter((id) => !loadedGalleryIds.has(id))
+  const selectedGalleryResult = missingSelectedIds.length
+    ? await admin.from('gallery_files').select('id,file_name,mime_type')
+      .eq('workspace_id', workspaceId).eq('booking_id', bookingId)
+      .in('id', missingSelectedIds)
+    : { data: [], error: null }
+  if (selectedGalleryResult.error) {
+    warnings.push('selected-photo filenames')
+    console.error('Client portal selected-photo filenames read failed:', selectedGalleryResult.error.message)
+  }
   await admin.from('client_portals').update({ last_accessed_at: nowIso() }).eq('id', portal.id)
   const booking = bookingResult.data
   return {
@@ -1232,6 +1244,11 @@ export async function getPortalData(publicId: string, offset = 0, limit = 48) {
         }
       : null,
     gallery: (galleryResult.data || []).map((file) => ({
+      id: String(file.id),
+      fileName: String(file.file_name),
+      mimeType: String(file.mime_type),
+    })),
+    selectedGallery: (selectedGalleryResult.data || []).map((file) => ({
       id: String(file.id),
       fileName: String(file.file_name),
       mimeType: String(file.mime_type),
@@ -1964,7 +1981,7 @@ export async function prepareBatchDownload(
       })
     }
   }
-  return { fileName: `${displayId}.zip`, batch, jobs, manifest, entries }
+  return { fileName: displayId, batch, jobs, manifest, entries }
 }
 
 export async function markBatchDownloaded(workspaceId: string, batchId: string, jobs: Array<Record<string, unknown>>, actorId: string) {
@@ -2033,7 +2050,7 @@ export async function prepareBatchCollectionDownload(
     batches: prepared.map((item) => item.manifest),
   }
   return {
-    fileName: `FICO-MANA-${scope.toUpperCase()}-${key}.zip`,
+    fileName: `FICO-MANA-${scope.toUpperCase()}-${key}`,
     entries: [
       { name: 'manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') },
       ...prepared.flatMap((item) => item.entries),

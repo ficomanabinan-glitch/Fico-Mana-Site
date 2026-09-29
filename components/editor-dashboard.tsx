@@ -17,6 +17,7 @@ import { useAdminToast } from '@/components/admin-toast-provider'
 import { useEditorSession } from '@/components/editor-portal-shell'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
+import { downloadPrivateFolder } from '@/lib/portal-folder-transfer'
 import {
   fetchEditorBatches,
   getCachedEditorBatches,
@@ -130,19 +131,16 @@ export default function EditorDashboard() {
     [batches],
   )
 
-  const startDownload = (batch: Batch) => {
+  const startDownload = async (batch: Batch) => {
     setDownloading(batch.id)
-    const anchor = document.createElement('a')
-    anchor.href = `/api/editor-workflow/batches/${encodeURIComponent(batch.id)}/download`
-    anchor.download = `${batch.id}.zip`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    toast.success('Batch download started', 'Client folders and their upload details are included.')
-    window.setTimeout(() => {
+    try {
+      const result = await downloadPrivateFolder(`/api/editor-workflow/batches/${encodeURIComponent(batch.id)}/download`, batch.id, () => {})
+      if (result) { toast.success('Batch folder saved', `${result.savedFiles} files saved in “${result.folderName}”.`); void load(true) }
+    } catch (error) {
+      toast.error('Folder download failed', error instanceof Error ? error.message : 'Try again.')
+    } finally {
       setDownloading('')
-      void load(true)
-    }, 3000)
+    }
   }
 
   if (batchesLoading && onsiteLoading) return <EditorPageSkeleton variant="dashboard" />
@@ -155,6 +153,9 @@ export default function EditorDashboard() {
           <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Today’s upload and editing work</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">
             Check today’s clients, downloads, and uploads.
+          </p>
+          <p className="mt-2 max-w-2xl text-caption leading-relaxed text-white/45">
+            Saving a batch to Downloads? Create and select a folder inside Downloads. Chrome does not allow selecting the Downloads folder itself.
           </p>
         </div>
         <span className="inline-flex w-fit items-center gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-caption font-semibold uppercase text-emerald-300">

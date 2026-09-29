@@ -46,6 +46,8 @@ export default function DownloadRequestDemo() {
             <PortalOriginalDownload
               total={125}
               totalBytes={3_840_000_000}
+              customerName="Sample Graduation Client"
+              bookingReference="FM-000000"
               access={access}
               downloadUrl={status === 'granted' ? '#' : null}
               requestUrl="#sample-request"

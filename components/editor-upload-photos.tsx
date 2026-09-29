@@ -139,7 +139,7 @@ export default function EditorUploadPhotos({
     try {
       const batches = await detectBatchFolders(files)
       if (!batches.length) {
-        throw new Error('This folder could not be matched to a batch. Try: use an unzipped folder downloaded from the Editing Queue.')
+        throw new Error('This folder could not be matched to a batch. Try: use the folder saved from the Editing Queue.')
       }
       const selected = initialBatchId
         ? batches.filter((batch) => batch.manifest.batch_id === initialBatchId)
@@ -222,7 +222,7 @@ export default function EditorUploadPhotos({
         <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Upload Photos</p>
         <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Return edited batches to clients</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/40">
-          Drop the unzipped batch folder to upload each client’s SELECTED/EDITED photos to private storage.
+          Drop the saved batch folder to upload each client’s SELECTED/EDITED photos to private storage.
         </p>
       </div>
 

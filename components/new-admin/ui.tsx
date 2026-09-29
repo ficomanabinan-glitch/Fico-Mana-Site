@@ -1,16 +1,37 @@
 'use client'
 
-import type { ReactNode, ComponentProps } from 'react'
+import { useState, type ReactNode, type ComponentProps } from 'react'
 import { Circle, CircleCheck, CircleAlert, Clock3, ExternalLink, Inbox } from 'lucide-react'
 import { Button as ShadcnButton } from '@/components/ui/button'
 import styles from './new-admin.module.css'
+import { downloadPrivateFolder } from '@/lib/portal-folder-transfer'
 
 export function Button({ className = '', primary = false, ...props }: ComponentProps<typeof ShadcnButton> & { primary?: boolean }) {
   return <ShadcnButton {...props} className={`${styles.button} ${primary ? styles.primary : ''} ${className}`} />
 }
 export function ExternalAction({ href, children, primary = false, disabled = false }: { href: string; children: ReactNode; primary?: boolean; disabled?: boolean }) {
   if (disabled) return <Button disabled title="No completed selections are available to download yet.">{children}</Button>
+  if (/^\/api\/editor-workflow\/(?:batches\/[^/]+\/download|collections\/download)(?:\?|$)/.test(href)) return <FolderAction href={href} primary={primary}>{children}</FolderAction>
   return <a className={`${styles.action} ${primary ? styles.primary : ''}`} href={href} target="_blank" rel="noopener noreferrer">{children}<ExternalLink size={14} aria-hidden="true" /><span className="sr-only"> (opens in a new tab)</span></a>
+}
+function FolderAction({ href, children, primary }: { href: string; children: ReactNode; primary: boolean }) {
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  async function save() {
+    if (saving) return
+    setSaving(true)
+    setMessage('')
+    const url = new URL(href, window.location.origin)
+    const folderName = url.pathname.includes('/collections/')
+      ? `FICO-MANA-${(url.searchParams.get('scope') || 'DAY').toUpperCase()}-${url.searchParams.get('key') || 'BATCH'}`
+      : decodeURIComponent(url.pathname.split('/')[4] || 'FICO-MANA-BATCH')
+    try {
+      const result = await downloadPrivateFolder(href, folderName, () => {})
+      if (result) setMessage(`${result.savedFiles} files saved in “${result.folderName}”.`)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'The folder could not be saved.') }
+    finally { setSaving(false) }
+  }
+  return <span className="inline-flex flex-col items-start gap-1"><button type="button" disabled={saving} className={`${styles.action} ${primary ? styles.primary : ''}`} onClick={() => void save()}>{saving ? 'Saving folder…' : children}</button>{message ? <small role="status" className={styles.muted}>{message}</small> : null}</span>
 }
 export function Panel({ title, action, children, body = false }: { title?: string; action?: ReactNode; children: ReactNode; body?: boolean }) {
   return <section className={styles.panel}>{title && <header className={styles.panelHeader}><h2>{title}</h2>{action}</header>}<div className={body ? styles.panelBody : undefined}>{children}</div></section>

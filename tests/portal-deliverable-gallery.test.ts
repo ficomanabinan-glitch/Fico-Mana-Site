@@ -71,9 +71,9 @@ test('delivered-photo tap, long press and keyboard preview never select or doubl
 test('the portal keeps Download All separate from delivered-photo previews', () => {
   const source = readFileSync('components/client-portal-page.tsx', 'utf8')
   assert.match(source, /<PortalDeliverableGallery key=\{publicId\} files=\{data.deliverables\}/)
-  assert.match(source, /<a href=\{data.downloadAllUrl\}/)
+  assert.match(source, /<PortalEditedDownload url=\{data.downloadAllUrl\}/)
   assert.doesNotMatch(source, /href=\{file.previewUrl\} target="_blank"/)
-  assert.match(source, /rounded-control border border-emerald-500\/20 bg-emerald-500\/\[0.05\]/)
+  assert.match(readFileSync('components/portal-edited-download.tsx', 'utf8'), /rounded-control border border-emerald-500\/20 bg-emerald-500\/\[0.05\]/)
 })
 
 test('the portal expiry notice states the deadline without explaining preview behavior', () => {

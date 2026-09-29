@@ -7,7 +7,7 @@ test('final deliverables are hidden until published photos exist and have no che
   const section = page.split('\n').find(line => line.includes('Final Deliverables'))!
   assert.match(section, /data\.deliverables\.length > 0 \? <section/)
   assert.match(section, /<PortalDeliverableGallery/)
-  assert.match(section, /Download All/)
+  assert.match(section, /<PortalEditedDownload/)
   assert.doesNotMatch(section, /CheckCircle|Your edited photos will appear/)
   assert.match(section, /<\/section> : null}/)
 })

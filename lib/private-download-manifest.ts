@@ -6,7 +6,7 @@ type DownloadEntry = { name: string; storageKey?: string; data?: Buffer; byteSiz
 type DownloadKind = 'PORTAL_ORIGINALS' | 'PORTAL_DELIVERABLES' | 'EDITOR_BATCH'
 
 function safeFileName(value: string) {
-  return value.replace(/["\r\n]/g, '').slice(0, 180) || 'FICO-MANA-PHOTOS.zip'
+  return value.replace(/["\r\n]/g, '').slice(0, 180) || 'FICO-MANA-PHOTOS'
 }
 
 function cleanEntries(entries: DownloadEntry[]) {
@@ -69,7 +69,7 @@ export async function createPortalDownloadRedirect(input: {
     entries,
   }).select('id').single()
   if (error || !manifest) throw new Error(error?.message || 'The download could not be prepared.')
-  return `${workerBaseUrl()}/download/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
+  return `${workerBaseUrl()}/folder/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
 }
 
 export async function createEditorBatchDownloadRedirect(input: {
@@ -106,5 +106,5 @@ export async function createEditorBatchDownloadRedirect(input: {
     completion_payload: completionPayload,
   }).select('id').single()
   if (error || !manifest) throw new Error(error?.message || 'The batch download could not be prepared.')
-  return `${workerBaseUrl()}/download/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
+  return `${workerBaseUrl()}/folder/${encodeURIComponent(String(manifest.id))}?token=${encodeURIComponent(token)}`
 }

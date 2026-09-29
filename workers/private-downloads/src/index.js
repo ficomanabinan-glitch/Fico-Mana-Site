@@ -1,5 +1,3 @@
-import { Uint8ArrayReader, ZipWriter } from '@zip.js/zip.js'
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function json(error, status) {
@@ -28,10 +26,6 @@ async function rpc(env, name, body) {
   const result = await response.json().catch(() => null)
   if (!response.ok) throw new Error(result?.message || 'Download authorization failed.')
   return result
-}
-
-function cleanDownloadName(value) {
-  return String(value || 'FICO-MANA-PHOTOS.zip').replace(/["\r\n]/g, '').slice(0, 180)
 }
 
 function inlineBytes(value) {
@@ -91,14 +85,103 @@ async function preflightEntries(entries, env) {
   return checked
 }
 
-// zip.js uses a deterministic ZIP64 STORE layout here: 98 archive bytes,
-// 158 bytes per non-empty entry, two UTF-8 filename copies, and file data.
-function zipContentLength(entries) {
-  const encoder = new TextEncoder()
-  return entries.reduce(
-    (total, entry) => total + BigInt(entry.byteSize) + 158n + (2n * BigInt(encoder.encode(entry.name).byteLength)),
-    98n,
-  ).toString()
+function folderCors(request) {
+  const origin = request.headers.get('origin') || ''
+  return ['https://ficomana.com', 'https://www.ficomana.com', 'https://editor.ficomana.com', 'https://admin.ficomana.com', 'https://newadmin.ficomana.com'].includes(origin) ||
+    /^http:\/\/(localhost|127\.0\.0\.1):3100$/.test(origin)
+    ? { 'access-control-allow-origin': origin, vary: 'Origin' }
+    : { vary: 'Origin' }
+}
+
+function folderError(request, message, status) {
+  const response = json(message, status)
+  for (const [key, value] of Object.entries(folderCors(request))) response.headers.set(key, value)
+  return response
+}
+
+async function handleFolderDownload(request, env, context, manifestId, token) {
+  if (!UUID.test(manifestId) || token.length < 32 || token.length > 128) {
+    return folderError(request, 'This download link is invalid.', 404)
+  }
+  if (env.DOWNLOAD_RATE_LIMITER) {
+    const actor = request.headers.get('cf-connecting-ip') || 'unknown'
+    const limited = await env.DOWNLOAD_RATE_LIMITER.limit({ key: actor })
+    if (!limited.success) return folderError(request, 'Too many download attempts. Wait one minute, then try again.', 429)
+  }
+  const hash = await tokenHash(token)
+  let manifest
+  try {
+    manifest = await rpc(env, 'resolve_private_download_manifest', { p_manifest: manifestId, p_token_hash: hash })
+  } catch {
+    return folderError(request, 'This private download link is unavailable or has expired.', 410)
+  }
+  const manifestEntries = Array.isArray(manifest?.entries) ? manifest.entries : []
+  if (!manifestEntries.length || manifestEntries.length > 9000) {
+    return folderError(request, 'No downloadable photos are available.', 404)
+  }
+  const directories = manifestEntries.filter(entry => String(entry.name || '').endsWith('/')).map(entry => String(entry.name).replace(/\/$/, ''))
+  const fileEntries = manifestEntries.filter(entry => !String(entry.name || '').endsWith('/'))
+  if (!fileEntries.length) return folderError(request, 'No downloadable files are available.', 404)
+  let entries
+  try {
+    entries = await preflightEntries(fileEntries, env)
+  } catch (error) {
+    await complete(env, manifestId, hash, false)
+    console.error('Private folder preflight failed', error instanceof Error ? error.message : 'unknown error')
+    return folderError(request, 'One or more photos are temporarily unavailable. No download was counted; please try again.', 409)
+  }
+  const header = new TextEncoder().encode(`${JSON.stringify({ files: entries.map((entry) => ({ name: entry.name, size: entry.byteSize })), directories })}\n`)
+  const totalBytes = entries.reduce((sum, entry) => sum + BigInt(entry.byteSize), BigInt(header.byteLength))
+  if (totalBytes > BigInt(Number.MAX_SAFE_INTEGER)) {
+    await complete(env, manifestId, hash, false)
+    return folderError(request, 'This folder is too large to prepare safely.', 413)
+  }
+  const { readable, writable } = typeof FixedLengthStream === 'function'
+    ? new FixedLengthStream(totalBytes)
+    : new TransformStream()
+  const streamTask = (async () => {
+    const writer = writable.getWriter()
+    let success = false
+    try {
+      await writer.write(header)
+      for (const entry of entries) {
+        const source = entry.storageKey
+          ? (await env.PRIVATE_PHOTOS.get(String(entry.storageKey)))?.body
+          : entry.inlineBytes instanceof Uint8Array
+            ? new ReadableStream({ start(controller) { controller.enqueue(entry.inlineBytes); controller.close() } })
+            : null
+        if (!source) throw new Error('A file is unavailable.')
+        const reader = source.getReader()
+        let readBytes = 0
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          readBytes += value.byteLength
+          if (readBytes > entry.byteSize) throw new Error('A photo exceeded its verified size.')
+          await writer.write(value)
+        }
+        if (readBytes !== entry.byteSize) throw new Error('A photo did not match its verified size.')
+      }
+      await writer.close()
+      success = true
+    } catch (error) {
+      await writer.abort(error).catch(() => undefined)
+      console.error('Private folder stream failed', error instanceof Error ? error.message : 'unknown error')
+    } finally {
+      await complete(env, manifestId, hash, success)
+    }
+  })()
+  context?.waitUntil?.(streamTask)
+  return new Response(readable, {
+    headers: {
+      'content-type': 'application/x-ficomana-photo-folder',
+      'content-length': totalBytes.toString(),
+      'cache-control': 'private, no-store',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+      ...folderCors(request),
+    },
+  })
 }
 
 async function runRetention(env) {
@@ -151,93 +234,13 @@ async function runRetention(env) {
 
 const privateDownloadWorker = {
   async fetch(request, env, context) {
-    if (request.method !== 'GET') return json('Method not allowed.', 405)
     const url = new URL(request.url)
-    const match = url.pathname.match(/^\/download\/([^/]+)$/)
-    const manifestId = match ? decodeURIComponent(match[1]) : ''
-    const token = url.searchParams.get('token') || ''
-    if (!UUID.test(manifestId) || token.length < 32 || token.length > 128) return json('This download link is invalid.', 404)
-    if (env.DOWNLOAD_RATE_LIMITER) {
-      const actor = request.headers.get('cf-connecting-ip') || 'unknown'
-      const limited = await env.DOWNLOAD_RATE_LIMITER.limit({ key: actor })
-      if (!limited.success) return json('Too many download attempts. Wait one minute, then try again.', 429)
+    const folderMatch = url.pathname.match(/^\/folder\/([^/]+)$/)
+    if (folderMatch) {
+      if (request.method !== 'GET') return folderError(request, 'Method not allowed.', 405)
+      return handleFolderDownload(request, env, context, decodeURIComponent(folderMatch[1]), url.searchParams.get('token') || '')
     }
-    const hash = await tokenHash(token)
-    let manifest
-    try {
-      manifest = await rpc(env, 'resolve_private_download_manifest', { p_manifest: manifestId, p_token_hash: hash })
-    } catch {
-      return json('This private download link is unavailable or has expired.', 410)
-    }
-    const manifestEntries = Array.isArray(manifest?.entries) ? manifest.entries : []
-    if (!manifestEntries.length || manifestEntries.length > 2000) return json('No downloadable photos are available.', 404)
-    let entries
-    try {
-      entries = await preflightEntries(manifestEntries, env)
-    } catch (error) {
-      await complete(env, manifestId, hash, false)
-      console.error('Private ZIP preflight failed', error instanceof Error ? error.message : 'unknown error')
-      return json('One or more photos are temporarily unavailable. No download was counted; please try again.', 409)
-    }
-    const sourceBytes = entries.reduce((total, entry) => total + BigInt(entry.byteSize), 0n)
-
-    // Cloudflare ignores a manually supplied Content-Length for ordinary
-    // streams. A FixedLengthStream makes the measured ZIP size part of the
-    // response body contract, so browsers can show total download progress.
-    const archiveBytes = BigInt(zipContentLength(entries))
-    if (archiveBytes > BigInt(Number.MAX_SAFE_INTEGER)) {
-      await complete(env, manifestId, hash, false)
-      return json('This download is too large to prepare safely.', 413)
-    }
-    const { readable, writable } = typeof FixedLengthStream === 'function'
-      ? new FixedLengthStream(archiveBytes)
-      : new TransformStream()
-    const archive = new ZipWriter(writable, { level: 0, zip64: true, useWebWorkers: false })
-    const streamTask = (async () => {
-      let success = false
-      try {
-        for (const entry of entries) {
-          const name = String(entry.name || 'file')
-          if (entry.storageKey) {
-            const object = await env.PRIVATE_PHOTOS.get(String(entry.storageKey))
-            if (!object?.body) throw new Error('A photo is unavailable.')
-            await archive.add(name, object.body, {
-              level: 0,
-              zip64: true,
-              lastModDate: object.uploaded || new Date(),
-            })
-          } else if (entry.inlineBytes instanceof Uint8Array) {
-            await archive.add(name, new Uint8ArrayReader(entry.inlineBytes), {
-              level: 0,
-              zip64: true,
-            })
-          } else {
-            throw new Error('A download entry is invalid.')
-          }
-        }
-        await archive.close()
-        success = true
-      } catch (error) {
-        try { await archive.close() } catch { /* stream may already be closed */ }
-        console.error('Private ZIP stream failed', error instanceof Error ? error.message : 'unknown error')
-      } finally {
-        await complete(env, manifestId, hash, success)
-      }
-    })()
-    context?.waitUntil?.(streamTask)
-
-    return new Response(readable, {
-      headers: {
-        'content-type': 'application/zip',
-        'content-disposition': `attachment; filename="${cleanDownloadName(manifest.fileName)}"`,
-        'cache-control': 'private, no-store',
-        'content-security-policy': "default-src 'none'; sandbox",
-        'content-length': archiveBytes.toString(),
-        'referrer-policy': 'no-referrer',
-        'x-ficomana-source-bytes': sourceBytes.toString(),
-        'x-content-type-options': 'nosniff',
-      },
-    })
+    return json('ZIP downloads are no longer available. Open the portal or editor and use Save Folder.', 410)
   },
   async scheduled(_controller, env, context) {
     context.waitUntil(runRetention(env))

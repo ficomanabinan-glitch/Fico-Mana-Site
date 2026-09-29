@@ -30,7 +30,7 @@ test('all original photos require a submitted selection except download-only sel
   assert.match(workflow, /selection\.data\.status !== 'SUBMITTED'/)
   assert.match(workflow, /storage_provider', 'r2'\)\.eq\('storage_status', 'available'/)
   assert.match(route, /API_RATE_LIMITS\.portalRawDownload/)
-  assert.match(route, /raw-photos\.zip/)
+  assert.match(route, /raw-photos-folder/)
   assert.match(payload, /data\.booking\.packageCategory === 'self-portrait' \|\| data\.selection\?\.status === 'SUBMITTED'/)
   assert.match(payload, /rawDownloadAllUrl: canDownload && data\.rawDownloadAccess\?\.allowed/)
   assert.match(payload, /rawDownloadRequestUrl/)

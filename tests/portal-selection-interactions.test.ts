@@ -22,7 +22,7 @@ const ready: ClientSelection = { ...selection, noRevisionAcknowledged: true,
   selectedItems: gallery.slice(0,6).map((file,i) => ({ fileId:file.id, preference:'less', extraEdit:i>=5 })),
   printAllocations: (['TOGA_PICTURE_4R','ALAMPAY_BARONG_4R','FRAME_8R','WALLET_SIZE'] as const).map(category => ({ category, fileId:'0', quantity:1, label:category })),
 }
-function setup(initial = selection, photos = gallery, sampleMode = false) {
+function setup(initial = selection, photos = gallery, sampleMode = false, selectedGallery: ClientGalleryFile[] = []) {
   const hooks = componentHarness()
   const component = loadTs<typeof import('../components/client-photo-selection.tsx')>('components/client-photo-selection.tsx', {
     react: hooks.react, '@/components/portal-photo-preview': { PortalPhotoPreview: Preview },
@@ -32,11 +32,12 @@ function setup(initial = selection, photos = gallery, sampleMode = false) {
     '@/components/portal-workspace.module.css': {},
     '@/components/admin-toast-provider': { useAdminToast: () => ({ success() {} }) },
     '@/lib/client-selection-summary':summary, '@/lib/portal-selection-draft':drafts, '@/lib/selection-step-navigation':navigation,
+    '@/lib/portal-folder-transfer': { downloadPortalPhotoFolder: async () => null },
     '@/components/ui/sheet': { Sheet:()=>null, SheetContent:()=>null, SheetHeader:()=>null, SheetTitle:()=>null, SheetDescription:()=>null },
   })
   let pricing: summary.AddonPreview = { total:0, lines:[] }, submitted = 0
   const onPricingChange = (value:summary.AddonPreview) => { pricing=value }
-  const render = () => hooks.render(() => component.ClientPhotoSelection({ publicId:'private',selection:initial,gallery:photos,galleryTotal:7,loadingMore:false,addons,
+  const render = () => hooks.render(() => component.ClientPhotoSelection({ publicId:'private',selection:initial,gallery:photos,selectedGallery,galleryTotal:7,loadingMore:false,addons,
     sampleMode, onLoadMore() {}, onSubmitted:async()=>{submitted++}, downloadUrl:'/test-photos.zip', onPricingChange, paymentSummary:{packageAmount:6500,amountPaid:500} }))
   let tree=render(); tree=render()
   return { render:()=>tree=render(), unmount:hooks.unmount,
@@ -123,6 +124,14 @@ test('submitted server state replaces stale drafts, keeps price snapshots and pr
   assert.equal(f.pricing.total,75);assert.equal(b.values.size,0);assert.equal(f.review().locked,true)
   assert.equal(f.review().selectedPhoto('0').previewUrl,'/api/editor-workflow/portal/private/file/0?kind=gallery')
   f.step('Add-ons');assert.equal(f.addons().locked,true)
+})
+
+test('selected photos beyond the loaded gallery page retain their real filenames', t=>{
+  browser(t)
+  const named = { ...gallery[0], fileName: 'FICO MANA_02141.JPG' }
+  const f = setup({ ...ready, status: 'SUBMITTED' }, [], false, [named]); t.after(f.unmount)
+  assert.equal(f.review().selectedPhoto('0').fileName, 'FICO MANA_02141.JPG')
+  assert.equal(f.review().selectedPhoto('1').fileName, 'Selected photo')
 })
 
 test('selected filter restores unloaded selections and viewer navigation stays in that set', t => {

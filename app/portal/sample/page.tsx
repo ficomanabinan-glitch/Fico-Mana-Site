@@ -24,6 +24,7 @@ export default function SamplePortalPage() {
     expiry: null,
     selection: { id: 'sample-selection', status: 'OPEN', requiredCount: 5, includedLimit: 5, clientStatus: 'Sample selection', noRevisionAcknowledged: false, selectedIds: [], selectedItems: [], printAllocations: [], addonOrders: [], totalAddonAmount: 0 },
     gallery,
+    selectedGallery: [],
     galleryTotal: gallery.length,
     rawDownloadBytes: 0,
     galleryOffset: 0,

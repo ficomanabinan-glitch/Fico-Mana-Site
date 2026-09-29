@@ -12,6 +12,7 @@ import {
 import { useAdminToast } from '@/components/admin-toast-provider'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
+import { downloadPrivateFolder } from '@/lib/portal-folder-transfer'
 import { uploadWithPresignedPlan, type BrowserUploadPlan } from '@/lib/storage/browser-upload'
 
 type JobStatus = 'WAITING_FOR_SELECTION' | 'READY_FOR_EDITING' | 'DOWNLOADED' | 'EDITING' | 'READY_TO_UPLOAD' | 'UPLOADING' | 'DELIVERED' | 'UPLOAD_FAILED'
@@ -161,10 +162,9 @@ export default function BatchDetailPage() {
     try{const response=await fetch(`/api/editor-workflow/matches/${encodeURIComponent(reviewId)}/resolve`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId})});const body=await responseJson(response);if(!response.ok)throw new Error(String(body.error||'Could not resolve this folder.'));toast.success('Folder matched','Select the edited batch again and Fico Mana will use the confirmed booking.');await load()}catch(error){toast.error('Match failed',error instanceof Error?error.message:'Try again.')}finally{setBusyJob('')}
   }
 
-  const downloadBatch=()=>{
-    const anchor=document.createElement('a');anchor.href=`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/download`;anchor.download=`${batchId}.zip`
-    document.body.appendChild(anchor);anchor.click();anchor.remove();toast.success('Day batch started','Selected client folders are streamed into the ZIP, and repeat downloads stay available.')
-    window.setTimeout(()=>void load(),2500)
+  const downloadBatch=async()=>{
+    try{const result=await downloadPrivateFolder(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}/download`,batchId,()=>{});if(result){toast.success('Day batch folder saved',`${result.savedFiles} files saved in “${result.folderName}”.`);void load()}}
+    catch(error){toast.error('Folder download failed',error instanceof Error?error.message:'Try again.')}
   }
   const chooseUploadFolder=(mode:'all'|'failed')=>{setUploadMode(mode);directoryInputRef.current?.click()}
 
@@ -176,7 +176,7 @@ export default function BatchDetailPage() {
     const resolved=new Map((detail.needsReview||[]).filter((item)=>item.status==='RESOLVED'&&item.resolvedBookingId).map((item)=>[item.sourceFolderName.toLowerCase(),String(item.resolvedBookingId)]))
     let manifest:BatchManifest
     if(manifestFile){
-      try{manifest=JSON.parse(await manifestFile.text()) as BatchManifest}catch{toast.error('Folder could not be read','Try: download the batch again and unzip the folder.');return}
+      try{manifest=JSON.parse(await manifestFile.text()) as BatchManifest}catch{toast.error('Folder could not be read','Try: save the batch folder again, then select that folder.');return}
       if(manifest.batch_id!==batchId||!Array.isArray(manifest.clients)){toast.error('Wrong batch folder',`Expected ${batchId}.`);return}
     }else{
       const clients=folderNames.map((folderName)=>{const bookingId=resolved.get(folderName.toLowerCase());const job=detail.jobs.find((item)=>item.bookingId===bookingId);return job?{booking_id:job.bookingId,client_id:job.clientId,folder_name:folderName,customer_name:job.customerName,expected_output_count:job.expectedOutputCount}:null}).filter((item):item is ManifestClient=>Boolean(item))

@@ -4,7 +4,7 @@ import test from 'node:test'
 
 const migrationPath = 'supabase/migrations/20260921045312_storage_retention_and_batch_downloads.sql'
 
-test('editor batch archives are handed to the private R2 worker', async () => {
+test('editor batch folders are handed to the private R2 worker', async () => {
   const [route, manifest, worker] = await Promise.all([
     readFile('app/api/editor-workflow/[...path]/route.ts', 'utf8'),
     readFile('lib/private-download-manifest.ts', 'utf8'),
@@ -14,8 +14,9 @@ test('editor batch archives are handed to the private R2 worker', async () => {
   assert.doesNotMatch(route, /archiver\('zip'/)
   assert.match(manifest, /kind: 'EDITOR_BATCH'/)
   assert.match(manifest, /inlineBase64/)
-  assert.match(worker, /Uint8ArrayReader/)
+  assert.match(worker, /handleFolderDownload/)
   assert.match(worker, /entry\.inlineBase64/)
+  assert.doesNotMatch(worker, /application\/zip|ZipWriter/)
 })
 
 test('automatic retention starts seven full days after portal expiry', async () => {

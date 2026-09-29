@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
-  Download, ExternalLink, FileText,
+  ExternalLink, FileText,
 } from 'lucide-react'
 import PortalQrCode from '@/components/portal-qr-code'
 import PortalOverview from '@/components/portal-overview'
 import styles from '@/components/portal-workspace.module.css'
 import PortalExpiryNotice from '@/components/portal-expiry-notice'
 import PortalDeliverableGallery from '@/components/portal-deliverable-gallery'
+import PortalEditedDownload from '@/components/portal-edited-download'
 import PortalOriginalDownload from '@/components/portal-original-download'
 import PortalPageSkeleton from '@/components/portal-page-skeleton'
 import { PortalPreviewProvider } from '@/components/portal-preview-cache'
@@ -35,6 +36,7 @@ export type PortalData={
   expiry:PortalExpiry|null
   selection:ClientSelection|null
   gallery:ClientGalleryFile[]
+  selectedGallery:ClientGalleryFile[]
   galleryTotal:number
   rawDownloadBytes:number
   galleryOffset:number
@@ -120,7 +122,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
     setData((previous) => {
       if (!previous) return previous
       const rawDownloadAllUrl = (previous.booking.packageCategory === 'self-portrait' || previous.selection?.status === 'SUBMITTED') && access.allowed
-        ? `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-photos.zip`
+        ? `/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-photos-folder`
         : null
       const next = { ...previous, rawDownloadAccess: access, rawDownloadAllUrl }
       queryClient.setQueryData(queryKey, next)
@@ -183,7 +185,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
         <p className="mt-2 text-sm leading-relaxed text-white/55">This is a download-only session. No photo selection or editor submission is needed.</p>
         {data.expiry ? <PortalExpiryNotice expiry={data.expiry} className="mt-6" /> : null}
         {error ? <div className={`${styles.notice} mt-6`} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}
-        <div className="mt-8"><PortalOriginalDownload total={data.galleryTotal} totalBytes={data.rawDownloadBytes} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /></div>
+        <div className="mt-8"><PortalOriginalDownload total={data.galleryTotal} totalBytes={data.rawDownloadBytes} customerName={data.booking.customerName} bookingReference={data.booking.id} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /></div>
         {data.gallery.length > 0 ? <section className="mt-8 fico-card border border-white/10 bg-white/[0.02]"><h2 className="text-card-title font-semibold tracking-heading">Photo preview</h2><div className="mt-4"><PortalDeliverableGallery files={data.gallery} /></div>{data.gallery.length < data.galleryTotal ? <button type="button" className={`${portalPrimaryAction} mt-5 px-5`} disabled={loadingMore} onClick={() => void load(data.gallery.length)}>{loadingMore ? 'Loading…' : `Show more photos (${data.gallery.length} of ${data.galleryTotal})`}</button> : null}</section> : null}
       </div>
     </main>
@@ -191,7 +193,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
 
   return <PortalPreviewProvider scope={`${publicId}:${data.selection?.rawUploadGeneration || 0}:${data.selection?.reopenedAt || ''}`} expiresAt={data.expiry?.expiresAt}><main className={`client-portal ${styles.clientPortal}`}>
     <ClientPhotoSelection
-      publicId={publicId} packageCategory={data.booking.packageCategory} selection={data.selection} gallery={data.gallery} galleryTotal={data.galleryTotal}
+      publicId={publicId} customerName={data.booking.customerName} bookingReference={data.booking.id} packageCategory={data.booking.packageCategory} selection={data.selection} gallery={data.gallery} selectedGallery={data.selectedGallery || []} galleryTotal={data.galleryTotal}
       loadingMore={loadingMore} addons={data.addonCatalog} projectStatus={stageLabel(data.editingStatus)}
       sampleMode={sampleMode}
       paymentSummary={{ packageAmount: data.booking.price, amountPaid: data.booking.amountPaid }}
@@ -206,8 +208,8 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
       </div>}
       notices={<>{sampleMode ? <aside className={styles.sampleNotice} aria-label="Sample portal information"><div><strong>Sample portal</strong><p>Practice the full selection flow with example photos. Nothing here is submitted or saved to a booking.</p></div><Link href="/portal">Exit sample</Link></aside> : null}{error ? <div className={styles.notice} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}{data.warnings?.length ? <div className={styles.notice} role="status">Some project details are temporarily unavailable: {data.warnings.join(', ')}.</div> : null}{data.expiry?.expiresAt ? <PortalExpiryNotice expiry={data.expiry} className={styles.expiryNotice} /> : null}</>}
       footerContent={<div className="mt-10 space-y-8">
-            {data.selection?.status === 'SUBMITTED' ? <PortalOriginalDownload total={data.galleryTotal} totalBytes={data.rawDownloadBytes} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /> : null}
-            {data.deliverables.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><h2 className="text-card-title font-semibold tracking-heading">Final Deliverables</h2><div className="mt-4 flex flex-col gap-3 rounded-control border border-emerald-500/20 bg-emerald-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-emerald-200">Your photos are ready</p><p className="mt-1 text-caption text-white/45">{data.deliverables.length} edited photo{data.deliverables.length === 1 ? '' : 's'}</p></div><a href={data.downloadAllUrl} className={`${portalPrimaryAction} inline-flex items-center justify-center gap-2 px-4 py-2.5 text-caption font-semibold`}><Download className="size-3.5" strokeWidth={1.5} />Download All</a></div><PortalDeliverableGallery key={publicId} files={data.deliverables} /></section> : null}
+            {data.selection?.status === 'SUBMITTED' ? <PortalOriginalDownload total={data.galleryTotal} totalBytes={data.rawDownloadBytes} customerName={data.booking.customerName} bookingReference={data.booking.id} access={data.rawDownloadAccess} downloadUrl={data.rawDownloadAllUrl} requestUrl={data.rawDownloadRequestUrl} onAccessChanged={refreshRawDownloadAccess} /> : null}
+            {data.deliverables.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><h2 className="text-card-title font-semibold tracking-heading">Final Deliverables</h2><PortalEditedDownload url={data.downloadAllUrl} customerName={data.booking.customerName} bookingReference={data.booking.id} count={data.deliverables.length} /><PortalDeliverableGallery key={publicId} files={data.deliverables} /></section> : null}
             {data.resources.length > 0 ? <section className="fico-card border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_rgba(255,255,255,0.04)]"><div className="flex items-center gap-2"><FileText className="size-4 text-[#C4CEFF]" strokeWidth={1.5} /><h2 className="text-card-title font-semibold tracking-heading">Project files and updates</h2></div><div className="mt-4 divide-y divide-white/[0.07]">{data.resources.map(resource => <div key={resource.id} className="py-4 first:pt-0 last:pb-0"><p className="text-caption font-medium tracking-[0.04em] text-white/40">{resource.resource_type.replace(/_/g, ' ')}</p><p className="mt-1 text-sm font-semibold">{resource.title}</p>{resource.content ? <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/50">{resource.content}</p> : null}{resource.url ? <a href={resource.url} target="_blank" rel="noopener noreferrer" className="group mt-3 inline-flex min-h-11 items-center gap-2 rounded-control border border-transparent px-2 text-caption font-semibold text-[#C4CEFF] transition-[transform,background-color,border-color,color] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-[#C4CEFF]/20 hover:bg-[#C4CEFF]/[0.07] hover:text-white">Open resource <ExternalLink className="size-3" strokeWidth={1.5} /></a> : null}</div>)}</div></section> : null}</div>}
     />
   </main></PortalPreviewProvider>

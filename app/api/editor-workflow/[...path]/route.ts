@@ -81,20 +81,8 @@ function json(data: unknown, status = 200) {
   })
 }
 
-function privateDownloadRedirect(location: string) {
-  return new Response(null, {
-    status: 307,
-    headers: {
-      location,
-      'cache-control': 'private, no-store',
-      'referrer-policy': 'no-referrer',
-      'x-content-type-options': 'nosniff',
-    },
-  })
-}
-
 function safeDownloadName(value: string) {
-  return value.replace(/["\r\n]/g, '').slice(0, 180) || 'download.zip'
+  return value.replace(/["\r\n]/g, '').slice(0, 180) || 'download'
 }
 
 function errorResponse(error: unknown, fallback: string, requestId: string, status = 400) {
@@ -123,9 +111,9 @@ async function handlePortal(request: NextRequest, path: string[]) {
     ? API_RATE_LIMITS.portalSelection
     : path[2] === 'raw-download-request'
       ? API_RATE_LIMITS.portalRawDownloadRequest
-    : path[2] === 'raw-photos.zip'
+    : path[2] === 'raw-photos-folder'
       ? API_RATE_LIMITS.portalRawDownload
-      : path[2] === 'deliverables.zip'
+      : path[2] === 'deliverables-folder'
       ? API_RATE_LIMITS.portalDownload
       : path[2] === 'file'
       ? API_RATE_LIMITS.portalPhotoRead
@@ -198,16 +186,16 @@ async function handlePortal(request: NextRequest, path: string[]) {
       },
     })
   }
-  if (path[2] === 'deliverables.zip' && method === 'GET') {
+  if (path.length === 3 && path[2] === 'deliverables-folder' && method === 'POST') {
     const files = await preparePortalDeliverables(publicId)
     if (!files.length) return json({ error: 'No delivered photos are available yet.' }, 404)
-    const location = await createPortalDownloadRedirect({
+    const url = await createPortalDownloadRedirect({
       publicId,
       kind: 'PORTAL_DELIVERABLES',
-      entries: files,
-      fileName: `${publicId}-FICO-MANA-PHOTOS.zip`,
+      entries: files.map(file => ({ ...file, name: `Edited/${file.name}` })),
+      fileName: `${publicId}-FICO-MANA-PHOTOS`,
     })
-    return privateDownloadRedirect(location)
+    return json({ url })
   }
   if (path.length === 3 && path[2] === 'raw-download-request' && method === 'POST') {
     const parsed = portalRawDownloadRequestSchema.safeParse(await request.json().catch(() => null))
@@ -219,7 +207,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
       return json({ error: message }, /already waiting|still available/i.test(message) ? 409 : 400)
     }
   }
-  if (path[2] === 'raw-photos.zip' && method === 'GET') {
+  if (path.length === 3 && path[2] === 'raw-photos-folder' && method === 'POST') {
     const files = await preparePortalRawPhotos(publicId)
     if (!files.length) return json({ error: 'No original photos are available.' }, 404)
     let attemptId = ''
@@ -232,18 +220,24 @@ async function handlePortal(request: NextRequest, path: string[]) {
       throw error
     }
     try {
-      const location = await createPortalDownloadRedirect({
+      const url = await createPortalDownloadRedirect({
         publicId,
         kind: 'PORTAL_ORIGINALS',
         entries: files,
-        fileName: `${publicId}-FICO-MANA-ORIGINALS.zip`,
+        fileName: `${publicId}-FICO-MANA-ORIGINALS`,
         rawAttemptId: attemptId,
       })
-      return privateDownloadRedirect(location)
+      const response = json({ url })
+      response.headers.set('Cache-Control', 'private, no-store')
+      response.headers.set('Referrer-Policy', 'no-referrer')
+      return response
     } catch (error) {
       await finishPortalRawDownload(attemptId, false).catch(() => undefined)
       throw error
     }
+  }
+  if (path.length === 3 && (path[2] === 'raw-photos.zip' || path[2] === 'deliverables.zip')) {
+    return json({ error: 'ZIP downloads are no longer available. Use Save Folder in the portal.' }, 410)
   }
   return json({ error: 'Unknown client portal workflow endpoint.' }, 404)
 }
@@ -365,8 +359,13 @@ async function handle(request: NextRequest, path: string[]) {
     }
 
     if (path[0] === 'collections' && path[1] === 'download' && method === 'GET') {
+      return json({ error: 'ZIP downloads are no longer available. Use Save Folder in the editor.' }, 410)
+    }
+    if (path[0] === 'collections' && path[1] === 'download' && method === 'POST') {
       const denied = requireCapability('edit')
       if (denied) return denied
+      const originError = rejectUntrustedMutation(request)
+      if (originError) return originError
       const scopeValue = request.nextUrl.searchParams.get('scope')
       const key = request.nextUrl.searchParams.get('key') || ''
       const scope = scopeValue === 'week' || scopeValue === 'month' ? scopeValue : 'day'
@@ -377,13 +376,14 @@ async function handle(request: NextRequest, path: string[]) {
         actorId,
         canUseWorkflow(access, 'admin'),
       )
-      return privateDownloadRedirect(await createEditorBatchDownloadRedirect({
+      const url = await createEditorBatchDownloadRedirect({
         workspaceId,
         actorId,
         entries: prepared.entries,
         fileName: prepared.fileName,
         batches: prepared.prepared.map((item) => ({ batchId: item.batch.id, jobs: item.jobs })),
-      }))
+      })
+      return json({ url })
     }
 
     if (path[0] === 'batches') {
@@ -398,21 +398,29 @@ async function handle(request: NextRequest, path: string[]) {
         return detail ? json(detail) : json({ error: 'Batch not found.' }, 404)
       }
       if (path[2] === 'download' && method === 'GET') {
+        return json({ error: 'ZIP downloads are no longer available. Use Save Folder in the editor.' }, 410)
+      }
+      if (path[2] === 'download' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
+        const originError = rejectUntrustedMutation(request)
+        if (originError) return originError
         const prepared = await prepareBatchDownload(
           workspaceId,
           batchId,
           actorId,
           canUseWorkflow(access, 'admin'),
         )
-        return privateDownloadRedirect(await createEditorBatchDownloadRedirect({
+        const url = await createEditorBatchDownloadRedirect({
           workspaceId,
           actorId,
-          entries: prepared.entries,
+          // A single saved batch is its own root folder, ready to select again for upload.
+          // Week/month exports keep shoot-date folders to separate multiple days.
+          entries: prepared.entries.map(entry => ({ ...entry, name: entry.name.startsWith(`${prepared.manifest.shoot_date}/`) ? entry.name.slice(String(prepared.manifest.shoot_date).length + 1) : entry.name })),
           fileName: prepared.fileName,
           batches: [{ batchId: prepared.batch.id, jobs: prepared.jobs }],
-        }))
+        })
+        return json({ url })
       }
       if (path[2] === 'failed' && method === 'GET') {
         return json({ bookingIds: await getBatchFailedBookingIds(workspaceId, batchId) })
