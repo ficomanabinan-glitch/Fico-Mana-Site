@@ -1,0 +1,9 @@
+# Reviewed historical false positives only. Future credentials and new commits
+# remain covered by the default rules and full-history scan.
+# These four matches are public CMS FAQ field definitions, not API credentials.
+ee6c52e869a01a7beff3670c6bc08f29215c1c84:lib/website-copy.ts:generic-api-key:355
+ee6c52e869a01a7beff3670c6bc08f29215c1c84:lib/website-copy.ts:generic-api-key:369
+ee6c52e869a01a7beff3670c6bc08f29215c1c84:lib/website-copy.ts:generic-api-key:383
+ee6c52e869a01a7beff3670c6bc08f29215c1c84:lib/website-copy.ts:generic-api-key:397
+# SHA-256 verifier only: the retention RPC hashes the supplied raw secret.
+5b36a61076f0637c9ccb99e2a16f2529db60cf42:supabase/migrations/20260921052808_enable_60_day_raw_retention.sql:generic-api-key:8
