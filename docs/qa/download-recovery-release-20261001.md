@@ -17,7 +17,7 @@ The Impeccable hardening guidance informed the clearer status messages, error/re
 
 ## Test evidence
 
-- Full automated suite: **423 passed, 0 failed**.
+- Full automated suite after the portal timestamp regression was added: **424 passed, 0 failed**.
 - Worker regression suite: 12 tests, including simultaneous independent requests, a stalled source, cancellation, truncated objects, Unicode filenames, CRC validation, and bounded streaming of a large archive.
 - Request recovery/access regression suite: 7 tests, including invalid reasons, expired portals, workspace isolation, anonymous execution denial, repeated requests, interrupted grants, late completion, and migration rollback/reapplication.
 - TypeScript checking, focused ESLint, production build, security source checks, secret scan, and diff checks passed.
@@ -26,6 +26,7 @@ The Impeccable hardening guidance informed the clearer status messages, error/re
 - The full reachable-history scan then passed with zero findings. A newly generated synthetic GitHub token still failed the negative-control scan, proving the reviewed exceptions did not disable detection. Full-repository ESLint passed with zero errors and 36 existing warnings; TypeScript checking passed.
 - Production SQL verification confirmed recovery was installed and the RPC was not executable by anonymous callers.
 - Authenticated production browser checks verified the recovered request appeared with its reason, could use the studio's existing grant, and the client download control became available again.
+- The final browser pass found a pre-existing submitted-banner hydration mismatch: the server formatted the timestamp in UTC while clients used their local timezone. The banner now explicitly uses `Asia/Manila`. A red/green actual-component render regression verifies identical initial markup in UTC, Manila, Los Angeles, and Auckland without suppressing hydration errors or changing saved choices.
 
 ## Live synthetic archive checks
 

@@ -450,7 +450,7 @@ export function ClientPhotoSelection({
         <span className={styles.submittedNoticeIcon} aria-hidden="true"><Lock /></span>
         <p className={styles.submittedNoticeContent}>
           <strong>Your selection is submitted and locked.</strong>
-          {selection.submittedAt ? <span>Submitted {new Date(selection.submittedAt).toLocaleString('en-PH')}.</span> : null}
+          {selection.submittedAt ? <span>Submitted {new Date(selection.submittedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}.</span> : null}
           <span>Project status: {projectStatus || selection.clientStatus}.</span>
         </p>
       </div> : null}
