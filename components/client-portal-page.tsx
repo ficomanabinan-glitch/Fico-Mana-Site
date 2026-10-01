@@ -68,6 +68,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   const [selectionProgress, setSelectionProgress] = useState<ClientSelectionProgress | null>(null)
   const [resetting, setResetting] = useState(false)
   const readSequence = useRef(0)
+  const rawDownloadReadSequence = useRef(0)
 
   const load = useCallback(async (offset = 0, silent = false) => {
     if (sampleMode) {
@@ -114,11 +115,13 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
 
   const refreshRawDownloadAccess = useCallback(async () => {
     if (sampleMode) return
+    const sequence = ++rawDownloadReadSequence.current
     const response = await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-download-state`, {
       cache: 'no-store', credentials: 'include',
     })
     if (!response.ok) return
     const access = (await response.json()) as PortalRawDownloadAccess
+    if (sequence !== rawDownloadReadSequence.current) return
     setData((previous) => {
       if (!previous) return previous
       const rawDownloadAllUrl = (previous.booking.packageCategory === 'self-portrait' || previous.selection?.status === 'SUBMITTED') && access.allowed
@@ -131,10 +134,27 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   }, [publicId, queryClient, queryKey, sampleMode])
 
   useEffect(() => {
-    if (!data?.rawDownloadAccess?.activeDownloads || sampleMode) return
-    const timer = window.setInterval(() => void refreshRawDownloadAccess(), 10_000)
-    return () => window.clearInterval(timer)
-  }, [data?.rawDownloadAccess?.activeDownloads, refreshRawDownloadAccess, sampleMode])
+    if (!data?.rawDownloadAccess || sampleMode) return
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        void refreshRawDownloadAccess().catch(() => undefined)
+      }
+    }
+    const awaitingUpdate = data.rawDownloadAccess.activeDownloads > 0
+      || data.rawDownloadAccess.requestStatus === 'PENDING'
+      || data.rawDownloadAccess.requestStatus === 'RESERVED'
+    const timer = awaitingUpdate ? window.setInterval(refreshWhenVisible, 10_000) : null
+    window.addEventListener('focus', refreshWhenVisible)
+    window.addEventListener('online', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      if (timer !== null) window.clearInterval(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      window.removeEventListener('online', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      rawDownloadReadSequence.current += 1
+    }
+  }, [data?.rawDownloadAccess, refreshRawDownloadAccess, sampleMode])
 
   useEffect(() => {
     // Hydrate the authorized server snapshot without immediately fetching it again.

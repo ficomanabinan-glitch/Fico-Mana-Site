@@ -1,5 +1,3 @@
-import { Uint8ArrayReader, ZipWriter } from '@zip.js/zip.js'
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function json(error, status) {
@@ -74,14 +72,167 @@ function attachmentDisposition(value, extension) {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`
 }
 
-// zip.js STORE + ZIP64 has a fixed overhead for these non-empty entries.
-// Verified against the produced bytes in the Worker regression tests.
+// STORE + ZIP64: local header/extra + descriptor + central header/extra.
+// No compression or archive-wide buffers: JPEGs are already compressed.
 function zipContentLength(entries) {
   const encoder = new TextEncoder()
   return entries.reduce(
-    (total, entry) => total + BigInt(entry.byteSize) + (entry.directory ? 134n : 158n) + 2n * BigInt(encoder.encode(entry.name).byteLength),
+    (total, entry) => total + BigInt(entry.byteSize) + (entry.directory ? 124n : 148n) + 2n * BigInt(encoder.encode(entry.name).byteLength),
     98n,
   )
+}
+
+// Slicing-by-four CRC32 avoids a byte-at-a-time checksum bottleneck on large shoots.
+// These immutable lookup tables contain no request state.
+const crcTables = Array.from({ length: 4 }, () => new Uint32Array(256))
+for (let index = 0; index < 256; index += 1) {
+  let value = index
+  for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ ((value & 1) ? 0xedb88320 : 0)
+  crcTables[0][index] = value >>> 0
+}
+for (let table = 1; table < 4; table += 1) {
+  for (let index = 0; index < 256; index += 1) {
+    let value = crcTables[table - 1][index]
+    value = (value >>> 8) ^ crcTables[0][value & 255]
+    crcTables[table][index] = value >>> 0
+  }
+}
+
+function crc32Update(crc, bytes) {
+  let index = 0
+  while (index + 4 <= bytes.byteLength) {
+    const value = crc ^ (bytes[index] | (bytes[index + 1] << 8) | (bytes[index + 2] << 16) | (bytes[index + 3] << 24))
+    crc = crcTables[3][value & 255] ^ crcTables[2][(value >>> 8) & 255] ^ crcTables[1][(value >>> 16) & 255] ^ crcTables[0][value >>> 24]
+    index += 4
+  }
+  while (index < bytes.byteLength) crc = (crc >>> 8) ^ crcTables[0][(crc ^ bytes[index++]) & 255]
+  return crc >>> 0
+}
+
+function zipHeader(entry, offset, crc, central, modified) {
+  const name = new TextEncoder().encode(entry.name)
+  const length = central ? 46 : 30
+  const extraLength = central ? 28 : 20
+  const bytes = new Uint8Array(length + name.byteLength + extraLength)
+  const view = new DataView(bytes.buffer)
+  const date = modified instanceof Date && Number.isFinite(modified.getTime()) ? modified : new Date()
+  const year = Math.min(2107, Math.max(1980, date.getUTCFullYear()))
+  const time = (date.getUTCHours() << 11) | (date.getUTCMinutes() << 5) | (date.getUTCSeconds() >>> 1)
+  const day = ((year - 1980) << 9) | ((date.getUTCMonth() + 1) << 5) | date.getUTCDate()
+  view.setUint32(0, central ? 0x02014b50 : 0x04034b50, true)
+  if (central) view.setUint16(4, 45, true)
+  const base = central ? 6 : 4
+  view.setUint16(base, 45, true)
+  view.setUint16(base + 2, entry.directory ? 0x0800 : 0x0808, true)
+  view.setUint16(base + 6, time, true)
+  view.setUint16(base + 8, day, true)
+  view.setUint32(base + 10, central ? crc : 0, true)
+  view.setUint32(base + 14, 0xffffffff, true)
+  view.setUint32(base + 18, 0xffffffff, true)
+  view.setUint16(base + 22, name.byteLength, true)
+  view.setUint16(base + 24, extraLength, true)
+  if (central) {
+    view.setUint32(38, entry.directory ? 0x10 : 0, true)
+    view.setUint32(42, 0xffffffff, true)
+  }
+  bytes.set(name, length)
+  const extra = length + name.byteLength
+  view.setUint16(extra, 1, true)
+  view.setUint16(extra + 2, extraLength - 4, true)
+  view.setBigUint64(extra + 4, BigInt(entry.byteSize), true)
+  view.setBigUint64(extra + 12, BigInt(entry.byteSize), true)
+  if (central) view.setBigUint64(extra + 20, offset, true)
+  return bytes
+}
+
+function zipDescriptor(size, crc) {
+  const bytes = new Uint8Array(24)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, 0x08074b50, true)
+  view.setUint32(4, crc, true)
+  view.setBigUint64(8, BigInt(size), true)
+  view.setBigUint64(16, BigInt(size), true)
+  return bytes
+}
+
+function zipFooter(count, offset, size) {
+  const bytes = new Uint8Array(98)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, 0x06064b50, true)
+  view.setBigUint64(4, 44n, true)
+  view.setUint16(12, 45, true)
+  view.setUint16(14, 45, true)
+  view.setBigUint64(24, BigInt(count), true)
+  view.setBigUint64(32, BigInt(count), true)
+  view.setBigUint64(40, size, true)
+  view.setBigUint64(48, offset, true)
+  view.setUint32(56, 0x07064b50, true)
+  view.setBigUint64(64, offset + size, true)
+  view.setUint32(72, 1, true)
+  view.setUint32(76, 0x06054b50, true)
+  view.setUint16(84, 0xffff, true)
+  view.setUint16(86, 0xffff, true)
+  view.setUint32(88, 0xffffffff, true)
+  view.setUint32(92, 0xffffffff, true)
+  return bytes
+}
+
+async function streamZip(entries, writable, env) {
+  const writer = writable.getWriter()
+  const centralHeaders = []
+  let sourceReader = null
+  let offset = 0n
+  // Closing the browser must cancel a pending R2 read too, not leave its slot reserved.
+  writer.closed.catch(error => sourceReader?.cancel(error).catch(() => undefined))
+  try {
+    for (const entry of entries) {
+      let source
+      let modified
+      if (!entry.directory) {
+        if (entry.storageKey) {
+          const object = await env.PRIVATE_PHOTOS.get(String(entry.storageKey))
+          if (!object?.body) throw new Error('A photo is unavailable.')
+          source = object.body
+          modified = object.uploaded
+        } else if (entry.inlineBytes instanceof Uint8Array) {
+          source = new ReadableStream({ start(controller) { controller.enqueue(entry.inlineBytes); controller.close() } })
+        } else throw new Error('A download entry is invalid.')
+        sourceReader = source.getReader()
+      }
+      const startOffset = offset
+      const header = zipHeader(entry, startOffset, 0, false, modified)
+      await writer.write(header)
+      offset += BigInt(header.byteLength)
+      let crc = 0xffffffff
+      let copied = 0
+      if (sourceReader) {
+        for (;;) {
+          const result = await sourceReader.read()
+          if (result.done) break
+          copied += result.value.byteLength
+          if (copied > entry.byteSize) throw new Error('A photo exceeded its verified size.')
+          crc = crc32Update(crc, result.value)
+          await writer.write(result.value)
+        }
+        sourceReader.releaseLock()
+        sourceReader = null
+        if (copied !== entry.byteSize) throw new Error('A photo did not match its verified size.')
+        crc = (crc ^ 0xffffffff) >>> 0
+        const descriptor = zipDescriptor(copied, crc)
+        await writer.write(descriptor)
+        offset += BigInt(copied + descriptor.byteLength)
+      } else crc = 0
+      centralHeaders.push(zipHeader(entry, startOffset, crc, true, modified))
+    }
+    const centralOffset = offset
+    for (const header of centralHeaders) { await writer.write(header); offset += BigInt(header.byteLength) }
+    await writer.write(zipFooter(entries.length, centralOffset, offset - centralOffset))
+    await writer.close()
+  } catch (error) {
+    await sourceReader?.cancel(error).catch(() => undefined)
+    await writer.abort(error).catch(() => undefined)
+    throw error
+  } finally { writer.releaseLock() }
 }
 
 async function preflightEntries(entries, env) {
@@ -212,7 +363,7 @@ async function handleFolderDownload(request, env, context, manifestId, token) {
 function safeArchivePath(value) {
   const path = String(value || '').replaceAll('\\', '/')
   const parts = path.replace(/\/$/, '').split('/')
-  if (!parts.length || parts.some(part => !part || part === '.' || part === '..' || /[\u0000-\u001f]/.test(part))) {
+  if (new TextEncoder().encode(path).byteLength > 65535 || !parts.length || parts.some(part => !part || part === '.' || part === '..' || /[\u0000-\u001f]/.test(part))) {
     throw new Error('The download contains an unsafe filename.')
   }
   return path
@@ -247,7 +398,11 @@ async function handleAttachment(request, env, context, manifestId, token, format
     directories = manifestEntries.filter(entry => String(entry.name || '').endsWith('/'))
       .map(entry => safeArchivePath(entry.name))
     entries = await preflightEntries(rawFiles, env)
-    for (const entry of entries) safeArchivePath(entry.name)
+    for (const entry of entries) entry.name = safeArchivePath(entry.name)
+    if (new Set([...directories, ...entries.map(entry => entry.name)]).size !== directories.length + entries.length) throw new Error('The download contains duplicate filenames.')
+    if ([...directories, ...entries.map(entry => entry.name)].reduce((size, name) => size + new TextEncoder().encode(name).byteLength, 0) > 4 * 1024 * 1024) {
+      throw new Error('The download contains too much filename metadata.')
+    }
     if (!entries.length) throw new Error('No downloadable files are available.')
   } catch (error) {
     await complete(env, manifestId, hash, false)
@@ -308,27 +463,12 @@ async function handleAttachment(request, env, context, manifestId, token, format
   const { readable, writable } = typeof FixedLengthStream === 'function'
     ? new FixedLengthStream(archiveBytes)
     : new TransformStream()
-  const archive = new ZipWriter(writable, { level: 0, zip64: true, useWebWorkers: false })
   const streamTask = (async () => {
     let success = false
     try {
-      for (const entry of zipEntries) {
-        if (entry.directory) {
-          await archive.add(entry.name, new Uint8ArrayReader(new Uint8Array(0)), { level: 0, zip64: true, directory: true })
-        } else if (entry.storageKey) {
-          const object = await env.PRIVATE_PHOTOS.get(String(entry.storageKey))
-          if (!object?.body) throw new Error('A photo is unavailable.')
-          await archive.add(entry.name, object.body, { level: 0, zip64: true, lastModDate: object.uploaded || new Date() })
-        } else if (entry.inlineBytes instanceof Uint8Array) {
-          await archive.add(entry.name, new Uint8ArrayReader(entry.inlineBytes), { level: 0, zip64: true })
-        } else {
-          throw new Error('A download entry is invalid.')
-        }
-      }
-      await archive.close()
+      await streamZip(zipEntries, writable, env)
       success = true
     } catch (error) {
-      try { await archive.close() } catch { /* stream may already be closed */ }
       console.error('Private ZIP stream failed', error instanceof Error ? error.message : 'unknown error')
     } finally {
       await complete(env, manifestId, hash, success)

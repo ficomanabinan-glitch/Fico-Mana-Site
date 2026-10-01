@@ -66,6 +66,7 @@ export default function PortalOriginalDownload({
 
   async function submitRequest() {
     const clean = reason.trim()
+    if (sending) return
     if (clean.length < 5) {
       setMessage('Please add a short reason (at least 5 characters).')
       return
@@ -86,16 +87,23 @@ export default function PortalOriginalDownload({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ reason: clean }),
       })
-      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string
+        request?: { status?: string; existing?: boolean }
+      }
       if (!response.ok) throw new Error(body.error || 'The request could not be sent.')
       setRequestOpen(false)
       setReason('')
-      setMessage('Request sent. The studio can now review your reason.')
-      await onAccessChanged()
+      setMessage(body.request?.status === 'GRANTED'
+        ? 'The studio has granted your download. You can download your photos now.'
+        : body.request?.existing
+          ? 'Your request is waiting for the studio. You do not need to send it again.'
+          : 'Request sent. The studio can now review your reason.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'The request could not be sent. Please try again.')
     } finally {
       setSending(false)
+      await onAccessChanged().catch(() => undefined)
     }
   }
 
@@ -123,7 +131,9 @@ export default function PortalOriginalDownload({
         )}
       </div>
 
-      {requestOpen ? (
+      {pending ? <p className="mt-3 text-caption leading-relaxed text-white/70" role="status">Your request is waiting for the studio. Download access updates here when it is granted.</p> : null}
+
+      {requestOpen && !pending && !granted ? (
         <div className="mt-5 rounded-control border border-white/10 bg-black/20 p-4">
           <label htmlFor="download-request-reason" className="text-caption font-semibold text-white/80">Reason</label>
           <textarea
@@ -133,7 +143,9 @@ export default function PortalOriginalDownload({
             rows={3}
             autoFocus
             placeholder="Tell the studio why you need another download."
-            className="mt-2 w-full resize-y rounded-control border border-white/12 bg-white/[0.04] px-3.5 py-3 text-sm leading-relaxed text-white outline-none placeholder:text-white/30 focus:border-[#C4CEFF]/50 focus:ring-2 focus:ring-[#C4CEFF]/15"
+            maxLength={500}
+            minLength={5}
+            className="mt-2 w-full resize-y rounded-control border border-white/12 bg-white/[0.04] px-3.5 py-3 text-base leading-relaxed text-white outline-none placeholder:text-white/60 focus:border-[#C4CEFF]/50 focus:ring-2 focus:ring-[#C4CEFF]/15"
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-caption text-white/35">{reason.length}/500 characters</p>

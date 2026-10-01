@@ -9,6 +9,7 @@ const migrations = [
   'supabase/migrations/20260923030814_retry_interrupted_portal_downloads.sql',
   'supabase/migrations/20260923061614_enforce_weekly_portal_download_slots.sql',
   'supabase/migrations/20260929091741_allow_requests_for_reserved_download_slots.sql',
+  'supabase/migrations/20261001031500_recover_interrupted_download_requests.sql',
 ]
 
 test('two reserved download slots can request staff access before worker completion', async () => {
@@ -53,10 +54,81 @@ test('two reserved download slots can request staff access before worker complet
     assert.equal(request.rows[0].value.status, 'PENDING')
     const queue = await db.query<{ reason: string }>(`select reason from portal_raw_download_requests where id=$1`, [request.rows[0].value.id])
     assert.equal(queue.rows[0].reason, 'Previous transfers were interrupted')
-    await assert.rejects(
-      db.query(`select request_portal_raw_download($1,$2,'Another request')`, [workspace, publicId]),
-      /already waiting/,
+    const repeated = await db.query<{ value: { id: string; status: string } }>(
+      `select request_portal_raw_download($1,$2,'Another request') value`, [workspace, publicId],
     )
+    assert.equal(repeated.rows[0].value.id, request.rows[0].value.id)
+    assert.equal(repeated.rows[0].value.status, 'PENDING')
+    const actor = '44444444-4444-4444-8444-444444444444'
+    await db.query(`select grant_portal_raw_download($1,$2,$3)`, [workspace, request.rows[0].value.id, actor])
+    const alreadyGranted = await db.query<{ value: { status: string } }>(
+      `select request_portal_raw_download($1,$2,'Another request') value`, [workspace, publicId],
+    )
+    assert.equal(alreadyGranted.rows[0].value.status, 'GRANTED')
+    const grantedAttempt = await db.query<{ id: string }>(`select begin_portal_raw_download($1,$2)->>'attemptId' id`, [workspace, publicId])
+    const manifestId = '55555555-5555-4555-8555-555555555555'
+    const tokenHash = 'a'.repeat(64)
+    await db.query(`insert into private_download_manifests(id,workspace_id,portal_id,raw_attempt_id,kind,token_hash,file_name,entries)
+      values($1,$2,$3,$4,'PORTAL_ORIGINALS',$5,'Client One - FM-1 - Originals.zip','[{"name":"photo.jpg","key":"synthetic/photo.jpg","size":10}]')`,
+    [manifestId, workspace, portal, grantedAttempt.rows[0].id, tokenHash])
+    const retried = await db.query<{ value: { id: string; status: string } }>(
+      `select request_portal_raw_download($1,$2,'Granted transfer was interrupted') value`, [workspace, publicId],
+    )
+    assert.equal(retried.rows[0].value.id, request.rows[0].value.id)
+    assert.equal(retried.rows[0].value.status, 'PENDING')
+    const attempt = await db.query<{ status: string }>(`select status from portal_raw_download_attempts where id=$1`, [grantedAttempt.rows[0].id])
+    assert.equal(attempt.rows[0].status, 'FAILED')
+    const manifest = await db.query<{ status: string }>(`select status from private_download_manifests where id=$1`, [manifestId])
+    assert.equal(manifest.rows[0].status, 'FAILED')
+    await assert.rejects(db.query(`select resolve_private_download_manifest($1,$2)`, [manifestId, tokenHash]), /Download link is unavailable/)
+    const visible = await db.query<{ reason: string }>(`select reason from portal_raw_download_requests where portal_id=$1 and status='PENDING'`, [portal])
+    assert.equal(visible.rows.length, 1)
+    assert.equal(visible.rows[0].reason, 'Granted transfer was interrupted')
+    const metadata = await db.query<{ granted_at: string | null; granted_by: string | null }>(`select granted_at,granted_by from portal_raw_download_requests where id=$1`, [request.rows[0].value.id])
+    assert.equal(metadata.rows[0].granted_at, null)
+    assert.equal(metadata.rows[0].granted_by, null)
+    // A late completion from the abandoned transfer cannot consume the new request.
+    await db.query(`select finish_portal_raw_download($1,true)`, [grantedAttempt.rows[0].id])
+    const lateManifest = await db.query<{ result: boolean }>(`select complete_private_download_manifest($1,$2,true) result`, [manifestId, tokenHash])
+    assert.equal(lateManifest.rows[0].result, false)
+    const afterLateCompletion = await db.query<{ status: string }>(`select status from portal_raw_download_requests where id=$1`, [request.rows[0].value.id])
+    assert.equal(afterLateCompletion.rows[0].status, 'PENDING')
+    await db.query(`select grant_portal_raw_download($1,$2,$3)`, [workspace, request.rows[0].value.id, actor])
+    const replacement = await db.query<{ id: string }>(`select begin_portal_raw_download($1,$2)->>'attemptId' id`, [workspace, publicId])
+    assert.notEqual(replacement.rows[0].id, grantedAttempt.rows[0].id)
+    await db.query(`select finish_portal_raw_download($1,true)`, [replacement.rows[0].id])
+    const completed = await db.query<{ status: string }>(`select status from portal_raw_download_requests where id=$1`, [request.rows[0].value.id])
+    assert.equal(completed.rows[0].status, 'CONSUMED')
+    await assert.rejects(db.query(`select begin_portal_raw_download($1,$2)`, [workspace, publicId]), /DOWNLOAD_LIMIT_REACHED/)
+
+    const secondRequest = await db.query<{ value: { id: string; status: string } }>(
+      `select request_portal_raw_download($1,$2,'Need another copy later') value`, [workspace, publicId],
+    )
+    assert.notEqual(secondRequest.rows[0].value.id, request.rows[0].value.id)
+    assert.equal(secondRequest.rows[0].value.status, 'PENDING')
+    await assert.rejects(db.query(`select request_portal_raw_download($1,$2,'tiny')`, [workspace, publicId]), /A reason between 5 and 500/)
+    await assert.rejects(db.query(`select request_portal_raw_download($1,$2,$3)`, [workspace, publicId, 'a'.repeat(501)]), /A reason between 5 and 500/)
+    await assert.rejects(db.query(`select request_portal_raw_download($1,$2,'Wrong workspace')`, [actor, publicId]), /Portal is unavailable/)
+    await assert.rejects(db.query(`select grant_portal_raw_download($1,$2,$3)`, [actor, secondRequest.rows[0].value.id, actor]), /Download request not found/)
+    await db.query(`update client_portals set expires_at=now()-interval '1 minute' where id=$1`, [portal])
+    await assert.rejects(db.query(`select request_portal_raw_download($1,$2,'Expired access')`, [workspace, publicId]), /Portal is unavailable/)
+    await db.query(`update client_portals set expires_at=now()+interval '30 days' where id=$1`, [portal])
+    await db.exec(`set role anon`)
+    await assert.rejects(db.query(`select request_portal_raw_download($1,$2,'Direct client call')`, [workspace, publicId]), /permission denied/)
+    await db.exec(`reset role`)
+
+    // Replacing this function is reversible without touching saved requests.
+    // Restore the preceding migration, prove its old behavior, then reapply.
+    await db.exec(await readFile('supabase/migrations/20260929091741_allow_requests_for_reserved_download_slots.sql', 'utf8'))
+    await assert.rejects(db.query(`select request_portal_raw_download($1,$2,'Duplicate after rollback')`, [workspace, publicId]), /already waiting/)
+    await db.exec(await readFile('supabase/migrations/20261001031500_recover_interrupted_download_requests.sql', 'utf8'))
+    const restored = await db.query<{ value: { id: string; status: string } }>(
+      `select request_portal_raw_download($1,$2,'Duplicate after reapply') value`, [workspace, publicId],
+    )
+    assert.equal(restored.rows[0].value.id, secondRequest.rows[0].value.id)
+    assert.equal(restored.rows[0].value.status, 'PENDING')
+    const audit = await db.query<{ count: number }>(`select count(*)::int count from workflow_audit_logs where action='RAW_DOWNLOAD_ACCESS_REQUESTED'`)
+    assert.equal(audit.rows[0].count, 3)
   } finally {
     await db.close()
   }

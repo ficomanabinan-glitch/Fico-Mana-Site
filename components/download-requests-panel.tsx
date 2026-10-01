@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Check, Clock3, Download, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlertCircle, Check, Clock3, Download, RefreshCw } from 'lucide-react'
 import { adminBtnGhost, adminEmptyState, adminPanel, adminSpinner } from '@/lib/admin-ui'
 import type { PortalRawDownloadRequest } from '@/lib/portal-raw-downloads'
 import { useAdminToast } from '@/components/admin-toast-provider'
@@ -18,24 +18,48 @@ export default function DownloadRequestsPanel({ onCountChange }: { onCountChange
   const [requests, setRequests] = useState<PortalRawDownloadRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [grantingId, setGrantingId] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const readSequence = useRef(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    const sequence = ++readSequence.current
+    if (!silent) setLoading(true)
     try {
       const response = await fetch('/api/editor-workflow/download-requests', { cache: 'no-store', credentials: 'include' })
       const body = (await response.json().catch(() => ({}))) as { requests?: PortalRawDownloadRequest[]; error?: string }
       if (!response.ok) throw new Error(body.error || 'Could not load download requests.')
-      const next = body.requests || []
+      if (!Array.isArray(body.requests)) throw new Error('The download request list could not be read.')
+      if (sequence !== readSequence.current) return
+      const next = body.requests
       setRequests(next)
+      setLoadError('')
       onCountChange?.(next.length)
     } catch (error) {
-      toast.error('Requests unavailable', error instanceof Error ? error.message : 'Could not load download requests.')
+      if (sequence !== readSequence.current) return
+      const message = error instanceof Error ? error.message : 'Could not load download requests.'
+      setLoadError(message)
     } finally {
-      setLoading(false)
+      if (sequence === readSequence.current) setLoading(false)
     }
-  }, [onCountChange, toast])
+  }, [onCountChange])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) void load(true)
+    }
+    const timer = window.setInterval(refreshWhenVisible, 15_000)
+    window.addEventListener('focus', refreshWhenVisible)
+    window.addEventListener('online', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      window.removeEventListener('online', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      readSequence.current += 1
+    }
+  }, [load])
 
   async function grant(request: PortalRawDownloadRequest) {
     setGrantingId(request.id)
@@ -45,6 +69,9 @@ export default function DownloadRequestsPanel({ onCountChange }: { onCountChange
       })
       const body = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) throw new Error(body.error || 'Access could not be granted.')
+      readSequence.current += 1
+      setLoading(false)
+      setLoadError('')
       const next = requests.filter((item) => item.id !== request.id)
       setRequests(next)
       onCountChange?.(next.length)
@@ -68,13 +95,22 @@ export default function DownloadRequestsPanel({ onCountChange }: { onCountChange
         </button>
       </header>
 
+      {loadError ? (
+        <div className="m-5 flex flex-col gap-3 rounded-control border border-red-400/25 bg-red-400/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+          <div className="flex min-w-0 items-start gap-3">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-200" />
+            <div className="min-w-0"><p className="text-sm font-semibold text-red-100">Download requests unavailable</p><p className="mt-1 break-words text-sm leading-relaxed text-red-100/80">{loadError} Try again to check the queue.</p></div>
+          </div>
+          <button type="button" onClick={() => void load()} className={`${adminBtnGhost} shrink-0 px-3 py-2`} disabled={loading}>Try again</button>
+        </div>
+      ) : null}
       {loading ? (
         <div className="flex min-h-56 items-center justify-center"><div className={adminSpinner} /></div>
-      ) : requests.length === 0 ? (
+      ) : requests.length === 0 && !loadError ? (
         <div className={`${adminEmptyState} m-5 min-h-56`}>
           <Download className="size-7 text-white/25" />
           <p className="text-sm font-medium text-white/70">No download requests</p>
-          <p className="max-w-sm text-center text-caption leading-relaxed text-white/40">Clients appear here after using both included original downloads.</p>
+          <p className="max-w-sm text-center text-caption leading-relaxed text-white/60">Clients appear here after requesting another originals download.</p>
         </div>
       ) : (
         <div className="divide-y divide-white/[0.07]">
