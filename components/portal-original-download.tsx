@@ -118,7 +118,7 @@ export default function PortalOriginalDownload({
         {downloadUrl ? (
           <button type="button" disabled={starting} className={`${primary} inline-flex shrink-0 items-center justify-center gap-2`} onClick={() => void downloadAll()}>
             <Download className="size-3.5" strokeWidth={1.5} />
-            {starting ? 'Preparing ZIP…' : retrying ? 'Download all again' : granted ? 'Use granted download' : 'Download all photos'}
+            {starting ? 'Preparing ZIP…' : retrying ? 'Download all again' : granted ? 'Download Again' : 'Download all photos'}
           </button>
         ) : pending ? (
           <button type="button" className={secondary} disabled>
