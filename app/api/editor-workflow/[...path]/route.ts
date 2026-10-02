@@ -202,7 +202,7 @@ async function handlePortal(request: NextRequest, path: string[]) {
   }
   if (path.length === 4 && path[2] === 'single-photo' && method === 'POST') {
     const fileId = decodeURIComponent(path[3])
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId)) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId)) {
       return json({ error: 'Choose a valid photo.' }, 400)
     }
     const kind = request.nextUrl.searchParams.get('kind') === 'deliverable' ? 'deliverable' : 'original'

@@ -2651,7 +2651,9 @@ export async function preparePortalRawPhotos(publicId: string) {
 }
 
 export async function preparePortalSinglePhoto(publicId: string, fileId: string, kind: 'original' | 'deliverable') {
-  const { admin, portal } = kind === 'original' ? await portalOriginalsReady(publicId) : await portalRecord(publicId)
+  // Individual photos are available while choosing. Only bulk originals require
+  // a submitted selection; expiry, reset and per-booking ownership still apply.
+  const { admin, portal } = await portalRecord(publicId)
   const table = kind === 'original' ? 'gallery_files' : 'deliverable_files'
   let query = admin.from(table).select('storage_key,file_name,file_size')
     .eq('id', fileId).eq('workspace_id', portal.workspace_id).eq('booking_id', portal.booking_id)

@@ -41,6 +41,11 @@ export function memoryDb(tables: Record<string, Row[]>, fail?: (table: string, a
       eq(key: string, expected: unknown) { predicates.push(row => field(row, key) === expected); return query },
       neq(key: string, expected: unknown) { predicates.push(row => field(row, key) !== expected); return query },
       is(key: string, expected: unknown) { predicates.push(row => (field(row, key) ?? null) === expected); return query },
+      not(key: string, operator: string, expected: unknown) {
+        if (operator !== 'is' || expected !== null) throw new Error('Unsupported synthetic not filter')
+        predicates.push(row => field(row, key) != null)
+        return query
+      },
       in(key: string, values: unknown[]) { predicates.push(row => values.includes(field(row, key))); return query },
       update(patch: Row) { action = 'update'; value = patch; return query },
       delete() { action = 'delete'; return query },

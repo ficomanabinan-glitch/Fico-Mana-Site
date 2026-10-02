@@ -63,11 +63,26 @@ for (const width of [390, 901, 1440]) {
   })
 }
 
-/** SC1 negative / existing access gating: unsubmitted choices cannot download. */
-test('open selection does not gain individual download controls', async ({ page, privatePortal }) => {
-  void privatePortal
+/** Individual downloads remain independent of selection and bulk-download eligibility. */
+test('open selection has visible download icons that do not change choices', async ({ page, privatePortal }) => {
+  const preparations: string[] = []
+  await page.route('**/single-photo/*?kind=*', async route => {
+    preparations.push(route.request().url())
+    await route.fulfill({ json: { error: 'Synthetic preparation interrupted. Try again.' } })
+  })
   await page.goto(`/portal/${PRIVATE_PORTAL_ID}`)
   await page.getByRole('button', { name: 'Try Again', exact: true }).click()
   await expect(page.getByTestId('portal-contact-sheet')).toBeVisible()
-  await expect(page.getByRole('button', { name: /^Download SYNTHETIC-/ })).toHaveCount(0)
+  const sheet = page.getByTestId('portal-contact-sheet')
+  await expect(sheet.getByRole('button', { name: /^Download SYNTHETIC-/ })).toHaveCount(5)
+  const icon = sheet.getByRole('button', { name: 'Download SYNTHETIC-01.JPG', exact: true })
+  await expect(icon).toBeVisible()
+  const selectionBefore = await sheet.getByRole('button', { pressed: true }).count()
+  await icon.click()
+  await expect(sheet.getByRole('alert')).toHaveText('Synthetic preparation interrupted. Try again.')
+  await expect(icon).toBeEnabled()
+  await expect(sheet.getByRole('button', { pressed: true })).toHaveCount(selectionBefore)
+  expect(preparations).toHaveLength(1)
+  expect(privatePortal.selectionPosts).toEqual([])
+  expect(privatePortal.requests.some(request => /folder|manifest/.test(request.path))).toBe(false)
 })
