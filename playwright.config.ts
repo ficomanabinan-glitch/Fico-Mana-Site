@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const baseURL = process.env.QA_BASE_URL || 'http://127.0.0.1:3200'
+// An owned optimized server must never fall back to a dev process that rewrites its artifacts.
+const useExistingServer = process.env.QA_USE_EXISTING_SERVER === 'true'
 if (!['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname)) {
   throw new Error('This isolated browser suite must run locally, not against live customer services.')
 }
@@ -16,7 +18,7 @@ export default defineConfig({
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
   ],
-  webServer: {
+  webServer: useExistingServer ? undefined : {
     command: `npm run dev -- --hostname 127.0.0.1 --port ${new URL(baseURL).port || '3200'}`,
     // Browser fixtures are synthetic; never inherit hosted database credentials.
     env: {

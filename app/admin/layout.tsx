@@ -28,6 +28,8 @@ import { notificationDestination } from '@/lib/notification-navigation'
 import { AdminToastProvider } from '@/components/admin-toast-provider'
 import { AdminAutoSyncProvider } from '@/components/admin-auto-sync'
 import AdminSyncStatus from '@/components/admin-sync-status'
+import AdminClientSearch from '@/components/admin-client-search'
+import ClientWorkspaceReturn from '@/components/client-workspace-return'
 import { WorkspaceRefreshProvider } from '@/components/workspace-refresh'
 import AdminLoadingSkeleton from '@/components/admin-loading-skeleton'
 import { notificationTypeBadge } from '@/lib/admin-ui'
@@ -245,6 +247,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const pageTitle = useMemo(() => {
     const activePath = pendingHref ?? pathname
+    if (activePath.startsWith('/admin/clients/')) return 'Client workspace'
     for (const section of navigationSections) {
       const item = section.items.find((entry) => entry.href === activePath)
       if (item) return item.label
@@ -343,6 +346,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
 
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                <AdminClientSearch />
                 <AdminSyncStatus />
                 <div className="relative">
                   <button
@@ -429,6 +433,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ) : null}
 
             <main ref={mainRef} className="relative min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">
+              <ClientWorkspaceReturn />
               <div key={pathname} className="console-route-entry min-w-0 w-full">{children}</div>
             </main>
           </div>

@@ -1044,8 +1044,9 @@ async function portalRecord(publicId: string, allowReset = false) {
   if (!data) throw new Error('Portal not found.')
   const booking = Array.isArray(data.bookings) ? data.bookings[0] : data.bookings
   if (!data.workspace_id || booking?.workspace_id !== data.workspace_id) throw new Error('Portal not found.')
-  if (hasPortalExpired(data.expires_at)) throw new Error('Portal expired.')
-  if (data.status === 'expired') throw new Error('Portal expired.')
+  if (hasPortalExpired(data.expires_at) || data.status === 'expired') {
+    throw new PortalSelectionError('This client portal has expired. Try: contact FICO MANA to request access again.', 'PORTAL_EXPIRED', 410)
+  }
   if (data.status !== 'active') throw new Error('Portal disabled.')
   const available = await admin.from('gallery_files').select('id')
     .eq('workspace_id', data.workspace_id).eq('booking_id', data.booking_id)

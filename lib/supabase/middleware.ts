@@ -74,6 +74,8 @@ function maybeEnforceEditorSubdomain(request: NextRequest) {
 function isEditorHostPassThrough(pathname: string) {
   const isClientPortalApi =
     pathname === '/api/provisioning' ||
+    // Client Portals lives on the editor host; the handler still requires admin RBAC.
+    pathname === '/api/storage/settings' ||
     /^\/api\/bookings\/[^/]+\/(?:portal|provisioning(?:\/audit)?|portal-resources)$/.test(pathname)
   return (
     pathname.startsWith('/editor') ||

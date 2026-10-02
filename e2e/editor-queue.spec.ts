@@ -34,7 +34,7 @@ for (const role of ['editor', 'admin'] as const) {
       await route.fulfill({ json: [] })
     })
     await page.goto('/editor/filtering?tab=calendar')
-    await expect(page.getByRole('heading', { name: 'Filtering Dashboard', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Client Selections', exact: true })).toBeVisible()
     await expect(page.getByText('Queue Test Client', { exact: true })).toBeVisible()
     expect(queueReads).toBeGreaterThan(0)
     await expect(page.getByText('Client queue unavailable', { exact: true })).toHaveCount(0)

@@ -34,11 +34,14 @@ export default function SchoolAffiliations() {
       />
 
       <motion.div
+        role="region"
+        aria-label={copy.schoolsTitle}
+        tabIndex={0}
         initial={{ opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         viewport={{ once: true }}
-        className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 snap-x snap-mandatory md:grid md:grid-cols-2 md:max-w-3xl md:mx-auto md:overflow-visible md:pb-0 md:gap-6"
+        className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 snap-x snap-mandatory outline-none focus-visible:ring-2 focus-visible:ring-[var(--fico-focus)] focus-visible:ring-offset-4 focus-visible:ring-offset-black md:grid md:grid-cols-2 md:max-w-3xl md:mx-auto md:overflow-visible md:pb-0 md:gap-6"
       >
         {partnerSchools.map((school, index) => (
           <motion.div

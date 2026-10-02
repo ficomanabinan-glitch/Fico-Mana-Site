@@ -6,6 +6,7 @@ import * as enhancedUploadNaming from '../../lib/enhanced-upload-naming.ts'
 import * as fileNamePolicy from '../../lib/storage/file-name-policy.ts'
 import * as portalPagePayload from '../../lib/portal-page-payload.ts'
 import * as portalDevice from '../../lib/security/portal-device.ts'
+import * as editorReadValidation from '../../lib/editor-read-validation.ts'
 
 const require = createRequire(import.meta.url)
 
@@ -24,6 +25,9 @@ export function loadTs<T>(path: string, stubs: Record<string, unknown>, source?:
     if (name === '@/lib/storage/file-name-policy') return fileNamePolicy
     if (name === '@/lib/portal-page-payload') return portalPagePayload
     if (name === '@/lib/security/portal-device') return portalDevice
+    if (name === '@/lib/editor-read-validation') return editorReadValidation
+    // The shared read notice has no external boundary; run its actual JSX unchanged.
+    if (name === '@/components/staff-read-notice') return loadTs('components/staff-read-notice.tsx', {})
     if (name.startsWith('node:') || ['react', 'react/jsx-runtime', 'lucide-react'].includes(name)) return require(name)
     throw new Error(`Unstubbed dependency: ${name}`)
   }

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
+import StaffReadNotice from '@/components/staff-read-notice'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import AddonCatalogManager from '@/components/addon-catalog-manager'
 import PaymentQrManager from '@/components/payment-qr-manager'
@@ -113,6 +114,8 @@ export default function PackageManagerPage() {
   const [packages, setPackages] = useState<ManagedPackage[]>(() => initialPackages ?? [])
   const [loading, setLoading] = useState(() => initialPackages === null)
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState(false)
+  const [hasPackageData, setHasPackageData] = useState(() => initialPackages !== null)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState(initialUiRef.current.search)
   const [category, setCategory] = useState<PackageCategoryFilter>(initialUiRef.current.category)
@@ -121,17 +124,24 @@ export default function PackageManagerPage() {
 
   const load = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
     const cached = getCachedManagedPackages()
-    if (cached) setPackages(cached)
+    if (cached) {
+      setPackages(cached)
+      setHasPackageData(true)
+    }
     if (!force && cached && isManagedPackageCacheFresh()) {
       setLoading(false)
       setRefreshing(false)
+      setReadError(false)
       return
     }
 
-    setRefreshing(Boolean(cached))
+    setRefreshing(true)
     try {
       setPackages(await fetchManagedPackages({ force }))
+      setHasPackageData(true)
+      setReadError(false)
     } catch (error) {
+      setReadError(true)
       toast.error('Packages unavailable', error instanceof Error ? error.message : 'Try again.')
     } finally {
       setLoading(false)
@@ -189,6 +199,7 @@ export default function PackageManagerPage() {
         `${body.title} is ${body.isActive ? 'live on the website' : 'saved but hidden'}.`,
       )
       setPackages(rememberManagedPackage(body))
+      setHasPackageData(true)
       setEditingId(body.id)
       setDraft(toDraft(body))
     } catch (error) {
@@ -250,11 +261,16 @@ export default function PackageManagerPage() {
     <div className={adminPage}>
       {pageHeader}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {readError ? <StaffReadNotice
+        message={hasPackageData ? 'Package catalog could not be refreshed. Showing the last loaded packages. Try loading it again.' : 'Package catalog could not be loaded. Your filters and unsaved work are unchanged. Try loading it again.'}
+        retryLabel="Retry package catalog" busy={loading || refreshing} onRetry={() => void load({ force: true })}
+      /> : null}
+
+      {hasPackageData ? <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard label="Total Packages" value={packages.length} detail="Preserved for existing bookings" />
         <SummaryCard label="Visible on Website" value={activeCount} detail={`${packages.length - activeCount} hidden`} />
         <SummaryCard label="Selection Rules" value={selectionCounts} detail="Package-based photo limits" />
-      </div>
+      </div> : null}
 
       <section className="rounded-xl border border-[#C4CEFF]/20 bg-[#0500D0]/10 p-4">
         <div className="flex gap-3">
@@ -272,7 +288,7 @@ export default function PackageManagerPage() {
 
       {packageFilters}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {hasPackageData ? <div className="grid gap-4 lg:grid-cols-2">
         {filtered.map((pkg) => (
           <article key={pkg.id} className={`${adminPanel} p-5`}>
             <div className="flex items-start justify-between gap-4">
@@ -303,7 +319,7 @@ export default function PackageManagerPage() {
         {filtered.length === 0 ? (
           <div className={`${adminPanel} col-span-full p-10 text-center text-sm text-white/40`}>No packages match these filters.</div>
         ) : null}
-      </div>
+      </div> : null}
 
       <AddonCatalogManager />
 

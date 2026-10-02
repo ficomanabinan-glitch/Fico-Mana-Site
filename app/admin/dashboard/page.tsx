@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getBookings, peekBookings, Booking } from '@/lib/data-store'
 import Link from 'next/link'
 import {
@@ -14,7 +14,8 @@ import {
   Download,
 } from 'lucide-react'
 import { adminPage, adminCard, adminPanel, adminCardHover, adminEmptyState } from '@/lib/admin-ui'
-import AdminBookingSearch from '@/components/admin-booking-search'
+import { ClientSearchCard } from '@/components/admin-client-search'
+import AdminActionCenter from '@/components/admin-action-center'
 import AdminPageHeader from '@/components/admin-page-header'
 import BookingPrioritySelect from '@/components/booking-priority-select'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
@@ -76,24 +77,26 @@ export default function DashboardOverview() {
   const stats = useMemo(() => calculateDashboardStats(bookings), [bookings])
   const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
-  const fetchStats = async (silent = false) => {
+  const fetchStats = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
-      const data = await getBookings()
+      const data = await getBookings({ requireFresh: true })
       setBookings(data)
-    } catch (err) {
-      console.error(err)
+      setLoadError('')
+    } catch {
+      setLoadError('Booking statistics could not be refreshed. Existing records may be out of date; retry before relying on the counts.')
       if (!silent) toast.error('Sync failed', 'Could not load the dashboard. Try: refresh the page.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     fetchStats(true)
-  }, [])
+  }, [fetchStats])
 
   useOnAdminDbSync(() => fetchStats(true))
 
@@ -110,6 +113,26 @@ export default function DashboardOverview() {
 
   if (loading) {
     return <AdminPageSkeleton variant="dashboard" />
+  }
+
+  const readWarning = loadError ? (
+    <div role="alert" className="rounded-card border border-amber-200/25 p-5 text-sm leading-6 text-amber-200">
+      {loadError}
+      <button type="button" disabled={refreshing} className="ml-3 min-h-11 rounded-control border border-amber-200/25 px-3 text-white disabled:opacity-60" onClick={() => fetchStats()}>
+        {refreshing ? 'Checking…' : 'Retry dashboard'}
+      </button>
+    </div>
+  ) : null
+
+  // An unsuccessful first read is unknown, not evidence of an empty studio.
+  if (loadError && bookings.length === 0) {
+    return (
+      <div className={adminPage}>
+        <AdminPageHeader title="Console Dashboard" subtitle="Booking statistics are unavailable. Retry to check your studio records." onRefresh={() => fetchStats()} refreshing={refreshing} />
+        <ClientSearchCard />
+        {readWarning}
+      </div>
+    )
   }
 
   const kpis = [
@@ -138,7 +161,7 @@ export default function DashboardOverview() {
     {
       label: 'Completed Sessions',
       value: stats.completedSessions,
-      desc: 'Total shoots delivered',
+      desc: 'Shoots marked complete; delivery is tracked separately',
       accent: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
       icon: UserCheck,
     },
@@ -153,7 +176,7 @@ export default function DashboardOverview() {
       label: 'Total Revenue',
       value: `₱${stats.totalRevenue.toLocaleString()}`,
       desc: 'Verified deposit & studio collections',
-      accent: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+      accent: 'text-blue-400 border-blue-500/30 bg-blue-500/10',
       icon: TrendingUp,
     },
   ]
@@ -205,7 +228,10 @@ export default function DashboardOverview() {
         </div>
       </AdminPageHeader>
 
-      <AdminBookingSearch bookings={bookings} />
+      <ClientSearchCard />
+
+      {readWarning}
+      {(!loadError || bookings.length > 0) && <AdminActionCenter bookings={bookings} />}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {kpis.map((kpi, idx) => {

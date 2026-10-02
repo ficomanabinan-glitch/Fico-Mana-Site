@@ -6,6 +6,11 @@
 
 @theme inline {
   --color-black: #222222;
+  --color-public-muted: var(--fico-public-muted);
+  --color-staff-surface: var(--fico-staff-surface);
+  --color-staff-highlight: var(--fico-staff-highlight);
+  --color-staff-primary-foreground: var(--fico-staff-primary-foreground);
+  --color-staff-primary-hover: var(--fico-staff-primary-hover);
   --font-heading: var(--font-cormorant);
   --font-serif: var(--font-cormorant), 'Cormorant Garamond', Georgia, serif;
   --font-sans: var(--font-geist-sans), 'Geist Fallback', Arial, sans-serif;
@@ -78,6 +83,15 @@
 }
 
 :root {
+  --fico-public-muted: rgb(255 255 255 / 0.65);
+  --fico-staff-surface: #222222;
+  --fico-staff-primary: #8fa0ff;
+  --fico-staff-primary-foreground: #11131b;
+  --fico-staff-primary-hover: #aebaff;
+  --fico-staff-highlight: #c4ceff;
+  --fico-focus: #a5b4fc;
+  /* Portal brand stays independent of the staff --primary override. */
+  --fico-portal-primary: #0500d0;
   --fico-text-caption: 0.75rem;
   --fico-text-small: 0.875rem;
   --fico-text-body: 1rem;
@@ -363,7 +377,7 @@
   }
 
   .admin-select option {
-    background-color: #222222;
+    background-color: var(--fico-staff-surface);
     color: #f4f4f8;
   }
 
@@ -518,12 +532,12 @@
 /* Admin / filtering: softer blue accents on dark UI (not deep #0500D0) */
 .admin-console {
   --radius: var(--fico-radius-control);
-  --primary: #8fa0ff;
-  --primary-foreground: #11131b;
-  --accent: #8fa0ff;
-  --brand-blue: #8fa0ff;
-  --ring: #a5b4fc;
-  --sidebar-primary: #8fa0ff;
+  --primary: var(--fico-staff-primary);
+  --primary-foreground: var(--fico-staff-primary-foreground);
+  --accent: var(--fico-staff-primary);
+  --brand-blue: var(--fico-staff-primary);
+  --ring: var(--fico-focus);
+  --sidebar-primary: var(--fico-staff-primary);
   --staff-muted-foreground: rgb(255 255 255 / 0.65);
 }
 
@@ -605,14 +619,25 @@
   flex-direction: initial !important;
 }
 
-/* Keep all three surfaces calm and usable for people who prefer reduced motion. */
+/* Remove spatial movement from navigation and overlays, while retaining brief
+   color/opacity feedback. Loading text/live regions remain authoritative. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  html {
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+  }
+  .console-route-entry,
+  [data-slot="sheet-content"],
+  [data-slot="dialog-content"],
+  .portal-photo-preview,
+  .portal-photo-preview::backdrop {
+    animation: none !important;
+    transform: none !important;
+    translate: none !important;
+    transition-property: opacity, background-color, color, border-color !important;
+    transition-duration: 100ms !important;
+  }
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
   }
 }

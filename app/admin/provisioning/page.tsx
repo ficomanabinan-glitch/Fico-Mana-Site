@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Cloud, ExternalLink, LoaderCircle, QrCode, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
+import StaffReadNotice from '@/components/staff-read-notice'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import PortalQrCode from '@/components/portal-qr-code'
 import { useCachedPageRead } from '@/components/use-cached-page-read'
@@ -35,6 +36,7 @@ export default function ProvisioningPage() {
   const toast = useAdminToast()
   const [overview, setOverview, loading, setLoading, refreshing] = useCachedPageRead<Overview | null>('editor:client-portals', null)
   const [busyId, setBusyId] = useState('')
+  const [readError, setReadError] = useState('')
   const [portalAction, setPortalAction] = useState<{ bookingId: string; kind: 'open' | 'qr' } | null>(null)
   const [qrPortal, setQrPortal] = useState<QrPortal | null>(null)
   const [search, setSearch] = useState('')
@@ -53,9 +55,10 @@ export default function ProvisioningPage() {
       const data = await response.json().catch(() => ({})) as Overview & { error?: string }
       if (!response.ok) throw new Error(data.error || 'Could not load provisioning.')
       setOverview(data)
+      setReadError('')
       if (revision === settingsRevision.current) setExpiryDays(String(data.storage.portalExpiryDays || 30))
-    } catch (error) {
-      toast.error('Provisioning unavailable', error instanceof Error ? error.message : 'Try again.')
+    } catch {
+      setReadError('Client portals could not be loaded. Storage and portal readiness cannot be verified until the list is available.')
     } finally { setLoading(false) }
   }
   useEffect(() => { void load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -124,8 +127,10 @@ export default function ProvisioningPage() {
   }
 
   const storage = overview?.storage
+  if (!overview) return <div className="w-full min-w-0 space-y-6 font-sans" data-testid="client-portals-page"><AdminPageHeader title="Client Portals" subtitle="Manage client links and private photo storage." />{readError ? <StaffReadNotice message={readError} retryLabel="Retry client portals" busy={refreshing} onRetry={() => void load()} /> : <p role="status" className={`${adminPanel} p-5`}>Loading client portals…</p>}</div>
   return <div className="w-full min-w-0 space-y-6 font-sans" data-testid="client-portals-page">
     <AdminPageHeader title="Client Portals" subtitle="Manage client links and private photo storage." onRefresh={load} refreshing={refreshing} />
+    {readError && <StaffReadNotice message={readError} retryLabel="Retry client portals" busy={refreshing} onRetry={() => void load()} />}
     <div aria-busy={!overview && loading} className="grid gap-4 md:grid-cols-3"><Metric label="Active projects" value={overview ? counts.active : null} /><Metric label="Needs attention" value={overview ? counts.attention : null} /><Metric label="Not provisioned" value={overview ? counts.waiting : null} /></div>
     <section className={`${adminPanel} p-5 md:p-6`}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)] xl:items-center">

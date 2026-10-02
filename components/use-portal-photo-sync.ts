@@ -1,10 +1,11 @@
 'use client'
 import { useEffect, useRef } from 'react'
+import { isPortalAccessDenied } from '@/lib/portal-access-denial'
 
 type Revision = { generation: number; reopenedAt: string | null; galleryCount: number; expiresAt?: string | null; portalReadyEmailSentAt?: string | null; deliverablesUploadedAt?: string | null }
-export function usePortalPhotoSync(publicId: string, revision: Revision | null, onReset: () => void, onChange: () => Promise<void>) {
-  const latest = useRef({ revision, onReset, onChange })
-  latest.current = { revision, onReset, onChange }
+export function usePortalPhotoSync(publicId: string, revision: Revision | null, onReset: () => void, onChange: () => Promise<void>, onAccessDenied?: () => void) {
+  const latest = useRef({ revision, onReset, onChange, onAccessDenied })
+  latest.current = { revision, onReset, onChange, onAccessDenied }
   useEffect(() => {
     if (!publicId) return
     let disposed = false, inFlight = false, wasResetting = false
@@ -14,7 +15,10 @@ export function usePortalPhotoSync(publicId: string, revision: Revision | null, 
       inFlight = true
       try {
         const response = await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/photo-revision`, { cache: 'no-store', credentials: 'include', signal: controller.signal })
-        if (!response.ok) return // A temporary read failure must not empty a usable gallery.
+        if (!response.ok) {
+          if (isPortalAccessDenied(response.status)) latest.current.onAccessDenied?.()
+          return // A temporary read failure must not empty a usable gallery.
+        }
         const next = await response.json() as Revision & { resetting: boolean }
         if (disposed) return
         if (next.resetting) { wasResetting = true; latest.current.onReset(); return }

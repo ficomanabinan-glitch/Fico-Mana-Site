@@ -42,10 +42,10 @@ import {
   rawPhotoStatusBadge,
 } from '@/lib/admin-ui'
 import AdminPageHeader from '@/components/admin-page-header'
+import StaffReadNotice from '@/components/staff-read-notice'
 import AdminBookingCalendar from '@/components/admin-booking-calendar'
 import AdminRawPhotoQueue from '@/components/admin-raw-photo-queue'
 import { usePageBackgroundSync } from '@/components/use-cached-page-read'
-import { useAdminToast } from '@/components/admin-toast-provider'
 import DownloadRequestsPanel from '@/components/download-requests-panel'
 import { useBookingQueue } from '@/components/use-booking-queue'
 import { useEditorSession } from '@/components/editor-portal-shell'
@@ -73,11 +73,12 @@ function workflowBookings(bookings: Booking[]) {
 }
 
 export default function FilteringDashboard({ initialSearch = '', initialTab }: Props) {
-  const toast = useAdminToast()
-  const canReorderQueue = Boolean(useEditorSession()?.capabilities.admin)
+  const editorSession = useEditorSession()
+  const canReorderQueue = Boolean(editorSession?.capabilities.admin)
   const [bookings, setBookings] = useState<Booking[]>(() => peekFilteringBookings() ?? [])
   const [loading, setLoading] = useState(() => peekFilteringBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState('')
   const [activeTab, setActiveTab] = useState<FilteringDashTab>(
     initialTab || (initialSearch ? 'queue' : 'overview'),
   )
@@ -88,15 +89,15 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
-      setBookings(await fetchFilteringBookings())
-    } catch (err) {
-      console.error(err)
-      if (!silent) toast.error('Sync failed', 'Could not load filtering dashboard data.')
+      setBookings(await fetchFilteringBookings({ force: !silent }))
+      setReadError('')
+    } catch {
+      setReadError('Client selections could not be loaded. Previously shown queue information may be out of date.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
     fetchData(true)
@@ -171,7 +172,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
   return (
     <div className={adminPage}>
       <AdminPageHeader
-        title="Filtering Dashboard"
+        title={editorSession ? 'Client Selections' : 'Filtering Dashboard'}
         subtitle="Review photo selections and check editing progress."
         onRefresh={activeTab === 'editor' || activeTab === 'queue' ? undefined : () => fetchData()}
         refreshing={refreshing}
@@ -184,6 +185,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
         </Link>
       </AdminPageHeader>
 
+      {readError && <StaffReadNotice message={readError} retryLabel="Retry selections" busy={refreshing} onRetry={() => void fetchData()} />}
       <div className={`${adminCard} p-1.5 flex gap-1 overflow-x-auto`}>
         {tabs.map((tab) => {
           const Icon = tab.icon
@@ -201,7 +203,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
             >
               <Icon className="w-3.5 h-3.5" />
               {tab.label}
-              {typeof tab.count === 'number' && tab.count > 0 && (
+              {!readError && typeof tab.count === 'number' && tab.count > 0 && (
                 <span
                   className={`min-w-[1.25rem] text-center text-caption px-1.5 py-0.5 rounded-md font-bold ${
                     isActive
@@ -219,7 +221,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
         })}
       </div>
 
-      {activeTab === 'overview' && (
+      {activeTab === 'overview' && (!readError || bookings.length > 0) && (
         <OverviewTab
           counts={pipeline.counts}
           pendingReview={pipeline.pendingReview}
@@ -229,11 +231,11 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
         />
       )}
 
-      {activeTab === 'queue' && (
+      {activeTab === 'queue' && (!readError || bookings.length > 0) && (
         <AdminRawPhotoQueue key={queueSearch || 'queue'} initialSearch={queueSearch} embedded />
       )}
 
-      {activeTab === 'calendar' && (
+      {activeTab === 'calendar' && (!readError || bookings.length > 0) && (
         <div className="grid xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] gap-6 items-start">
           <div className="xl:sticky xl:top-4">
             <AdminBookingCalendar
@@ -259,7 +261,7 @@ export default function FilteringDashboard({ initialSearch = '', initialTab }: P
       )}
 
       {activeTab === 'downloads' && (
-        <DownloadRequestsPanel onCountChange={setDownloadRequestCount} />
+        <DownloadRequestsPanel key={initialSearch || 'all-download-requests'} bookingId={initialSearch} onCountChange={setDownloadRequestCount} />
       )}
 
       {activeTab === 'editor' && (

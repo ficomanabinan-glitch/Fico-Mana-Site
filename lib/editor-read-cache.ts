@@ -1,4 +1,5 @@
 import { STAFF_BACKGROUND_SYNC_MIN_MS, STAFF_READ_FRESH_MS } from './admin-cache-policy.ts'
+import { assertEditorReadMetadata } from './editor-read-validation.ts'
 
 export type EditorBatchClient = {
   bookingId: string
@@ -92,11 +93,12 @@ export async function fetchEditorBatches({
     cache: 'no-store',
     credentials: 'include',
   }).then(async (response) => {
-    const body = (await response.json().catch(() => [])) as EditorBatchSummary[] & { error?: string }
+    const body = (await response.json()) as EditorBatchSummary[] & { error?: string }
     if (!response.ok) {
       throw new Error(body.error || 'Could not load editor batches.')
     }
-    const data = Array.isArray(body) ? body : []
+    assertEditorReadMetadata(body, 'batches')
+    const data = body
     if (requestGeneration === cacheGeneration) {
       batchCache = { data, cachedAt: Date.now() }
       if (synchronize) lastSynchronizedAt = Date.now()

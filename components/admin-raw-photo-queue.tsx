@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import StaffReadNotice from '@/components/staff-read-notice'
+import StaffModalFrame from '@/components/staff-modal-frame'
 import { type Booking } from '@/lib/data-store'
 import { fetchFilteringBookings as getBookings, peekFilteringBookings as peekBookings, invalidateFilteringBookings } from '@/lib/filtering-read-cache'
 import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
@@ -60,6 +62,7 @@ export default function AdminRawPhotoQueue({
   const [bookings, setBookings] = useState<Booking[]>(() => (peekBookings() ?? []).filter(hasRawPhotoSubmission))
   const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState('')
   const [searchTerm, setSearchTerm] = useState(initialSearch)
   const [activeTab, setActiveTab] = useState<FilteringTab>(initialSearch ? 'All' : 'Pending Review')
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -85,16 +88,16 @@ export default function AdminRawPhotoQueue({
   const fetchQueue = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
-      const data = await getBookings()
+      const data = await getBookings({ force: !silent })
       setBookings(data.filter(hasRawPhotoSubmission))
-    } catch (err) {
-      console.error(err)
-      toast.error('Sync failed', 'Could not load photo selections. Try: refresh the page.')
+      setReadError('')
+    } catch {
+      setReadError('Photo selections could not be loaded. Previously shown selections may be out of date.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
     fetchQueue(true)
@@ -292,6 +295,8 @@ export default function AdminRawPhotoQueue({
   const countRejected = bookings.filter((b) => b.rawPhotoStatus === 'Rejected').length
   const countAll = bookings.length
 
+  if (!loading && readError && !bookings.length) return <div className="space-y-6">{!embedded && <AdminPageHeader title="Raw Photo Filtering" subtitle="Review selected photos and send feedback." />}<StaffReadNotice message={readError} retryLabel="Retry selections" busy={refreshing} onRetry={() => void fetchQueue()} /></div>
+
   return (
     <div className="space-y-6">
       {!embedded && (
@@ -319,6 +324,7 @@ export default function AdminRawPhotoQueue({
         </div>
       )}
 
+      {readError && <StaffReadNotice message={readError} retryLabel="Retry selections" busy={refreshing} onRetry={() => void fetchQueue()} />}
       <div className="flex border-b border-white/10 gap-2 overflow-x-auto">
         {(['Pending Review', 'Approved', 'Rejected', 'All'] as FilteringTab[]).map((tab) => {
           const count =
@@ -366,6 +372,7 @@ export default function AdminRawPhotoQueue({
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
           <input
             type="text"
+            aria-label="Search photo selections"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by client name, email, booking reference, package..."
@@ -530,15 +537,16 @@ export default function AdminRawPhotoQueue({
       )}
 
       {showDetailModal && selectedBooking && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <StaffModalFrame labelledBy="selection-details-title" onClose={() => { setShowDetailModal(false); setPreviewSelectionFile(null); setSelectedBooking(null) }} className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="max-h-[90vh] w-full max-w-4xl space-y-6 overflow-y-auto rounded-card border border-white/10 bg-[#222222] p-6 shadow-2xl md:p-8">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-white text-lg">Selected Photos</h3>
+                <h2 id="selection-details-title" className="font-bold text-white text-lg">Selected Photos</h2>
                 <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close selected photos"
                 onClick={() => {
                   setShowDetailModal(false)
                   setSelectedBooking(null)
@@ -648,27 +656,28 @@ export default function AdminRawPhotoQueue({
               </button>
             </div>
           </div>
-        </div>
+        </StaffModalFrame>
       )}
 
-      {showDetailModal && previewSelectionFile ? <div role="dialog" aria-modal="true" aria-label={`Preview ${previewSelectionFile.fileName}`} onKeyDown={(event) => { if (event.key === 'Escape') setPreviewSelectionFile(null) }} className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4 text-white sm:p-6">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 pb-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{previewSelectionFile.fileName}</p><p className="text-xs text-white/60">{previewSelectionFile.extraEdit ? 'Extra edit' : 'Included'} · {previewSelectionFile.preference}</p></div><button type="button" autoFocus onClick={() => setPreviewSelectionFile(null)} aria-label="Close full photo preview" className="flex size-11 shrink-0 items-center justify-center rounded-control border border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><X className="size-5" aria-hidden="true" /></button></div>
+      {showDetailModal && previewSelectionFile ? <StaffModalFrame labelledBy="selection-preview-title" onClose={() => setPreviewSelectionFile(null)} className="fixed inset-0 z-[70] flex flex-col bg-black/95 p-4 text-white sm:p-6">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 pb-3"><div className="min-w-0"><h2 id="selection-preview-title" className="truncate text-sm font-semibold">Preview {previewSelectionFile.fileName}</h2><p className="text-xs text-white/60">{previewSelectionFile.extraEdit ? 'Extra edit' : 'Included'} · {previewSelectionFile.preference}</p></div><button type="button" onClick={() => setPreviewSelectionFile(null)} aria-label="Close full photo preview" className="flex size-11 shrink-0 items-center justify-center rounded-control border border-white/20 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]"><X className="size-5" aria-hidden="true" /></button></div>
         <img src={`/api/editor-workflow/files/${encodeURIComponent(previewSelectionFile.id)}?variant=preview`} alt={previewSelectionFile.fileName} className="mx-auto min-h-0 max-h-[calc(100dvh-7rem)] max-w-full flex-1 rounded-control object-contain" />
-      </div> : null}
+      </StaffModalFrame> : null}
 
       {showRejectModal && selectedBooking && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+        <StaffModalFrame labelledBy="selection-rejection-title" onClose={() => setShowRejectModal(false)} className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 z-[60]">
           <form
             onSubmit={handleRejectSubmit}
             className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
           >
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-white">Reject Raw Photo</h3>
+                <h2 id="selection-rejection-title" className="font-bold text-white">Reject Raw Photo</h2>
                 <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close selection rejection"
                 onClick={() => setShowRejectModal(false)}
                 className="p-1 hover:bg-white/[0.05] rounded text-white/40"
               >
@@ -682,10 +691,11 @@ export default function AdminRawPhotoQueue({
             </div>
 
             <div className="space-y-2">
-              <label className="text-caption font-semibold tracking-label text-white/45 uppercase">
+              <label htmlFor="selection-rejection-reason" className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 Rejection Reason
               </label>
               <select
+                id="selection-rejection-reason"
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value as RawRejectionReason)}
                 className={adminSelect}
@@ -699,10 +709,11 @@ export default function AdminRawPhotoQueue({
             </div>
 
             <div className="space-y-2">
-              <label className="text-caption font-semibold tracking-label text-white/45 uppercase">
+              <label htmlFor="selection-rejection-notes" className="text-caption font-semibold tracking-label text-white/45 uppercase">
                 {rejectionReason === 'other' ? 'Custom Reason *' : 'Additional Notes (optional)'}
               </label>
               <textarea
+                id="selection-rejection-notes"
                 required={rejectionReason === 'other'}
                 rows={3}
                 value={customReason}
@@ -728,7 +739,7 @@ export default function AdminRawPhotoQueue({
               </button>
             </div>
           </form>
-        </div>
+        </StaffModalFrame>
       )}
     </div>
   )

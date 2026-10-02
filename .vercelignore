@@ -3,11 +3,13 @@
 /ficomana-proposal-newui
 /ficomana-proposal-newui/**
 .next/
+.next-qa/
 .vercel/output/
 artifacts/
 /test-results/
 /playwright-report/
 .audit/
+.qa-assessment-*/
 .impeccable/
 .agents/
 .codex/

@@ -18,6 +18,8 @@ import { useEditorSession } from '@/components/editor-portal-shell'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
 import { startPrivateAttachmentDownload } from '@/lib/private-attachment-download'
+import { getEditorDashboardNextTask } from '@/lib/editor-dashboard-next-task'
+import { studioDay } from '@/lib/new-admin/presentation-data'
 import {
   fetchEditorBatches,
   getCachedEditorBatches,
@@ -34,10 +36,6 @@ type TodayJob = {
   storageReady?: boolean
 }
 
-function dateKey(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
 function dayLabel(value: string) {
   return new Date(`${value}T12:00:00`).toLocaleDateString('en-PH', {
     weekday: 'long',
@@ -50,11 +48,12 @@ function dayLabel(value: string) {
 export default function EditorDashboard() {
   const toast = useAdminToast()
   const session = useEditorSession()
-  const today = dateKey()
+  const today = studioDay()
   const [batches, setBatches] = useState<Batch[]>(() => getCachedEditorBatches() ?? [])
   const [todayJobs, setTodayJobs, onsiteLoading, setOnsiteLoading] = useCachedPageRead<TodayJob[]>(`editor:today:${today}`, [])
   const [batchesLoading, setBatchesLoading] = useState(() => getCachedEditorBatches() === null)
   const [onsiteError, setOnsiteError] = useState('')
+  const [batchError, setBatchError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [downloading, setDownloading] = useState('')
 
@@ -66,6 +65,12 @@ export default function EditorDashboard() {
     }
 
     const batchTask = (async () => {
+      if (!session?.capabilities.edit) {
+        setBatches([])
+        setBatchError('')
+        setBatchesLoading(false)
+        return
+      }
       try {
         const current = await fetchEditorBatches({ force: true })
         setBatches(current)
@@ -74,6 +79,10 @@ export default function EditorDashboard() {
           const synchronized = await fetchEditorBatches({ force: true, synchronize: true })
           setBatches(synchronized)
         }
+        setBatchError('')
+      } catch (error) {
+        setBatchError('Editing batches could not be checked. Retry to get the latest work list.')
+        throw error
       } finally {
         setBatchesLoading(false)
       }
@@ -108,7 +117,7 @@ export default function EditorDashboard() {
       )
     }
     setRefreshing(false)
-  }, [toast, today, setTodayJobs, setOnsiteLoading])
+  }, [toast, today, setTodayJobs, setOnsiteLoading, session?.capabilities.edit])
 
   useEffect(() => {
     void load()
@@ -144,6 +153,14 @@ export default function EditorDashboard() {
     }
   }
 
+  const nextTask = getEditorDashboardNextTask({
+    batches: batchesLoading ? [] : batches,
+    jobs: onsiteLoading ? [] : todayJobs,
+    today,
+    capabilities: session?.capabilities ?? { edit: false, onsite: false },
+    unavailable: !!batchError || !!onsiteError,
+  })
+
   if (batchesLoading && onsiteLoading) return <EditorPageSkeleton variant="dashboard" />
 
   return (
@@ -151,24 +168,38 @@ export default function EditorDashboard() {
       <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editor Dashboard</p>
-          <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">Today’s upload and editing work</h1>
+          <h1 className="mt-2 font-sans text-page-title font-semibold tracking-heading text-balance">{session?.capabilities.edit ? 'Today’s upload and editing work' : 'Today’s onsite photo uploads'}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">
-            Check today’s clients, downloads, and uploads.
+            {session?.capabilities.edit ? 'Check today’s clients, downloads, and uploads.' : 'Check today’s clients and upload their original photos.'}
           </p>
-          <p className="mt-2 max-w-2xl text-caption leading-relaxed text-white/45">
+          {session?.capabilities.edit ? <p className="mt-2 max-w-2xl text-caption leading-relaxed text-white/45">
             Batches download as ZIP files. Extract a batch before uploading edited photos.
-          </p>
+          </p> : null}
         </div>
         <span className="inline-flex w-fit items-center gap-2 rounded-control border border-emerald-500/20 bg-emerald-500/[0.07] px-3 py-2 text-caption font-semibold uppercase text-emerald-300">
           <CheckCircle2 className="size-3.5" />{session?.role} access active
         </span>
       </div>
 
+      <section aria-labelledby="editor-next-task" className={`${adminPanel} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
+        <div className="min-w-0">
+          <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Next task</p>
+          <h2 id="editor-next-task" className="mt-1 text-base font-semibold">{nextTask?.title ?? (batchesLoading || onsiteLoading ? 'Checking the work list…' : 'No immediate task found')}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">{nextTask?.explanation ?? 'Review the onsite list and editing batches below. Uploaded photos alone do not confirm that editing or delivery is complete.'}</p>
+          {nextTask ? <p className="mt-2 break-words text-caption text-white/65">{nextTask.context}</p> : null}
+        </div>
+        {nextTask?.retry ? <button type="button" disabled={refreshing} onClick={() => void load(true)} className={`${adminBtnGhost} inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2.5`}><RefreshCw className="size-4" />{refreshing ? 'Checking…' : nextTask.label}</button>
+          : nextTask?.downloadBatchId ? <button type="button" disabled={downloading === nextTask.downloadBatchId} onClick={() => { const batch = batches.find(item => item.id === nextTask.downloadBatchId); if (batch) void startDownload(batch) }} className={`${adminBtnPrimary} inline-flex shrink-0 items-center justify-center gap-2 px-4 py-2.5`}><Download className="size-4" />{downloading === nextTask.downloadBatchId ? 'Preparing…' : nextTask.label}</button>
+            : nextTask?.href ? <Link href={nextTask.href} className={`${adminBtnPrimary} inline-flex shrink-0 items-center justify-center px-4 py-2.5`}>{nextTask.label}</Link> : null}
+      </section>
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Onsite Clients Today" value={todayJobs.length} tone="text-cyan-300" icon={ImagePlus} />
-        <Metric label="Pending Download" value={totals.download} tone="text-amber-300" icon={Download} />
-        <Metric label="Uploading" value={totals.uploading} tone="text-violet-300" icon={UploadCloud} />
-        <Metric label="Upload Failed" value={totals.failed} tone="text-red-300" icon={AlertTriangle} />
+        <Metric label="Onsite Clients Today" value={onsiteLoading || onsiteError ? '—' : todayJobs.length} tone="text-cyan-300" icon={ImagePlus} />
+        {session?.capabilities.edit ? <>
+          <Metric label="Pending Download" value={batchesLoading || batchError ? '—' : totals.download} tone="text-amber-300" icon={Download} />
+          <Metric label="Uploading" value={batchesLoading || batchError ? '—' : totals.uploading} tone="text-violet-300" icon={UploadCloud} />
+          <Metric label="Upload Failed" value={batchesLoading || batchError ? '—' : totals.failed} tone="text-red-300" icon={AlertTriangle} />
+        </> : null}
       </div>
 
       <section className={`${adminPanel} overflow-hidden`}>
@@ -237,7 +268,7 @@ export default function EditorDashboard() {
         )}
       </section>
 
-      <section className="space-y-4">
+      {session?.capabilities.edit ? <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editing Queue</p>
@@ -252,6 +283,8 @@ export default function EditorDashboard() {
 
         {batchesLoading && batches.length === 0 ? (
           <EditorPageSkeleton variant="queue" />
+        ) : batchError ? (
+          <div role="alert" className={`${adminPanel} p-5 text-sm text-amber-200`}>{batchError}</div>
         ) : batches.length === 0 ? (
           <div className={`${adminPanel} p-12 text-center text-xs text-white/35`}>No editing batches are available.</div>
         ) : (
@@ -311,7 +344,7 @@ export default function EditorDashboard() {
             })}
           </div>
         )}
-      </section>
+      </section> : null}
     </div>
   )
 }
@@ -323,7 +356,7 @@ function Metric({
   icon: Icon,
 }: {
   label: string
-  value: number
+  value: number | string
   tone: string
   icon: typeof ImagePlus
 }) {

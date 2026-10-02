@@ -65,6 +65,9 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Browser QA must not share generated chunks/locks with the normal local server.
+  distDir: process.env.QA_ISOLATED_LOCAL === 'true' ? '.next-qa' : '.next',
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   // Reuse recently visited route segments in this tab. Page effects still
   // revalidate private data; API/Proxy authentication and no-store stay intact.
   experimental: { staleTimes: { dynamic: 300, static: 300 } },

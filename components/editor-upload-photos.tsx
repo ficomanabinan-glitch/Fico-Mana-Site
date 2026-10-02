@@ -11,6 +11,8 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import StaffReadNotice from '@/components/staff-read-notice'
+import { assertEditorReadMetadata } from '@/lib/editor-read-validation'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
 import {
@@ -92,23 +94,31 @@ export default function EditorUploadPhotos({
   const [results, setResults] = useState<UploadResult[]>([])
   const [runErrors, setRunErrors] = useState<string[]>([])
   const [reports, setReports, reportsLoading, setReportsLoading] = useCachedPageRead<UploadReport[]>('editor:upload-reports', [])
+  const [reportError, setReportError] = useState('')
+  const [reportsVerified, setReportsVerified] = useState(false)
+  const [refreshingReports, setRefreshingReports] = useState(false)
 
   const loadReports = useCallback(async (silent = false) => {
     if (!silent) setReportsLoading(true)
+    setRefreshingReports(true)
     try {
       const response = await fetch('/api/editor-workflow/uploads/report?limit=40', {
         cache: 'no-store',
         credentials: 'include',
       })
-      const body = (await response.json().catch(() => [])) as UploadReport[] & { error?: string }
+      const body = (await response.json()) as UploadReport[] & { error?: string }
       if (!response.ok) throw new Error(body.error || 'Could not load upload history.')
-      setReports(Array.isArray(body) ? body : [])
+      assertEditorReadMetadata(body, 'uploads')
+      setReports(body)
+      setReportsVerified(true)
+      setReportError('')
     } catch (error) {
-      toast.error('Upload report unavailable', error instanceof Error ? error.message : 'Try again.')
+      setReportError(`Upload history could not be loaded. Try: Retry upload history. ${error instanceof Error ? error.message : ''}`)
     } finally {
       setReportsLoading(false)
+      setRefreshingReports(false)
     }
-  }, [toast, setReports, setReportsLoading])
+  }, [setReports, setReportsLoading])
 
   useEffect(() => {
     if (input.current) {
@@ -372,12 +382,13 @@ export default function EditorUploadPhotos({
             <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Upload report</p>
             <h2 className="mt-1 text-base font-semibold">Folders and clients already uploaded</h2>
             <p className="mt-1 text-caption text-white/35">
-              {latestReport ? `Latest: ${formatDateTime(latestReport.completedAt || latestReport.createdAt)}` : 'No uploads recorded yet'}
+              {latestReport ? `Latest: ${formatDateTime(latestReport.completedAt || latestReport.createdAt)}` : reportsLoading ? 'Loading upload history…' : reportError && !reportsVerified ? 'Upload history unavailable' : 'No uploads recorded yet'}
               {failedReports ? ` · ${failedReports} failed client${failedReports === 1 ? '' : 's'} in recent runs` : ''}
             </p>
           </div>
         </div>
-        {reportsLoading ? (
+        {reportError ? <div className="p-5"><StaffReadNotice message={reportError} retryLabel="Retry upload history" busy={refreshingReports} onRetry={() => void loadReports(true)} /></div> : null}
+        {reportError && !reportsVerified && reports.length === 0 ? null : reportsLoading ? (
           <EditorPageSkeleton variant="queue" />
         ) : reports.length === 0 ? (
           <div className="p-12 text-center text-xs text-white/35">Completed and failed uploads will appear here.</div>

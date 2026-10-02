@@ -48,6 +48,7 @@ export function mapDbBookingToModel(b: DbBookingRow): Booking {
 
   return {
     id: String(b.id),
+    clientId: b.client_id ? String(b.client_id) : undefined,
     customerName: String(b.customer_name),
     customerEmail: String(b.customer_email),
     customerPhone: String(b.customer_phone),

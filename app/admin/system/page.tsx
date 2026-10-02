@@ -67,24 +67,24 @@ export default function SystemPage() {
         <StatusCard
           icon={Database}
           title="Records"
-          value="Connected"
-          tone="good"
-          detail="Your bookings, payments, photos, and activity history are saved here."
+          value="Studio records"
+          tone="neutral"
+          detail="Bookings, payments, photos, and activity history are managed in the studio workspaces. Open Bookings to review current records."
         />
         <StatusCard
           icon={ShieldCheck}
           title="Security"
-          value="Protected"
-          tone="good"
-          detail="Only authorized staff can view and update your records."
+          value="Staff access controls"
+          tone="neutral"
+          detail="Only authorized staff can view and update your records. Review accounts and roles in User Access. This is not an independent security health check."
         />
         <StatusCard
           icon={Cloud}
           title="Private storage"
-          value={loading ? 'Checking…' : storage?.configured ? 'Configured' : 'Action needed'}
-          tone={storage?.configured ? 'good' : 'warning'}
+          value={loading ? 'Checking…' : !storage ? 'Check unavailable' : storage.configured && storage.privateBucket ? 'Configured' : 'Action needed'}
+          tone={loading || !storage ? 'neutral' : storage.configured && storage.privateBucket ? 'good' : 'warning'}
           detail={
-            storage?.configured
+            loading ? 'Checking the current storage configuration.' : !storage ? 'Storage could not be checked. Refresh this page to try again; no readiness has been confirmed.' : storage.configured
               ? `${storage.provider} · ${storage.privateBucket ? 'Private bucket' : 'Review bucket privacy'}`
               : 'Cloudflare R2 credentials are incomplete. Ask your administrator to finish the server configuration.'
           }
@@ -92,9 +92,9 @@ export default function SystemPage() {
         <StatusCard
           icon={Mail}
           title="Email"
-          value={loading ? 'Checking…' : email?.ok ? 'Configured' : 'Action needed'}
-          tone={email?.ok ? 'good' : 'warning'}
-          detail={email?.ok ? `Email setup is available${email.fromAddress ? ` for ${email.fromAddress}` : ''}. Use the test below to check delivery.` : 'Complete email setup to send client notifications.'}
+          value={loading ? 'Checking…' : !email ? 'Check unavailable' : email.ok ? 'Configured' : 'Action needed'}
+          tone={loading || !email ? 'neutral' : email.ok ? 'good' : 'warning'}
+          detail={loading ? 'Checking the current email configuration.' : !email ? 'Email could not be checked. Refresh this page to try again; delivery has not been confirmed.' : email.ok ? `Email setup is available${email.fromAddress ? ` for ${email.fromAddress}` : ''}. Use the test below to check delivery.` : 'Complete email setup to send client notifications.'}
         />
       </div>
 
@@ -143,11 +143,11 @@ function StatusCard({
   title: string
   value: string
   detail: string
-  tone: 'good' | 'warning'
+  tone: 'good' | 'warning' | 'neutral'
 }) {
   return (
     <div className={`${adminCard} p-5`}>
-      <Icon className={tone === 'good' ? 'size-5 text-emerald-300' : 'size-5 text-amber-300'} />
+      <Icon className={tone === 'good' ? 'size-5 text-emerald-300' : tone === 'warning' ? 'size-5 text-amber-300' : 'size-5 text-white/65'} />
       <p className="mt-4 text-caption font-semibold uppercase tracking-wider text-white/35">{title}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
       <p className="mt-2 text-caption leading-relaxed text-white/40">{detail}</p>

@@ -10,6 +10,8 @@ import {
   FolderCog, FolderUp, ImagePlus, Loader2, RefreshCw, RotateCcw,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import StaffReadNotice from '@/components/staff-read-notice'
+import { assertEditorReadMetadata } from '@/lib/editor-read-validation'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminPanel } from '@/lib/admin-ui'
 import { startPrivateAttachmentDownload } from '@/lib/private-attachment-download'
@@ -53,6 +55,8 @@ export default function BatchDetailPage() {
   const toast=useAdminToast()
   const shellSession=useEditorSession()
   const [detail,setDetail,loading,setLoading]=useCachedPageRead<Detail|null>(`editor:batch:${batchId}`,null)
+  const [readError,setReadError]=useState('')
+  const [refreshing,setRefreshing]=useState(false)
   const [busyJob,setBusyJob]=useState('')
   const [rawTarget,setRawTarget]=useState('')
   const [uploadMode,setUploadMode]=useState<'all'|'failed'>('all')
@@ -65,6 +69,7 @@ export default function BatchDetailPage() {
   const inEditorPortal=pathname.startsWith('/editor')
 
   const load=async()=>{
+    setRefreshing(true)
     try {
       const [response,sessionResponse]=await Promise.all([
         fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}`,{cache:'no-store',credentials:'include'}),
@@ -72,11 +77,13 @@ export default function BatchDetailPage() {
       ])
       const body=await responseJson(response)
       if(!response.ok) throw new Error(String(body.error||'Batch not found.'))
+      assertEditorReadMetadata(body, 'batch')
       setDetail(body as unknown as Detail)
+      setReadError('')
       if(shellSession)setSession(shellSession)
       else if(sessionResponse?.ok)setSession(await sessionResponse.json() as WorkflowSession)
-    } catch(error) { toast.error('Batch unavailable',error instanceof Error?error.message:'Try again.') }
-    finally { setLoading(false) }
+    } catch(error) { setReadError(`This editing batch could not be loaded. Try: Retry batch. ${error instanceof Error?error.message:''}`) }
+    finally { setLoading(false); setRefreshing(false) }
   }
 
   useEffect(()=>{
@@ -257,9 +264,11 @@ export default function BatchDetailPage() {
   }
 
   if(loading)return <EditorPageSkeleton variant="batch"/>
+  if(readError&&!detail)return <div className="space-y-4"><Link href={backHref} className={`${adminBtnGhost} inline-flex min-h-11 items-center gap-1.5 px-4 py-2`}><ArrowLeft className="size-3.5"/>Back to Editor</Link><StaffReadNotice message={readError} retryLabel="Retry batch" busy={refreshing} onRetry={()=>void load()}/></div>
   if(!detail)return <div className={`${adminPanel} p-14 text-center text-sm text-white/35`}>Batch not found.</div>
 
   return <div className="space-y-6">
+    {readError?<StaffReadNotice message={readError} retryLabel="Retry batch" busy={refreshing} onRetry={()=>void load()}/>:null}
     <input ref={rawInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(event)=>void uploadRawFiles(event.target.files)}/>
     <input ref={directoryInputRef} type="file" multiple className="hidden" onChange={(event)=>void uploadDirectory(event.target.files)}/>
     <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 xl:flex-row xl:items-end xl:justify-between"><div><Link href={backHref} className="inline-flex items-center gap-1.5 text-caption font-semibold uppercase text-white/40 hover:text-white"><ArrowLeft className="size-3.5"/>Back to Editor</Link><p className="mt-4 text-caption font-semibold uppercase tracking-label text-[#C4CEFF]">Editing Batch</p><h1 className="mt-1 text-2xl font-semibold">{detail.shootDate}</h1><p className="mt-1 font-mono text-caption text-white/35">{detail.id}</p></div><div className="flex flex-wrap gap-2">{canEdit?<button onClick={downloadBatch} className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2`}><Download className="size-3.5"/>{detail.counts.downloaded+detail.counts.editing+detail.counts.readyToUpload>0?'Download Day Batch Again':'Download Day Batch'}</button>:null}{!inEditorPortal?<Link href="/admin/provisioning" className={`${adminBtnGhost} inline-flex items-center gap-1.5 px-3 py-2`}>Private Storage Settings</Link>:null}{canEdit?inEditorPortal?<Link href={`/editor/upload?batch=${encodeURIComponent(batchId)}${detail.counts.failed>0?'&retry=1':''}`} className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2`}><FolderUp className="size-3.5"/>{detail.counts.failed>0?'Retry Upload':'Upload Batch'}</Link>:<><button onClick={()=>chooseUploadFolder('all')} disabled={uploading} className={`${adminBtnPrimary} inline-flex items-center gap-1.5 px-3 py-2`}><FolderUp className="size-3.5"/>Upload Edited Jobs</button>{detail.counts.failed>0?<button onClick={()=>chooseUploadFolder('failed')} disabled={uploading} className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-caption font-semibold uppercase text-red-300"><RefreshCw className="size-3.5"/>Retry Failed Only</button>:null}</>:null}</div></div>

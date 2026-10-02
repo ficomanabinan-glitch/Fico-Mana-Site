@@ -14,6 +14,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import AdminPageHeader from '@/components/admin-page-header'
+import StaffReadNotice from '@/components/staff-read-notice'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import {
   adminBtnPrimary,
@@ -93,9 +94,11 @@ export default function SalesManagementPage() {
   const [data, setData] = useState<Payload | null>(initialData)
   const [loading, setLoading] = useState(initialData === null)
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const hasDataRef = useRef(data !== null)
   const activeRequestKeyRef = useRef('')
+  const targetsDirtyRef = useRef(false)
   const [targets, setTargets] = useState({
     monthlyRevenueTarget: '',
     desiredMonthlyProfit: '',
@@ -105,7 +108,7 @@ export default function SalesManagementPage() {
   const applyPayload = useCallback((body: Payload) => {
     hasDataRef.current = true
     setData(body)
-    setTargets({
+    if (!targetsDirtyRef.current) setTargets({
       monthlyRevenueTarget: String(body.settings.monthlyRevenueTarget || ''),
       desiredMonthlyProfit: String(body.settings.desiredMonthlyProfit || ''),
       desiredProfitMargin: String(body.settings.desiredProfitMargin || ''),
@@ -122,15 +125,19 @@ export default function SalesManagementPage() {
       setLoading(!keepExistingData)
       if (!force && cached && isSalesCacheFresh(period, anchor, reportBy, customStart, customEnd)) {
         setRefreshing(false)
+        setReadError(false)
         return
       }
-      setRefreshing(keepExistingData)
+      setRefreshing(true)
       try {
         const body = await fetchSales(period, anchor, { force, reportBy, start: customStart, end: customEnd })
-        if (activeRequestKeyRef.current === requestKey) applyPayload(body)
-      } catch (error) {
         if (activeRequestKeyRef.current === requestKey) {
-          toast.error('Sales data unavailable', error instanceof Error ? error.message : 'Try again.')
+          applyPayload(body)
+          setReadError(false)
+        }
+      } catch {
+        if (activeRequestKeyRef.current === requestKey) {
+          setReadError(true)
         }
       } finally {
         if (activeRequestKeyRef.current === requestKey) {
@@ -139,7 +146,7 @@ export default function SalesManagementPage() {
         }
       }
     },
-    [anchor, applyPayload, customEnd, customStart, period, reportBy, toast],
+    [anchor, applyPayload, customEnd, customStart, period, reportBy],
   )
 
   useEffect(() => {
@@ -169,6 +176,7 @@ export default function SalesManagementPage() {
         }),
       })
       if (!response.ok) throw new Error('Could not save financial targets.')
+      targetsDirtyRef.current = false
       toast.success('Financial targets saved', 'Sales planning metrics were recalculated.')
       await load({ force: true })
     } catch (error) {
@@ -210,11 +218,16 @@ export default function SalesManagementPage() {
     </AdminPageHeader>
   )
 
-  if (loading || !data) {
+  const readNotice = readError ? <StaffReadNotice
+    message={data ? 'Sales data could not be refreshed. Showing the last loaded report, which may differ from the selected reporting period. Your unsaved targets are unchanged. Try loading it again.' : 'Sales data could not be loaded. Your reporting filters are unchanged. Try loading it again.'}
+    retryLabel="Retry sales data" busy={loading || refreshing} onRetry={() => void load({ force: true })}
+  /> : null
+
+  if (!data) {
     return (
       <div className={adminPage}>
         {pageHeader}
-        <SalesBodySkeleton />
+        {readNotice ?? <SalesBodySkeleton />}
       </div>
     )
   }
@@ -234,6 +247,7 @@ export default function SalesManagementPage() {
   return (
     <div className={adminPage}>
       {pageHeader}
+      {readNotice}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((metric) => {
@@ -370,12 +384,12 @@ export default function SalesManagementPage() {
           <MoneyField
             label="Monthly Revenue Target"
             value={targets.monthlyRevenueTarget}
-            onChange={(value) => setTargets((previous) => ({ ...previous, monthlyRevenueTarget: value }))}
+            onChange={(value) => { targetsDirtyRef.current = true; setTargets((previous) => ({ ...previous, monthlyRevenueTarget: value })) }}
           />
           <MoneyField
             label="Desired Monthly Net Profit"
             value={targets.desiredMonthlyProfit}
-            onChange={(value) => setTargets((previous) => ({ ...previous, desiredMonthlyProfit: value }))}
+            onChange={(value) => { targetsDirtyRef.current = true; setTargets((previous) => ({ ...previous, desiredMonthlyProfit: value })) }}
           />
           <label className="space-y-2">
             <span className={adminLabel}>Desired Profit Margin %</span>
@@ -384,7 +398,7 @@ export default function SalesManagementPage() {
               min="0"
               max="100"
               value={targets.desiredProfitMargin}
-              onChange={(event) => setTargets((previous) => ({ ...previous, desiredProfitMargin: event.target.value }))}
+              onChange={(event) => { targetsDirtyRef.current = true; setTargets((previous) => ({ ...previous, desiredProfitMargin: event.target.value })) }}
               className={adminInput}
             />
           </label>

@@ -30,9 +30,11 @@ import { WorkspaceRefreshProvider } from '@/components/workspace-refresh'
 import {
   DashboardSidebarNavigation,
   DashboardSidebarProfile,
+  type DashboardNavigationItem,
   type DashboardNavigationSection,
 } from '@/components/dashboard-sidebar'
 import EditorLoadingSkeleton from '@/components/editor-page-skeleton'
+import ClientWorkspaceReturn from '@/components/client-workspace-return'
 import { invalidateEditorBatchCache } from '@/lib/editor-read-cache'
 import { bindStaffReadCache } from '@/lib/staff-cache-session'
 import StaffQueryProvider from '@/components/staff-query-provider'
@@ -151,28 +153,46 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
 
   const navigation = useMemo<DashboardNavigationSection[]>(() => {
     if (!session) return []
-    const items = [
-      { label: 'Dashboard', href: '/editor', icon: LayoutDashboard, show: true, exact: true },
-      { label: 'Editing Batches', href: '/editor/queue', icon: FolderDown, show: session.capabilities.edit },
-      { label: 'Client Selections', href: '/editor/filtering', icon: ListChecks, show: session.capabilities.edit },
-      { label: 'Client Portals', href: '/editor/client-portals', icon: FolderHeart, show: session.capabilities.edit },
-      { label: 'Upload Photos', href: '/editor/upload', icon: FolderUp, show: session.capabilities.edit },
-      { label: 'Onsite Upload', href: '/editor/onsite', icon: CloudUpload, show: session.capabilities.onsite },
-      { label: 'Files Management', href: '/editor/files', icon: FolderOpen, show: session.capabilities.edit },
-    ]
-    return [
+    const sections: { label: string; items: (DashboardNavigationItem & { show: boolean })[] }[] = [
       {
-        label: 'Editor Workflow',
-        items: items
-          .filter((item) => item.show)
-          .map((item) => ({
-            label: item.label,
-            href: item.href,
-            icon: item.icon,
-            exact: item.exact,
-          })),
+        label: 'Overview',
+        items: [{ label: 'Dashboard', href: '/editor', icon: LayoutDashboard, show: true, exact: true }],
+      },
+      {
+        label: 'Originals & selection',
+        items: [
+          { label: 'Onsite Upload', href: '/editor/onsite', icon: CloudUpload, show: session.capabilities.onsite },
+          { label: 'Client Selections', href: '/editor/filtering', icon: ListChecks, show: session.capabilities.edit },
+        ],
+      },
+      {
+        label: 'Editing',
+        items: [
+          { label: 'Editing Batches', href: '/editor/queue', icon: FolderDown, show: session.capabilities.edit },
+          { label: 'Upload Photos', href: '/editor/upload', icon: FolderUp, show: session.capabilities.edit },
+        ],
+      },
+      {
+        label: 'Delivery & files',
+        items: [
+          { label: 'Client Portals', href: '/editor/client-portals', icon: FolderHeart, show: session.capabilities.edit },
+          { label: 'Files Management', href: '/editor/files', icon: FolderOpen, show: session.capabilities.edit },
+        ],
       },
     ]
+    return sections
+      .map((section) => ({
+        label: section.label,
+        items: section.items
+          .filter((item) => item.show)
+          .map(({ label, href, icon, exact }) => ({
+            label,
+            href,
+            icon,
+            exact,
+          })),
+      }))
+      .filter((section) => section.items.length > 0)
   }, [session])
 
   const navigate = useCallback((href: string, mobile: boolean) => {
@@ -297,6 +317,7 @@ export default function EditorPortalShell({ children }: { children: ReactNode })
             ) : null}
 
             <main ref={mainRef} className="min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-5 md:p-8">
+              <ClientWorkspaceReturn />
               <div key={pathname} className="console-route-entry min-w-0 w-full">
                 {children}
               </div>

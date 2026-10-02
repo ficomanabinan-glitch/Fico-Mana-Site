@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   getBookings,
@@ -19,6 +19,10 @@ import AdminPageHeader from '@/components/admin-page-header'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
 import { GraduationSessionDetails } from '@/components/graduation-session-details'
 import AdminBookingRawPhoto from '@/components/admin-booking-raw-photo'
+import StaffModalFrame from '@/components/staff-modal-frame'
+import StaffReadNotice from '@/components/staff-read-notice'
+import { clientWorkspaceHref } from '@/lib/client-workspace-navigation'
+import Link from 'next/link'
 import { parsePackagePrice, usesMakeupSlots, isWalkInEligiblePackage, BOOKING_PACKAGE_CATEGORY_LABELS, type BookingPackage, type BookingPackageCategory } from '@/lib/booking-packages'
 import {
   MANA_SESSION_BLOCKS,
@@ -39,7 +43,6 @@ import { useBookingQueue } from '@/components/use-booking-queue'
 import ReceiptUploadEnhancer from '@/components/receipt-upload-enhancer'
 import { 
   Search, 
-  Filter, 
   Eye, 
   Calendar, 
   Trash2, 
@@ -50,7 +53,6 @@ import {
   ArrowUpRight,
   X,
   Save,
-  Check,
   FileText,
   Upload,
   Link2,
@@ -65,9 +67,6 @@ import {
   adminSelect,
   adminLabel,
   adminBtnPrimary,
-  adminTableWrap,
-  adminTableHead,
-  adminTableRow,
   adminSpinnerWrap,
   adminSpinner,
   adminOverlay,
@@ -92,6 +91,7 @@ function BookingsManagement() {
   const [filteredBookings, setFilteredBookings] = useState<Booking[]>(() => peekBookings() ?? [])
   const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState('')
 
   // Search & Filter states
   const [searchTerm, setSearchTerm] = useState('')
@@ -102,6 +102,7 @@ function BookingsManagement() {
 
   // Selected Booking Drawer/Modal states
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const openedDetailsFromUrl = useRef<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
@@ -151,22 +152,31 @@ function BookingsManagement() {
   const fetchBookings = useCallback(async (silent = false, force = !silent) => {
     if (!silent) setRefreshing(true)
     try {
-      const data = await getBookings({ force })
+      const data = await getBookings({ force, requireFresh: true })
       setBookings(data)
       setFilteredBookings(data)
-    } catch (err) {
-      console.error(err)
-      toast.error('Sync failed', 'Could not load bookings. Try: refresh the page.')
+      setReadError('')
+    } catch {
+      setReadError('Bookings could not be loaded. Any previously shown records may be out of date.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
     setSearchTerm(searchParams.get('search')?.trim() ?? '')
     setDateFilter(searchParams.get('date')?.trim() ?? '')
   }, [searchParams])
+
+  const detailsFromUrl = searchParams.get('details')?.trim() ?? ''
+  useEffect(() => {
+    if (!detailsFromUrl || openedDetailsFromUrl.current === detailsFromUrl) return
+    const matchedBooking = bookings.find(booking => booking.id === detailsFromUrl)
+    if (!matchedBooking) return
+    openedDetailsFromUrl.current = detailsFromUrl
+    setSelectedBooking(enrichBookingDisplay(matchedBooking))
+  }, [bookings, detailsFromUrl])
 
   useEffect(() => {
     fetchBookings(true, true)
@@ -729,6 +739,8 @@ function BookingsManagement() {
     )
   }
 
+  if (readError && !bookings.length) return <div className={adminPage}><AdminPageHeader title="Booking Management" subtitle="View and manage client bookings." /><StaffReadNotice message={readError} retryLabel="Retry bookings" busy={refreshing} onRetry={() => void fetchBookings()} /></div>
+
   return (
     <div className={adminPage}>
       <ReceiptUploadEnhancer />
@@ -747,6 +759,7 @@ function BookingsManagement() {
         </button>
       </AdminPageHeader>
 
+      {readError && <StaffReadNotice message={readError} retryLabel="Retry bookings" busy={refreshing} onRetry={() => void fetchBookings()} />}
       {showWalkIn && (
         <div className={`${adminPanel} p-5 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300`}>
           <h2 className="text-xs font-bold uppercase tracking-wider text-white/70 mb-4">In-Studio Walk-in</h2>
@@ -1014,14 +1027,16 @@ function BookingsManagement() {
                     <div className="inline-flex items-center gap-1">
                       <button
                         onClick={() => handleOpenDetails(b)}
-                        className="p-1.5 hover:bg-primary/5 rounded-full text-white/50 hover:text-primary transition-colors inline-flex"
+                        className="size-11 items-center justify-center hover:bg-primary/5 rounded-full text-white/70 hover:text-primary transition-colors inline-flex"
+                        aria-label={`View details for ${b.customerName} ${b.id}`}
                         title="View details & Manage"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => openDeleteModal(b)}
-                        className="p-1.5 hover:bg-red-500/10 rounded-full text-white/40 hover:text-red-400 transition-colors inline-flex"
+                        className="size-11 items-center justify-center hover:bg-red-500/10 rounded-full text-white/70 hover:text-red-400 transition-colors inline-flex"
+                        aria-label={`Delete booking ${b.id}`}
                         title="Delete booking"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1037,16 +1052,17 @@ function BookingsManagement() {
 
       {/* 3. CUSTOMER DETAILS DRAWER / MODAL */}
       {selectedBooking && (
-        <div className={`${adminOverlay} justify-end`}>
+        <StaffModalFrame className={`${adminOverlay} justify-end p-0`} labelledBy="booking-details-title" onClose={() => setSelectedBooking(null)}>
           <div className={adminDrawer}>
             {/* Header */}
             <div className="p-6 border-b border-white/10 flex justify-between items-start bg-white/[0.03]">
               <div>
                 <span className="text-caption font-semibold text-white/40 uppercase tracking-label">Customer Details</span>
-                <h3 className="text-base font-bold text-white mt-1">{selectedBooking.customerName}</h3>
+                <h3 id="booking-details-title" className="text-base font-bold text-white mt-1">{selectedBooking.customerName}</h3>
                 <p className="text-caption font-mono text-white/40 mt-0.5">Ref: {selectedBooking.id}</p>
               </div>
               <button
+                aria-label="Close booking details"
                 onClick={() => setSelectedBooking(null)}
                 className="p-1.5 hover:bg-white/10 rounded text-white/40 transition-colors"
               >
@@ -1056,6 +1072,7 @@ function BookingsManagement() {
 
             {/* Content Body */}
             <div className="min-w-0 flex-1 overflow-y-auto p-4 space-y-6 sm:p-6">
+              <Link href={clientWorkspaceHref(selectedBooking.id,selectedBooking.clientId)} className="inline-flex min-h-11 w-full items-center justify-center rounded-control border border-primary/30 px-4 text-sm font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary">Open complete client workspace</Link>
               {/* Contact Info Card */}
               <div className="rounded-card border border-white/10 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-1.5 gap-2">
@@ -1609,21 +1626,22 @@ function BookingsManagement() {
               </p>
             </div>
           </div>
-        </div>
+        </StaffModalFrame>
       )}
       {/* Complete session / Client Portal modal */}
       {showCompleteModal && selectedBooking && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+        <StaffModalFrame className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 z-[60]" labelledBy="booking-complete-title" onClose={() => setShowCompleteModal(false)}>
           <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-white text-lg">
+                <h3 id="booking-complete-title" className="font-bold text-white text-lg">
                   {completeModalMode === 'gallery' ? 'Send Client Portal' : 'Complete Session'}
                 </h3>
                 <p className="text-caption text-white/40 font-mono mt-0.5">{selectedBooking.id}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close session action"
                 onClick={() => setShowCompleteModal(false)}
                 className="p-1 hover:bg-white/[0.05] rounded text-white/40"
               >
@@ -1717,19 +1735,20 @@ function BookingsManagement() {
               </button>
             </div>
           </div>
-        </div>
+        </StaffModalFrame>
       )}
 
       {showDeleteModal && deleteTarget && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+        <StaffModalFrame className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 z-[60]" labelledBy="booking-delete-title" onClose={() => { setShowDeleteModal(false); setDeleteTarget(null) }}>
           <div className="rounded-card border border-red-500/30 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5">
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-white text-lg">Delete booking</h3>
+                <h3 id="booking-delete-title" className="font-bold text-white text-lg">Delete booking</h3>
                 <p className="text-caption text-white/40 font-mono mt-0.5">{deleteTarget.id}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close delete booking"
                 onClick={() => {
                   setShowDeleteModal(false)
                   setDeleteTarget(null)
@@ -1808,7 +1827,7 @@ function BookingsManagement() {
               </button>
             </div>
           </div>
-        </div>
+        </StaffModalFrame>
       )}
     </div>
   )

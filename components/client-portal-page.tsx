@@ -17,6 +17,7 @@ import PortalPageSkeleton from '@/components/portal-page-skeleton'
 import { PortalPreviewProvider } from '@/components/portal-preview-cache'
 import type { PortalExpiry } from '@/lib/portal-expiry'
 import { usePortalPhotoSync } from '@/components/use-portal-photo-sync'
+import { isPortalAccessDenied } from '@/lib/portal-access-denial'
 import { clearPortalDraft, portalDraftKey } from '@/lib/portal-selection-draft'
 import { portalPaymentSummary, type AddonPreview } from '@/lib/client-selection-summary'
 import {
@@ -53,7 +54,14 @@ export type PortalData={
 }
 
 function money(value:number){return new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP',maximumFractionDigits:0}).format(value)}
-function stageLabel(status:string){return status.replace(/_/g,' ').replace(/\b\w/g,(char)=>char.toUpperCase())}
+function stageLabel(status:string){const value=status.toLowerCase().replace(/[_-]+/g,' ').trim();return value ? value.replace(/^./,(char)=>char.toUpperCase()) : 'Not available'}
+function projectLabel(data:PortalData){
+  if(data.expiry?.deliverablesUploadedAt) return 'Edited photos delivered'
+  if(data.warnings?.includes('editing status')) return 'Not available'
+  const status=data.editingStatus
+  const labels:Record<string,string>={WAITING_FOR_SELECTION:'Waiting for your selection',READY_FOR_EDITING:'Ready for editing',DOWNLOADED:'Preparing for editing',EDITING:'Editing in progress',READY_TO_UPLOAD:'Ready to upload edited photos',UPLOADING:'Uploading edited photos',UPLOAD_FAILED:'Edited photo upload needs attention',DELIVERED:'Edited photos delivered'}
+  return labels[status.toUpperCase().replace(/[ -]+/g,'_')] || stageLabel(status)
+}
 function AccessMessage({title,message,onRetry}:{title:string;message:string;onRetry?:()=>void}){return <main className="flex min-h-screen items-center justify-center bg-[#171717] p-6 text-white"><div className="w-full max-w-lg rounded-card border border-white/10 bg-white/[0.03] p-8 text-center shadow-[inset_0_1px_rgba(255,255,255,0.05)]"><h1 className="text-xl font-semibold">{title}</h1><p className="mt-3 text-sm leading-relaxed text-white/50">{message}</p>{onRetry?<button type="button" onClick={onRetry} className={`${portalPrimaryAction} mt-5 px-5 py-2.5 text-xs font-semibold`}>Try Again</button>:null}</div></main>}
 
 const portalPrimaryAction='min-h-11 cursor-pointer rounded-control bg-primary text-white shadow-[inset_0_1px_rgba(255,255,255,0.16)] transition-[background-color,transform,box-shadow] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-[#0903e8] hover:shadow-[inset_0_1px_rgba(255,255,255,0.2),0_10px_28px_rgba(5,0,208,0.2)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#171717] disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none'
@@ -70,6 +78,18 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   const readSequence = useRef(0)
   const rawDownloadReadSequence = useRef(0)
 
+  const revokeAccess = useCallback((message: string) => {
+    readSequence.current += 1
+    rawDownloadReadSequence.current += 1
+    setData(null)
+    queryClient.removeQueries({ queryKey, exact: true })
+    setDraftPricing(null)
+    setSelectionProgress(null)
+    setResetting(false)
+    setLoading(false)
+    setError(message)
+  }, [queryClient, queryKey])
+
   const load = useCallback(async (offset = 0, silent = false) => {
     if (sampleMode) {
       setLoading(false)
@@ -82,13 +102,15 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
       setError('')
       if (!silent) setDraftPricing(null)
     } else setLoadingMore(true)
+    let accessDenied = false
     try {
       const response = await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}?offset=${offset}&limit=48`, { cache: 'no-store', credentials: 'include' })
       const body = (await response.json().catch(() => ({}))) as PortalData & { error?: string }
       if (sequence !== readSequence.current) return
       if (!response.ok) {
+        accessDenied = isPortalAccessDenied(response.status)
         const reason = body.error || 'This client portal is unavailable.'
-        throw new Error(`${reason} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)
+        throw new Error(reason)
       }
       setData(previous => {
         const next = offset === 0 ? body : {
@@ -103,7 +125,9 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
     } catch (loadError) {
       if (sequence !== readSequence.current) return
       const message = loadError instanceof Error ? loadError.message : 'This client portal is unavailable.'
-      setError(message.includes('Try:') ? message : `${message} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`)
+      const guidance = message.includes('Try:') ? message : `${message} Try: refresh this page. If it continues, ask FICO MANA staff to reopen or regenerate your private portal link.`
+      if (accessDenied) revokeAccess(guidance)
+      else setError(guidance)
       if (silent) throw loadError
     } finally {
       if (sequence === readSequence.current) {
@@ -111,7 +135,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
         setLoadingMore(false)
       }
     }
-  }, [publicId, queryClient, queryKey, sampleMode])
+  }, [publicId, queryClient, queryKey, revokeAccess, sampleMode])
 
   const refreshRawDownloadAccess = useCallback(async () => {
     if (sampleMode) return
@@ -119,7 +143,10 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
     const response = await fetch(`/api/editor-workflow/portal/${encodeURIComponent(publicId)}/raw-download-state`, {
       cache: 'no-store', credentials: 'include',
     })
-    if (!response.ok) return
+    if (!response.ok) {
+      if (isPortalAccessDenied(response.status)) revokeAccess('This private portal is no longer available. Try: ask FICO MANA staff to check your portal access.')
+      return
+    }
     const access = (await response.json()) as PortalRawDownloadAccess
     if (sequence !== rawDownloadReadSequence.current) return
     setData((previous) => {
@@ -131,7 +158,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
       queryClient.setQueryData(queryKey, next)
       return next
     })
-  }, [publicId, queryClient, queryKey, sampleMode])
+  }, [publicId, queryClient, queryKey, revokeAccess, sampleMode])
 
   useEffect(() => {
     if (!data?.rawDownloadAccess || sampleMode) return
@@ -185,11 +212,10 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
     setDraftPricing(null)
   }, async () => {
     await load(0, true)
-  })
+  }, () => revokeAccess('This private portal is no longer available. Try: ask FICO MANA staff to check your portal access.'))
 
   const addonAmount = draftPricing?.total ?? Number(data?.selection?.totalAddonAmount || 0)
   const payment = portalPaymentSummary(data?.booking.price || 0, data?.booking.amountPaid || 0, addonAmount)
-  const selectionLocked = data?.selection?.status === 'SUBMITTED' || data?.selection?.status === 'SUBMITTING'
 
   if (loading) return <PortalPageSkeleton />
   if (resetting) return <AccessMessage title="Your photos are being updated" message="The studio is clearing the previous uploads. This portal will refresh automatically when it is ready." />
@@ -214,7 +240,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   return <PortalPreviewProvider scope={`${publicId}:${data.selection?.rawUploadGeneration || 0}:${data.selection?.reopenedAt || ''}`} expiresAt={data.expiry?.expiresAt}><main className={`client-portal ${styles.clientPortal}`}>
     <ClientPhotoSelection
       publicId={publicId} packageCategory={data.booking.packageCategory} selection={data.selection} gallery={data.gallery} selectedGallery={data.selectedGallery || []} galleryTotal={data.galleryTotal}
-      loadingMore={loadingMore} addons={data.addonCatalog} projectStatus={stageLabel(data.editingStatus)}
+      loadingMore={loadingMore} addons={data.addonCatalog} projectStatus={projectLabel(data)}
       sampleMode={sampleMode}
       paymentSummary={{ packageAmount: data.booking.price, amountPaid: data.booking.amountPaid }}
       onLoadMore={() => { if (!sampleMode) void load(data.gallery.length) }}
@@ -224,7 +250,7 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
       onPricingChange={setDraftPricing} onProgressChange={setSelectionProgress}
       headerContent={<div className={styles.identity}>
         <div className={styles.identityText}><p className={styles.brand}>FICO MANA</p><div className={styles.clientLine}><p className={styles.clientName}>{data.booking.customerName}</p><span className={styles.metadata}>{data.booking.id}</span></div></div>
-        <PortalOverview><PortalContext data={data} selectionProgress={selectionProgress} addonAmount={addonAmount} payment={payment} selectionLocked={selectionLocked} />{data.expiry ? <PortalExpiryNotice expiry={data.expiry} /> : null}</PortalOverview>
+        <PortalOverview><PortalContext data={data} selectionProgress={selectionProgress} addonAmount={addonAmount} payment={payment} />{data.expiry ? <PortalExpiryNotice expiry={data.expiry} /> : null}</PortalOverview>
       </div>}
       notices={<>{sampleMode ? <aside className={styles.sampleNotice} aria-label="Sample portal information"><div><strong>Sample portal</strong><p>Practice the full selection flow with example photos. Nothing here is submitted or saved to a booking.</p></div><Link href="/portal">Exit sample</Link></aside> : null}{error ? <div className={styles.notice} data-tone="error" role="alert">{error}<button type="button" className={styles.secondary} onClick={() => void load(0, true).catch(() => {})}>Try again</button></div> : null}{data.warnings?.length ? <div className={styles.notice} role="status">Some project details are temporarily unavailable: {data.warnings.join(', ')}.</div> : null}{data.expiry?.expiresAt ? <PortalExpiryNotice expiry={data.expiry} className={styles.expiryNotice} /> : null}</>}
       footerContent={<div className="mt-10 space-y-8">
@@ -235,19 +261,18 @@ export default function ClientPortalPage({ publicId, initialData = null, initial
   </main></PortalPreviewProvider>
 }
 
-function PortalContext({ data, selectionProgress, addonAmount, payment, selectionLocked }: {
+function PortalContext({ data, selectionProgress, addonAmount, payment }: {
   data: PortalData
   selectionProgress: ClientSelectionProgress | null
   addonAmount: number
   payment: ReturnType<typeof portalPaymentSummary>
-  selectionLocked: boolean
 }) {
   const selected = selectionProgress?.selectedCount ?? data.selection?.selectedItems.filter(item => !item.extraEdit).length ?? 0
   const limit = selectionProgress?.includedLimit ?? data.selection?.includedLimit ?? 5
   return <>
     <section className={styles.overviewSection}><p className={styles.brand}>FICO MANA Client Portal</p><h2 className={styles.clientName}>{data.booking.customerName}</h2><p className={styles.metadata}>{data.booking.id}</p></section>
-    <section className={styles.overviewSection}><p className={styles.kicker}>Your session</p><dl><div className={styles.summaryRow}><dt>Package</dt><dd>{data.booking.packageName}</dd></div><div className={styles.summaryRow}><dt>Shoot day</dt><dd>{data.booking.bookingDate}</dd></div><div className={styles.summaryRow}><dt>Booking</dt><dd>{data.booking.bookingStatus}</dd></div><div className={styles.summaryRow}><dt>Project status</dt><dd>{selectionLocked ? 'Selection submitted' : stageLabel(data.editingStatus)}</dd></div><div className={styles.summaryRow}><dt>Included photographs</dt><dd>{selected} of {limit}</dd></div>{selectionProgress?.editingPreference ? <div className={styles.summaryRow}><dt>Editing preference</dt><dd>{selectionProgress.editingPreference}</dd></div> : null}</dl></section>
-    <section className={styles.overviewSection}><p className={styles.kicker}>Payment details</p><dl>{[['Package', money(data.booking.price)], ['Extras', money(addonAmount)], ['Booking total', money(payment.total)], ['Paid', money(data.booking.amountPaid)], ['Remaining', money(payment.remaining)], ['Status', data.booking.paymentStatus]].map(([label,value]) => <div className={styles.summaryRow} key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>
+    <section className={styles.overviewSection}><p className={styles.kicker}>Your session</p><dl><div className={styles.summaryRow}><dt>Package</dt><dd>{data.booking.packageName}</dd></div><div className={styles.summaryRow}><dt>Shoot day</dt><dd>{data.booking.bookingDate}</dd></div><div className={styles.summaryRow}><dt>Booking</dt><dd>{stageLabel(data.booking.bookingStatus)}</dd></div><div className={styles.summaryRow}><dt>Project status</dt><dd>{projectLabel(data)}</dd></div><div className={styles.summaryRow}><dt>Photo selection</dt><dd>{data.selection?.status === 'SUBMITTED' ? 'Selection submitted · Locked' : data.selection?.status === 'SUBMITTING' ? 'Submission in progress · Locked' : data.selection ? stageLabel(data.selection.status) : data.warnings?.includes('photo selection') ? 'Not available' : 'Not recorded'}</dd></div><div className={styles.summaryRow}><dt>Included photographs</dt><dd>{selected} of {limit}</dd></div>{selectionProgress?.editingPreference ? <div className={styles.summaryRow}><dt>Editing preference</dt><dd>{selectionProgress.editingPreference}</dd></div> : null}</dl></section>
+    <section className={styles.overviewSection}><p className={styles.kicker}>Payment details</p><dl>{[['Package', money(data.booking.price)], ['Extras', money(addonAmount)], ['Booking total', money(payment.total)], ['Paid', money(data.booking.amountPaid)], ['Remaining', money(payment.remaining)], ['Status', stageLabel(data.booking.paymentStatus)]].map(([label,value]) => <div className={styles.summaryRow} key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>
     <PortalQrCode compact className={styles.overviewQr} portalUrl={data.shareUrl} customerName={data.booking.customerName} bookingId={data.booking.id} />
   </>
 }

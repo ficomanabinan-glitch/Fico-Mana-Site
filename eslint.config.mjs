@@ -7,6 +7,7 @@ const config = [
     // generated/tooling files with the Next.js configurations below.
     ignores: [
       '.next/**',
+      '.next-qa/**',
       '.vercel/**',
       'node_modules/**',
       '.staging-data/**',

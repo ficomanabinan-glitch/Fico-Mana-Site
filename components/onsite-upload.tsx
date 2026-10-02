@@ -17,6 +17,8 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useAdminToast } from '@/components/admin-toast-provider'
+import StaffReadNotice from '@/components/staff-read-notice'
+import { assertEditorReadMetadata } from '@/lib/editor-read-validation'
 import { EditorPageSkeleton } from '@/components/editor-page-skeleton'
 import { adminBtnGhost, adminBtnPrimary, adminInput, adminPanel } from '@/lib/admin-ui'
 import { uploadRawDirect as uploadRawFile } from '@/lib/raw-upload-client'
@@ -83,6 +85,8 @@ export default function OnsiteUpload({
   const [date, setDate] = useState(/^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayKey())
   const [search, setSearch] = useState(initialBooking)
   const [data, setData, loading, setLoading] = useCachedPageRead<OnsiteResponse | null>(`editor:onsite:${date}`, null)
+  const [readFailure, setReadFailure] = useState<{ date: string; message: string } | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [busy, setBusy] = useState('')
   const [progress, setProgress] = useState<Record<string, Progress>>({})
   const [deleteJob, setDeleteJob] = useState<Job | null>(null)
@@ -101,6 +105,7 @@ export default function OnsiteUpload({
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
+    setRefreshing(true)
     try {
       const response = await fetch(`/api/editor-workflow/onsite?date=${encodeURIComponent(date)}${silent ? '&fast=1' : ''}`, {
         cache: 'no-store',
@@ -108,13 +113,16 @@ export default function OnsiteUpload({
       })
       const body = (await response.json()) as OnsiteResponse
       if (!response.ok) throw new Error(body.error || 'Could not load the onsite schedule.')
+      assertEditorReadMetadata(body, 'onsite')
       setData(body)
+      setReadFailure(current => current?.date === date ? null : current)
     } catch (error) {
-      toast.error('Onsite schedule unavailable', error instanceof Error ? error.message : 'Try again.')
+      setReadFailure({ date, message: `The onsite schedule could not be loaded. Try: Retry onsite schedule. ${error instanceof Error ? error.message : ''}` })
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [date, toast, setData, setLoading])
+  }, [date, setData, setLoading])
 
   useEffect(() => {
     void load()
@@ -238,6 +246,7 @@ export default function OnsiteUpload({
   }
 
   const allJobs = useMemo(() => data?.batch?.jobs || [], [data])
+  const readError = readFailure?.date === date ? readFailure.message : ''
   const jobs = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return allJobs
@@ -300,7 +309,8 @@ export default function OnsiteUpload({
         </label>
       </div>
 
-      {allJobs.length === 0 ? (
+      {readError ? <StaffReadNotice message={readError} retryLabel="Retry onsite schedule" busy={refreshing} onRetry={() => void load(true)} /> : null}
+      {readError && !data ? null : allJobs.length === 0 ? (
         <div className={`${adminPanel} p-14 text-center`}>
           <CheckCircle2 className="mx-auto size-8 text-emerald-400/45" />
           <p className="mt-3 text-sm font-semibold">No clients scheduled for this date</p>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { ArrowLeft, Cloud, ExternalLink, FileImage, Folder, ImagePlus, RefreshCw, Search, ShieldCheck, Trash2, X } from 'lucide-react'
 import EditorCapabilityGate from '@/components/editor-capability-gate'
@@ -47,9 +48,17 @@ function sizeLabel(bytes: number) {
 }
 
 function FileManagement() {
-  const [date, setDate] = useState('')
-  const [booking, setBooking] = useState('')
+  const searchParams = useSearchParams()
+  const initialDate = searchParams.get('date') || ''
+  const initialBooking = searchParams.get('booking') || ''
+  const [date, setDate] = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : '')
+  const [booking, setBooking] = useState(() => /^FM-(?:\d{6}|W[A-Z0-9-]{1,40})$/i.test(initialBooking) ? initialBooking.toUpperCase() : '')
   const [category, setCategory] = useState('')
+  useEffect(() => {
+    setDate(/^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : '')
+    setBooking(/^FM-(?:\d{6}|W[A-Z0-9-]{1,40})$/i.test(initialBooking) ? initialBooking.toUpperCase() : '')
+    setCategory('')
+  }, [initialDate,initialBooking])
   const [data, setData] = useState<View | null>(null)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -306,5 +315,5 @@ function StorageCostSummary({ summary, error, onOpenRawCleanup }: { summary: Sto
 }
 
 export default function EditorFilesPage() {
-  return <EditorCapabilityGate capability="edit" fallback="/editor/onsite"><FileManagement/></EditorCapabilityGate>
+  return <EditorCapabilityGate capability="edit" fallback="/editor/onsite"><Suspense fallback={<p role="status" className="text-white/70">Loading file location…</p>}><FileManagement/></Suspense></EditorCapabilityGate>
 }

@@ -16,7 +16,8 @@ test('portal quietly retains healthy/offline content, blocks reset galleries and
   globalThis.clearInterval=(()=>{}) as never
   globalThis.fetch=async()=>{reads++;if(pending)await new Promise<void>(resolve=>{release=resolve});return unavailable?Response.json({},{status:503}):Response.json(next)}
   const h=componentHarness()
-  const code=loadTs<typeof import('../components/use-portal-photo-sync.ts')>('components/use-portal-photo-sync.ts',{react:h.react})
+  const access=loadTs<typeof import('../lib/portal-access-denial.ts')>('lib/portal-access-denial.ts',{})
+  const code=loadTs<typeof import('../components/use-portal-photo-sync.ts')>('components/use-portal-photo-sync.ts',{react:h.react,'@/lib/portal-access-denial':access})
   const render=()=>h.render(()=>code.usePortalPhotoSync('private',{generation:0,reopenedAt:null,galleryCount:2},()=>{resets++},async()=>{changes++}))
   render();await tick();assert.equal(changes,0)
   unavailable=true;poll();await tick();assert.equal(changes,0);assert.equal(resets,0)
@@ -39,11 +40,31 @@ test('first download on another device quietly refreshes the expiry notice witho
   globalThis.clearInterval=(()=>{}) as never
   globalThis.fetch=async()=>Response.json(next)
   const h=componentHarness()
-  const {usePortalPhotoSync}=loadTs<typeof import('../components/use-portal-photo-sync.ts')>('components/use-portal-photo-sync.ts',{react:h.react})
+  const access=loadTs<typeof import('../lib/portal-access-denial.ts')>('lib/portal-access-denial.ts',{})
+  const {usePortalPhotoSync}=loadTs<typeof import('../components/use-portal-photo-sync.ts')>('components/use-portal-photo-sync.ts',{react:h.react,'@/lib/portal-access-denial':access})
   const render=()=>h.render(()=>usePortalPhotoSync('private',current,()=>{resets++},async()=>{changes++;current={...next}}))
   render();await tick();assert.equal(changes,0)
   next={...next,portalReadyEmailSentAt:'2026-09-08T00:00:00Z',expiresAt:'2026-10-08T00:00:00Z'}
   poll();await tick();assert.equal(changes,1);assert.equal(resets,0)
   render();poll();await tick();assert.equal(changes,1)
   h.unmount();assert.equal(listeners.size,0)
+})
+
+test('portal revision revokes cached access on denial but not a temporary outage',async t=>{
+  const original={fetch:globalThis.fetch,window:globalThis.window,document:globalThis.document,setInterval:globalThis.setInterval,clearInterval:globalThis.clearInterval}
+  t.after(()=>Object.assign(globalThis,original))
+  const target={addEventListener:()=>{},removeEventListener:()=>{}}
+  Object.assign(globalThis,{window:target,document:{...target,visibilityState:'visible'}})
+  let poll:()=>void=()=>{},status=200,denials=0
+  globalThis.setInterval=((callback:()=>void)=>{poll=callback;return 1}) as never
+  globalThis.clearInterval=(()=>{}) as never
+  globalThis.fetch=async()=>Response.json(status===200?{generation:0,reopenedAt:null,galleryCount:2,resetting:false}:{error:'unavailable'},{status})
+  const h=componentHarness()
+  const access=loadTs<typeof import('../lib/portal-access-denial.ts')>('lib/portal-access-denial.ts',{})
+  const {usePortalPhotoSync}=loadTs<typeof import('../components/use-portal-photo-sync.ts')>('components/use-portal-photo-sync.ts',{react:h.react,'@/lib/portal-access-denial':access})
+  h.render(()=>usePortalPhotoSync('private',{generation:0,reopenedAt:null,galleryCount:2},()=>{},async()=>{},()=>{denials++}))
+  await tick()
+  status=503;poll();await tick();assert.equal(denials,0)
+  status=410;poll();await tick();assert.equal(denials,1)
+  h.unmount()
 })

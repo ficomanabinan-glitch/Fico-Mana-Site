@@ -16,6 +16,7 @@ export interface PaymentRecord {
 
 export interface Booking extends Record<string, unknown> {
   id: string
+  clientId?: string
   customerName: string
   customerEmail: string
   customerPhone: string
@@ -243,29 +244,29 @@ export async function getBookingPackages(category?: string): Promise<BookingPack
   return category ? bookingPackages.filter((p) => p.category === category) : bookingPackages
 }
 
+class BookingReadError extends Error {
+  constructor(public readonly status: number) {
+    super(status === 401 ? 'Staff login is required to read bookings.' : 'Bookings are temporarily unavailable. Retry the read.')
+  }
+}
+
+function bookingReadFallback(error: unknown): Booking[] {
+  return error instanceof BookingReadError && error.status === 401 ? [] : getCachedBookings()
+}
+
 async function fetchBookingsFresh(signalUpdate = false): Promise<Booking[]> {
   if (bookingsInFlight) return bookingsInFlight
   const generation = bookingsGeneration
   const work = (async () => {
-    try {
-      const res = await fetch('/api/bookings', { cache: 'no-store', credentials: 'include' })
-      if (res.ok) {
-        const data = (await res.json()) as Booking[]
-        // A read started before a mutation must never restore an old row.
-        if (generation !== bookingsGeneration) return getCachedBookings()
-        cacheBookings(data)
-        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
-        return data
-      }
-      if (res.status === 401) {
-        console.error('getBookings: staff login required')
-        return []
-      }
-      console.error('getBookings failed:', res.status)
-    } catch (error) {
-      console.error('getBookings failed:', error)
-    }
-    return getCachedBookings()
+    const res = await fetch('/api/bookings', { cache: 'no-store', credentials: 'include' })
+    if (!res.ok) throw new BookingReadError(res.status)
+    const data: unknown = await res.json()
+    if (!Array.isArray(data)) throw new BookingReadError(503)
+    // A read started before a mutation/session change must not certify stale rows.
+    if (generation !== bookingsGeneration) throw new BookingReadError(409)
+    cacheBookings(data)
+    if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+    return data as Booking[]
   })()
   bookingsInFlight = work
   try {
@@ -276,22 +277,25 @@ async function fetchBookingsFresh(signalUpdate = false): Promise<Booking[]> {
 }
 
 /** Staff: all bookings from API. Recent cached data renders immediately while stale data refreshes quietly. */
-export async function getBookings(options: { force?: boolean } = {}): Promise<Booking[]> {
+export async function getBookings(options: { force?: boolean; requireFresh?: boolean } = {}): Promise<Booking[]> {
   const cached = peekBookings()
+  // Opt-in for first-run guidance and operational totals: failure must stay failure.
+  // The underlying request remains shared; normal callers retain their existing SWR.
+  if (options.requireFresh) return fetchBookingsFresh(false)
   if (options.force) {
     if (cached !== undefined) {
-      void fetchBookingsFresh(true)
+      void fetchBookingsFresh(true).catch(bookingReadFallback)
       return cached
     }
-    return fetchBookingsFresh(false)
+    return fetchBookingsFresh(false).catch(bookingReadFallback)
   }
   // An authoritative empty list is cached too (including after the last deletion).
   if (cached !== undefined && cacheIsFresh(cachedAt(BOOKINGS_AT_KEY))) return cached
   if (cached !== undefined) {
-    void fetchBookingsFresh(true)
+    void fetchBookingsFresh(true).catch(bookingReadFallback)
     return cached
   }
-  return fetchBookingsFresh(false)
+  return fetchBookingsFresh(false).catch(bookingReadFallback)
 }
 
 /** undefined means not loaded; an empty notification list is still authoritative. */
@@ -392,19 +396,13 @@ async function fetchFicoSpotBlocksFresh(signalUpdate = false): Promise<FicoSpotB
   if (ficoSpotBlocksInFlight) return ficoSpotBlocksInFlight
   const generation = readSessionGeneration
   ficoSpotBlocksInFlight = (async () => {
-    try {
-      const res = await fetch('/api/fico-spot-blocks', { cache: 'no-store' })
-      if (res.ok) {
-        const data = (await res.json()) as FicoSpotBlock[]
-        if (generation !== readSessionGeneration) return []
-        ficoSpotBlocksMemory = { data, at: Date.now() }
-        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
-        return data
-      }
-    } catch (error) {
-      console.error('getFicoSpotBlocks failed:', error)
-    }
-    return ficoSpotBlocksMemory?.data ?? []
+    const res = await fetch('/api/fico-spot-blocks', { cache: 'no-store' })
+    if (!res.ok) throw new Error('Held studio spots could not be checked.')
+    const data: unknown = await res.json()
+    if (!Array.isArray(data) || generation !== readSessionGeneration) throw new Error('Held studio spots could not be checked.')
+    ficoSpotBlocksMemory = { data, at: Date.now() }
+    if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+    return data as FicoSpotBlock[]
   })()
   try {
     return await ficoSpotBlocksInFlight
@@ -414,13 +412,14 @@ async function fetchFicoSpotBlocksFresh(signalUpdate = false): Promise<FicoSpotB
 }
 
 /** Public: admin-held FICO spots per day. */
-export async function getFicoSpotBlocks(): Promise<FicoSpotBlock[]> {
+export async function getFicoSpotBlocks(options: { requireFresh?: boolean } = {}): Promise<FicoSpotBlock[]> {
+  if (options.requireFresh) return fetchFicoSpotBlocksFresh(false)
   if (ficoSpotBlocksMemory && cacheIsFresh(ficoSpotBlocksMemory.at)) return ficoSpotBlocksMemory.data
   if (ficoSpotBlocksMemory) {
-    void fetchFicoSpotBlocksFresh(true)
+    void fetchFicoSpotBlocksFresh(true).catch(() => ficoSpotBlocksMemory?.data ?? [])
     return ficoSpotBlocksMemory.data
   }
-  return fetchFicoSpotBlocksFresh(false)
+  return fetchFicoSpotBlocksFresh(false).catch(() => ficoSpotBlocksMemory?.data ?? [])
 }
 
 /** Staff: hold N FICO spots on a date (0 clears the hold). */
@@ -454,19 +453,13 @@ async function fetchBlockedSlotsFresh(signalUpdate = false): Promise<BlockedSlot
   if (blockedSlotsInFlight) return blockedSlotsInFlight
   const generation = readSessionGeneration
   blockedSlotsInFlight = (async () => {
-    try {
-      const res = await fetch('/api/blocked-slots', { cache: 'no-store' })
-      if (res.ok) {
-        const data = (await res.json()) as BlockedSlot[]
-        if (generation !== readSessionGeneration) return []
-        blockedSlotsMemory = { data, at: Date.now() }
-        if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
-        return data
-      }
-    } catch (error) {
-      console.error('getBlockedSlots failed:', error)
-    }
-    return blockedSlotsMemory?.data ?? []
+    const res = await fetch('/api/blocked-slots', { cache: 'no-store' })
+    if (!res.ok) throw new Error('Blocked session slots could not be checked.')
+    const data: unknown = await res.json()
+    if (!Array.isArray(data) || generation !== readSessionGeneration) throw new Error('Blocked session slots could not be checked.')
+    blockedSlotsMemory = { data, at: Date.now() }
+    if (signalUpdate) queueMicrotask(signalAdminCacheUpdated)
+    return data as BlockedSlot[]
   })()
   try {
     return await blockedSlotsInFlight
@@ -476,13 +469,14 @@ async function fetchBlockedSlotsFresh(signalUpdate = false): Promise<BlockedSlot
 }
 
 /** Public: admin-blocked session slots (studio can still operate other slots). */
-export async function getBlockedSlots(): Promise<BlockedSlot[]> {
+export async function getBlockedSlots(options: { requireFresh?: boolean } = {}): Promise<BlockedSlot[]> {
+  if (options.requireFresh) return fetchBlockedSlotsFresh(false)
   if (blockedSlotsMemory && cacheIsFresh(blockedSlotsMemory.at)) return blockedSlotsMemory.data
   if (blockedSlotsMemory) {
-    void fetchBlockedSlotsFresh(true)
+    void fetchBlockedSlotsFresh(true).catch(() => blockedSlotsMemory?.data ?? [])
     return blockedSlotsMemory.data
   }
-  return fetchBlockedSlotsFresh(false)
+  return fetchBlockedSlotsFresh(false).catch(() => blockedSlotsMemory?.data ?? [])
 }
 
 /** Staff: block a session slot on a date. */

@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import StaffReadNotice from '@/components/staff-read-notice'
 import { getBookings, getBlockedSlots, getFicoSpotBlocks, peekBookings, peekBlockedSlots, peekFicoSpotBlocks, Booking } from '@/lib/data-store'
 import type { BlockedSlot } from '@/lib/blocked-slots'
 import type { FicoSpotBlock } from '@/lib/fico-spot-blocks'
 import AdminDayOperations from '@/components/admin-day-operations'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
-import { useAdminToast } from '@/components/admin-toast-provider'
 import AdminPageHeader from '@/components/admin-page-header'
 import AdminBookingCalendar, { AdminDaySessions } from '@/components/admin-booking-calendar'
 import { adminPage } from '@/lib/admin-ui'
@@ -18,42 +18,45 @@ function todayKey() {
 }
 
 export default function AdminCalendarPage() {
-  const toast = useAdminToast()
   const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>(() => peekBlockedSlots() ?? [])
   const [ficoSpotBlocks, setFicoSpotBlocks] = useState<FicoSpotBlock[]>(() => peekFicoSpotBlocks() ?? [])
   const [loading, setLoading] = useState(() => [peekBookings(), peekBlockedSlots(), peekFicoSpotBlocks()].some(data => data === undefined))
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState('')
   const [selectedDate, setSelectedDate] = useState(todayKey())
 
-  const fetchData = async (silent = false) => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
       const [data, blocked, ficoBlocks] = await Promise.all([
-        getBookings(),
-        getBlockedSlots(),
-        getFicoSpotBlocks(),
+        getBookings({ force: !silent, requireFresh: true }),
+        getBlockedSlots({ requireFresh: true }),
+        getFicoSpotBlocks({ requireFresh: true }),
       ])
       setBookings(data)
       setBlockedSlots(blocked)
       setFicoSpotBlocks(ficoBlocks)
+      setReadError('')
     } catch {
-      if (!silent) toast.error('Sync failed', 'Could not load calendar data.')
+      setReadError('Calendar data could not be loaded. Availability cannot be verified until bookings and slot restrictions are available.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchData(true)
-  }, [])
+  }, [fetchData])
 
   useOnAdminDbSync(() => fetchData(true))
 
   if (loading) {
     return <AdminPageSkeleton variant="calendar" />
   }
+
+  if (readError) return <div className={adminPage}><AdminPageHeader title="Session Calendar" subtitle="View shoot dates and manage available slots." /><StaffReadNotice message={readError} retryLabel="Retry calendar" busy={refreshing} onRetry={() => void fetchData()} /></div>
 
   return (
     <div className={adminPage}>

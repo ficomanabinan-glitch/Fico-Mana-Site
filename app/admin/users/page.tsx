@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { KeyRound, Plus, ShieldCheck, Trash2, UserCog, Users } from 'lucide-react'
 import { PasswordVisibilityToggle } from '@/components/password-visibility-toggle'
 import AdminPageHeader from '@/components/admin-page-header'
+import StaffReadNotice from '@/components/staff-read-notice'
 import { useAdminToast } from '@/components/admin-toast-provider'
 import {
   adminBtnGhost,
@@ -64,6 +65,7 @@ export default function UserAccessPage() {
   const toast = useAdminToast()
   const [data, setData] = useState<StaffResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [readError, setReadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<StaffAccount | null>(null)
@@ -73,12 +75,13 @@ export default function UserAccessPage() {
     setLoading(true)
     try {
       setData(await api<StaffResponse>('/api/admin/users'))
-    } catch (error) {
-      toast.error('Could not load user access', error instanceof Error ? error.message : undefined)
+      setReadError('')
+    } catch {
+      setReadError('User access could not be loaded. Account permissions cannot be checked until the list is available.')
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => { void load() }, [load])
 
@@ -175,6 +178,8 @@ export default function UserAccessPage() {
   const canAssign = (role: StaffAccessRole) =>
     data?.currentRole === 'owner' ? role !== 'owner' : ['editor', 'onsite', 'staff', 'unassigned'].includes(role)
 
+  if (!data) return <div className={adminPage}><AdminPageHeader title="User Access" subtitle="Manage staff accounts and workspace access." />{readError ? <StaffReadNotice message={readError} retryLabel="Retry User Access" busy={loading} onRetry={() => void load()} /> : <p role="status" className={`${adminPanel} p-5`}>Loading staff accounts…</p>}</div>
+
   return (
     <div className={adminPage}>
       <AdminPageHeader
@@ -184,6 +189,7 @@ export default function UserAccessPage() {
         refreshing={loading}
       />
 
+      {readError && <StaffReadNotice message={readError} retryLabel="Retry User Access" busy={loading} onRetry={() => void load()} />}
       <div className="grid gap-4 sm:grid-cols-3">
         <Metric icon={Users} label="Active accounts" value={String(data?.accounts.length ?? 0)} />
         <Metric icon={UserCog} label="Editors" value={String(editors)} />

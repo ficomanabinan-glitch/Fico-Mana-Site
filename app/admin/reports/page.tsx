@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import StaffReadNotice from '@/components/staff-read-notice'
 import { BarChart3, CalendarDays, PhilippinePeso, Users } from 'lucide-react'
 import { getBookings, peekBookings, type Booking } from '@/lib/data-store'
 import { useOnAdminDbSync } from '@/components/admin-auto-sync'
@@ -9,11 +10,23 @@ import AdminPageHeader from '@/components/admin-page-header'
 
 export default function ReportsPage() {
   const [bookings, setBookings] = useState<Booking[]>(() => peekBookings() ?? [])
+  const [loading, setLoading] = useState(() => peekBookings() === undefined)
+  const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState('')
+  const fetchReports = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      setBookings(await getBookings({ force: true, requireFresh: true }))
+      setReadError('')
+    } catch {
+      setReadError('Reports could not be loaded. Previously shown figures may be out of date.')
+    } finally { setLoading(false); setRefreshing(false) }
+  }, [])
 
   useEffect(() => {
-    getBookings().then(setBookings)
-  }, [])
-  useOnAdminDbSync(() => { void getBookings().then(setBookings) })
+    void fetchReports()
+  }, [fetchReports])
+  useOnAdminDbSync(fetchReports)
 
   const report = useMemo(() => {
     const totalRevenue = bookings.reduce(
@@ -28,7 +41,7 @@ export default function ReportsPage() {
 
     return {
       clients: new Set(
-        bookings.map((booking) => booking.customerEmail || booking.customerPhone || booking.customerName),
+        bookings.map((booking) => booking.clientId || `booking:${booking.id}`),
       ).size,
       bookings: bookings.length,
       confirmed: bookings.filter((booking) => booking.bookingStatus === 'Confirmed').length,
@@ -44,12 +57,17 @@ export default function ReportsPage() {
     { label: 'Collected', value: `₱${report.revenue.toLocaleString()}`, icon: PhilippinePeso },
   ]
 
+  if (loading) return <div className={adminPage}><AdminPageHeader title="Reports" subtitle="View booking and payment summaries." /><div role="status" className={`${adminPanel} p-5`}>Loading report figures…</div></div>
+  if (readError && !bookings.length) return <div className={adminPage}><AdminPageHeader title="Reports" subtitle="View booking and payment summaries." /><StaffReadNotice message={readError} retryLabel="Retry reports" busy={refreshing} onRetry={() => void fetchReports()} /></div>
+
   return (
     <div className={adminPage}>
       <AdminPageHeader
         title="Reports"
         subtitle="View booking and payment summaries."
       />
+
+      {readError && <StaffReadNotice message={readError} retryLabel="Retry reports" busy={refreshing} onRetry={() => void fetchReports()} />}
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {cards.map((card) => {

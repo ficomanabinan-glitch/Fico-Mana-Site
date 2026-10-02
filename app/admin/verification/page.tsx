@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import StaffReadNotice from '@/components/staff-read-notice'
+import StaffModalFrame from '@/components/staff-modal-frame'
 import Link from 'next/link'
 import { getBookings, peekBookings, dismissBookingNotifications, addNotification, Booking } from '@/lib/data-store'
 import { GraduationSessionDetails } from '@/components/graduation-session-details'
@@ -37,6 +39,7 @@ export default function PaymentVerificationQueue() {
     .filter(booking => booking.bookingStatus === 'Pending Verification').map(enrichBookingDisplay))
   const [loading, setLoading] = useState(() => peekBookings() === undefined)
   const [refreshing, setRefreshing] = useState(false)
+  const [readError, setReadError] = useState('')
 
   // Modal states
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -57,26 +60,26 @@ export default function PaymentVerificationQueue() {
     setExiting(null)
   }
 
-  const fetchQueue = async (silent = false) => {
+  const fetchQueue = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true)
     try {
-      const data = await getBookings()
+      const data = await getBookings({ force: !silent, requireFresh: true })
       const queue = data
         .filter((b) => b.bookingStatus === 'Pending Verification')
         .map(enrichBookingDisplay)
       setBookings(queue)
-    } catch (err) {
-      console.error(err)
-      toast.error('Sync failed', 'Could not load bookings. Try: refresh the page.')
+      setReadError('')
+    } catch {
+      setReadError('The verification queue could not be loaded. Previously shown receipts may be out of date.')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchQueue(true)
-  }, [])
+  }, [fetchQueue])
 
   useOnAdminDbSync(() => fetchQueue(true))
 
@@ -239,6 +242,8 @@ export default function PaymentVerificationQueue() {
     return <AdminPageSkeleton variant="verification" />
   }
 
+  if (readError && !bookings.length) return <div className={adminPage}><AdminPageHeader title="Payment Verification" subtitle="Review receipts and confirm client payments." /><StaffReadNotice message={readError} retryLabel="Retry verification" busy={refreshing} onRetry={() => void fetchQueue()} /></div>
+
   return (
     <div className={adminPage}>
       <AdminPageHeader
@@ -248,6 +253,7 @@ export default function PaymentVerificationQueue() {
         refreshing={refreshing}
       />
 
+      {readError && <StaffReadNotice message={readError} retryLabel="Retry verification" busy={refreshing} onRetry={() => void fetchQueue()} />}
       {bookings.length === 0 ? (
         <div className={`${adminPanel} mx-auto max-w-2xl p-8 text-center sm:p-10`}>
           <div className="w-16 h-16 bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-400 rounded-full mx-auto mb-4">
@@ -290,8 +296,10 @@ export default function PaymentVerificationQueue() {
                 const display = enrichBookingDisplay(booking)
                 return (
                   <div key={booking.id} className={`rounded-card border border-white/10 bg-white/[0.02] flex flex-col justify-between overflow-hidden ${adminCardHover} ${exiting?.id === booking.id ? (exiting.type === 'approve' ? 'card-approve-exit' : 'card-reject-exit') : ''} ${isLikelyInvalidReceipt(display.receiptUrl) ? 'ring-1 ring-red-500/40' : ''}`}>
-                    <div
-                      className="h-48 bg-white/[0.05] relative overflow-hidden group cursor-pointer border-b border-white/10"
+                    <button
+                      type="button"
+                      aria-label={`View receipt for ${booking.customerName} ${booking.id}`}
+                      className="h-48 w-full bg-white/[0.05] relative overflow-hidden group cursor-pointer border-b border-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                       onClick={() => {
                         setSelectedBooking(display)
                         setShowReceiptModal(true)
@@ -301,7 +309,7 @@ export default function PaymentVerificationQueue() {
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold uppercase tracking-label pointer-events-none">
                         View Large Receipt
                       </div>
-                    </div>
+                    </button>
 
                     <div className="p-5 space-y-4">
                       <div className="flex justify-between items-start border-b border-white/10 pb-3">
@@ -374,7 +382,7 @@ export default function PaymentVerificationQueue() {
       )}
 
       {receiptModalBooking && selectedBooking && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+        <StaffModalFrame labelledBy="verification-receipt-title" onClose={() => { setShowReceiptModal(false); setSelectedBooking(null) }} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-4xl w-full flex flex-col md:flex-row overflow-hidden max-h-[90vh]">
             <div className="md:w-1/2 bg-white/[0.05] border-r border-white/10 relative min-h-[300px] flex items-center justify-center">
               {receiptModalBooking.receiptUrl && receiptModalBooking.receiptUrl.endsWith('.pdf') ? (
@@ -400,10 +408,12 @@ export default function PaymentVerificationQueue() {
                 <div className="flex justify-between items-start border-b border-white/10 pb-4">
                   <div>
                     <span className="text-caption text-white/40 font-bold uppercase tracking-label">Verification Details</span>
-                    <h2 className="text-lg font-bold text-white mt-1">{selectedBooking.customerName}</h2>
+                    <h2 id="verification-receipt-title" className="text-lg font-bold text-white mt-1">Receipt for {selectedBooking.customerName}</h2>
                     <p className="text-xs font-mono text-white/40 mt-0.5">Reference: {selectedBooking.id}</p>
                   </div>
                   <button
+                    type="button"
+                    aria-label="Close receipt details"
                     onClick={() => {
                       setShowReceiptModal(false)
                       setSelectedBooking(null)
@@ -539,22 +549,23 @@ export default function PaymentVerificationQueue() {
               </div>
             </div>
           </div>
-        </div>
+        </StaffModalFrame>
       )}
 
       {showRejectModal && selectedBooking && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+        <StaffModalFrame labelledBy="verification-rejection-title" onClose={() => setShowRejectModal(false)} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 z-[60] animate-in fade-in duration-200">
           <form
             onSubmit={handleRejectSubmit}
             className="relative rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
           >
             <div className="flex justify-between items-start border-b border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-white">Reject Payment Receipt</h3>
+                <h2 id="verification-rejection-title" className="font-bold text-white">Reject Payment Receipt</h2>
                 <p className="text-caption text-white/40 font-mono mt-0.5">Booking ID: {selectedBooking.id}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close payment rejection"
                 onClick={() => setShowRejectModal(false)}
                 className="p-1 hover:bg-white/[0.05] rounded text-white/40"
               >
@@ -571,10 +582,11 @@ export default function PaymentVerificationQueue() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-caption font-semibold tracking-label text-muted-foreground uppercase">
+                <label htmlFor="payment-rejection-reason" className="text-caption font-semibold tracking-label text-muted-foreground uppercase">
                   Rejection Reason
                 </label>
                 <select
+                  id="payment-rejection-reason"
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value as RejectionReasonId)}
                   className={adminSelect}
@@ -633,7 +645,7 @@ export default function PaymentVerificationQueue() {
               </button>
             </div>
           </form>
-        </div>
+        </StaffModalFrame>
       )}
     </div>
   )

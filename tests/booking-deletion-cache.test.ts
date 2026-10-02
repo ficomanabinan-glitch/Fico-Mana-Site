@@ -6,6 +6,26 @@ import type { Booking } from '../lib/data-store.ts'
 const first = { id: 'FM-CACHE-1', customerName: 'Synthetic one' } as Booking
 const second = { id: 'FM-CACHE-2', customerName: 'Synthetic two' } as Booking
 
+test('authoritative calendar constraint reads reject failed or malformed data and retain shared cache behavior', async t => {
+  const { store } = setup(t)
+  for (const read of [store.getBlockedSlots, store.getFicoSpotBlocks]) {
+    for (const status of [401, 403, 429, 503]) {
+      globalThis.fetch = async () => Response.json({ error: 'Synthetic failure' }, { status })
+      await assert.rejects(read({ requireFresh: true }))
+    }
+    globalThis.fetch = async () => Response.json({ malformed: true })
+    await assert.rejects(read({ requireFresh: true }))
+    let requests = 0
+    globalThis.fetch = async () => { requests++; return Response.json([]) }
+    assert.deepEqual(await Promise.all([read({ requireFresh: true }), read({ requireFresh: true })]), [[], []])
+    assert.equal(requests, 1)
+    globalThis.fetch = async () => { throw new Error('Synthetic offline') }
+    assert.deepEqual(await read(), [])
+    await assert.rejects(read({ requireFresh: true }))
+    store.clearAdminReadCaches()
+  }
+})
+
 function setup(t: test.TestContext) {
   const originals = Object.fromEntries(['window', 'localStorage', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   const records = new Map<string, string>()
@@ -185,4 +205,52 @@ test('failed booking list reads cannot be mistaken for a successful empty databa
     '@/lib/supabase/env': { isSupabaseConfigured: () => true },
   })
   await assert.rejects(sync.loadSyncedBookings(), /temporarily unavailable/)
+})
+
+// Client360 R22/R23: first-run and operational totals require a successful read.
+// Scenarios: first503/network/malformed response; cached503; concurrent fresh success.
+// Oracles: strict read rejects, no false empty cache; ordinary SWR retains its snapshot;
+// successful empty result is cached; concurrent fresh reads issue one external request.
+// External HTTP/storage are the only fakes. Human acceptance review is still pending.
+test('authoritative booking reads reject first-load outages and malformed lists rather than inventing empty data', async t => {
+  const { store } = setup(t)
+  for (const status of [401, 403, 429, 503]) {
+    globalThis.fetch = async () => Response.json({ error: 'Synthetic unavailable' }, { status })
+    await assert.rejects(store.getBookings({ requireFresh: true }))
+    assert.equal(store.peekBookings(), undefined)
+  }
+  globalThis.fetch = async () => { throw new Error('Synthetic offline') }
+  await assert.rejects(store.getBookings({ requireFresh: true }))
+  globalThis.fetch = async () => Response.json({ bookings: [] })
+  await assert.rejects(store.getBookings({ requireFresh: true }))
+  assert.equal(store.peekBookings(), undefined)
+})
+
+test('an authoritative refresh rejects an outage while ordinary booking reads keep their cached data', async t => {
+  const { store, seed } = setup(t)
+  seed([first])
+  globalThis.fetch = async () => Response.json({ error: 'Synthetic unavailable' }, { status: 503 })
+  await assert.rejects(store.getBookings({ requireFresh: true }))
+  assert.deepEqual(store.peekBookings(), [first])
+  assert.deepEqual(await store.getBookings(), [first])
+  assert.deepEqual(await store.getBookings({ force: true }), [first])
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(store.peekBookings(), [first])
+})
+
+test('concurrent authoritative booking reads deduplicate and cache a genuinely empty result', async t => {
+  const { store, seed } = setup(t)
+  seed([first])
+  let requests = 0
+  let finish!: (response: Response) => void
+  globalThis.fetch = async () => { requests += 1; return new Promise<Response>(resolve => { finish = resolve }) }
+  const a = store.getBookings({ requireFresh: true })
+  const b = store.getBookings({ requireFresh: true })
+  assert.equal(requests, 1)
+  finish(Response.json([]))
+  assert.deepEqual(await a, [])
+  assert.deepEqual(await b, [])
+  assert.deepEqual(store.peekBookings(), [])
+  assert.deepEqual(await store.getBookings(), [])
+  assert.equal(requests, 1)
 })

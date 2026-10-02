@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { headers } from 'next/headers'
 import ClientPortalPage, { type PortalData } from '@/components/client-portal-page'
 import PortalPageSkeleton from '@/components/portal-page-skeleton'
-import { getPortalData } from '@/lib/editor-workflow'
+import { getPortalData, PortalSelectionError } from '@/lib/editor-workflow'
 import { portalPagePayload } from '@/lib/portal-page-payload'
 import { API_RATE_LIMITS, enforceApiRateLimit } from '@/lib/security/api-rate-limit'
 
@@ -22,8 +22,10 @@ async function PortalContent({ id }: { id: string }) {
       const limited = await enforceApiRateLimit(request, API_RATE_LIMITS.portalRead, [publicId])
       if (limited) initialError = 'The portal is temporarily unavailable. Try: wait a moment and try again.'
       else initialData = portalPagePayload(publicId, await getPortalData(publicId, 0, 48)) as PortalData
-    } catch {
-      initialError = 'This client portal is unavailable. Try: refresh this page or ask FICO MANA staff to check your private portal link.'
+    } catch (error) {
+      initialError = error instanceof PortalSelectionError && error.code === 'PORTAL_EXPIRED'
+        ? error.message
+        : 'This client portal is unavailable. Try: refresh this page or ask FICO MANA staff to check your private portal link.'
     }
   }
   return <ClientPortalPage key={publicId} publicId={publicId} initialData={initialData} initialError={initialError} />

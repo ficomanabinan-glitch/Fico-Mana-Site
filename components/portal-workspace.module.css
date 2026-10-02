@@ -1,3 +1,12 @@
+/* Local action tokens preserve the incumbent Editorial Light Table palette. */
+.clientPortal,
+.portal,
+.onboardingPage {
+  --portal-action: #1b16dc;
+  --portal-action-hover: #2b25ef;
+  --portal-focus: var(--fico-focus);
+}
+
 .portal {
   --portal-bg: #181819;
   --portal-surface: #1f1f21;
@@ -5,7 +14,7 @@
   --portal-border: rgba(255,255,255,.09);
   --portal-border-strong: rgba(255,255,255,.16);
   --portal-muted: #aaaab1;
-  --portal-blue: #0500d0;
+  --portal-blue: var(--fico-portal-primary);
   --portal-ease: cubic-bezier(.32,.72,0,1);
   --portal-radius-card: var(--fico-radius-card, 16px);
   --portal-radius-control: var(--fico-radius-control, 10px);
@@ -32,7 +41,7 @@
 .step span { font-size:12px; line-height:1.2; font-weight:600; white-space:nowrap; }
 .step:hover:not(:disabled) { color:#fff; }
 .step:active:not(:disabled) { transform:scale(.98); }
-.step[aria-current=step] { color:white; background:#0500d0; box-shadow:inset 0 1px rgba(255,255,255,.18),0 6px 18px rgba(5,0,208,.18); }
+.step[aria-current=step] { color:white; background:var(--fico-portal-primary); box-shadow:inset 0 1px rgba(255,255,255,.18),0 6px 18px rgba(5,0,208,.18); }
 .step:disabled { cursor:not-allowed; }
 .main { padding-top:30px; padding-bottom:104px; }
 .heading { display:flex; align-items:flex-end; justify-content:space-between; gap:32px; margin-bottom:24px; }
@@ -87,7 +96,7 @@
 .previewChoice:active:not(:disabled) { transform:scale(.985); }
 .previewChoice[aria-pressed=true] { border-color:rgba(196,206,255,.28); background:rgba(196,206,255,.06); color:#c4ceff; }
 .previewChoice:disabled { cursor:not-allowed; opacity:.5; }
-.primary { display:inline-flex; align-items:center; justify-content:center; gap:10px; min-height:44px; padding:10px 18px; border:1px solid #0500d0; border-radius:var(--portal-radius-control); background:#0500d0; color:#fff; font-size:11px; font-weight:650; cursor:pointer; box-shadow:inset 0 1px rgba(255,255,255,.16); transition:background-color 420ms var(--portal-ease),transform 420ms var(--portal-ease),box-shadow 420ms var(--portal-ease); }
+.primary { display:inline-flex; align-items:center; justify-content:center; gap:10px; min-height:44px; padding:10px 18px; border:1px solid var(--fico-portal-primary); border-radius:var(--portal-radius-control); background:var(--fico-portal-primary); color:#fff; font-size:11px; font-weight:650; cursor:pointer; box-shadow:inset 0 1px rgba(255,255,255,.16); transition:background-color 420ms var(--portal-ease),transform 420ms var(--portal-ease),box-shadow 420ms var(--portal-ease); }
 .primary:has(.buttonIcon) { padding:9px 9px 9px 18px; }
 .primary:hover:not(:disabled) { background:#0903e8; box-shadow:inset 0 1px rgba(255,255,255,.2),0 10px 28px rgba(5,0,208,.2); }
 .primary:active:not(:disabled) { transform:scale(.985); }
@@ -155,7 +164,7 @@
 .preferenceHelp { margin:7px 0 0; color:var(--portal-muted); font-size:11px; line-height:1.5; }
 .preferenceHelp a { color:#c4ceff; text-decoration:underline; text-underline-offset:3px; }
 .galleryCount { color:var(--portal-muted); font-size:12px; }
-.portal summary:focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; border-radius:8px; }
+.portal summary:focus-visible { outline:2px solid var(--portal-focus); outline-offset:3px; border-radius:8px; }
 .draftNotice button { flex-shrink:0; }
 .note a { display:inline-block; min-height:44px; padding-block:10px; color:#c4ceff; text-decoration:underline; text-underline-offset:3px; }
 .reviewZoom { width:100%; cursor:zoom-in; }
@@ -230,7 +239,7 @@
 .addonRow { display:flex; align-items:center; gap:8px; padding-inline:16px; }
 .addonToggle { flex:1; display:flex; align-items:center; gap:16px; min-height:100px; padding:20px 0; min-width:0; text-align:left; cursor:pointer; }
 .addonIcon { display:grid; place-items:center; width:40px; height:40px; border:1px solid var(--portal-border); border-radius:50%; flex-shrink:0; }
-.addonItem[data-selected=true] .addonIcon { background:#0500d0; border-color:#0500d0; }
+.addonItem[data-selected=true] .addonIcon { background:var(--fico-portal-primary); border-color:var(--fico-portal-primary); }
 .addonCopy { flex:1; min-width:0; }
 .addonCopy strong { display:block; font-size:14px; font-weight:550; }
 .addonCopy small, .addonPrice small, .extraSummary small { display:block; font-size:10px; color:var(--portal-muted); margin-top:5px; line-height:1.6; }
@@ -254,7 +263,7 @@
 .policy h2 { font-size:14px; font-weight:600; color:#e6c98b; }
 .policy p, .policy label { font-size:12px; line-height:1.7; color:#c5c5c5; margin-top:12px; }
 .policy label { display:flex; align-items:flex-start; gap:12px; min-height:44px; cursor:pointer; }
-.policy input { width:18px; height:18px; margin-top:4px; flex-shrink:0; accent-color:#0500d0; }
+.policy input { width:18px; height:18px; margin-top:4px; flex-shrink:0; accent-color:var(--fico-portal-primary); }
 .balance { display:flex; flex-direction:column; gap:7px; padding:24px 0; }
 .balance dt { font-size:11px; color:var(--portal-muted); }
 .balance dd { font-family:var(--font-geist-sans),sans-serif; font-size:32px; font-weight:650; line-height:1; letter-spacing:-.03em; margin:0; }
@@ -275,7 +284,7 @@
   .addonRow { padding-inline:12px; }
   .addonPicker { margin:0 12px 12px; padding:12px; }
 }
-.portal :is(button,a,input,select):focus-visible { outline:2px solid #a5b4fc; outline-offset:3px; }
+.portal :is(button,a,input,select):focus-visible { outline:2px solid var(--portal-focus); outline-offset:3px; }
 @keyframes shimmer { from { background-position:200% 0; } to { background-position:-200% 0; } }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 @media (hover:hover) { .photo:hover { transform:translateY(-2px); border-color:rgba(196,206,255,.45); box-shadow:0 14px 34px rgba(0,0,0,.16); } .photo:hover .image img { transform:scale(1.025); } }
@@ -362,7 +371,7 @@
   --portal-border: rgba(244, 241, 233, 0.1);
   --portal-border-strong: rgba(244, 241, 233, 0.2);
   --portal-muted: #aaa79f;
-  --portal-blue: #1b16dc;
+  --portal-blue: var(--portal-action);
   --portal-ink: #f4f1e9;
   --portal-warm: #d9ba72;
   --portal-cool: #c7ceff;
@@ -461,7 +470,7 @@
 }
 
 .step[aria-current='step'] {
-  background: #1b16dc;
+  background: var(--portal-action);
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.2),
     0 8px 24px rgba(27, 22, 220, 0.2);
@@ -775,16 +784,16 @@
 }
 
 .primary {
-  border-color: #1b16dc;
+  border-color: var(--portal-action);
   border-radius: 12px;
-  background: #1b16dc;
+  background: var(--portal-action);
   box-shadow:
     0 12px 28px rgba(27, 22, 220, 0.19),
     inset 0 1px rgba(255, 255, 255, 0.2);
 }
 
 .primary:hover:not(:disabled) {
-  background: #2b25ef;
+  background: var(--portal-action-hover);
   box-shadow:
     0 16px 36px rgba(27, 22, 220, 0.25),
     inset 0 1px rgba(255, 255, 255, 0.24);
@@ -920,7 +929,7 @@
   }
 
   .step {
-    min-height: 42px;
+    min-height: 44px;
   }
 
   .main {
@@ -1550,7 +1559,7 @@
   width: 100%;
   padding: 12px 18px;
   border-radius: 12px;
-  background: #1b16dc;
+  background: var(--portal-action);
   color: #ffffff;
   font-size: 0.875rem;
   font-weight: 680;
@@ -1560,7 +1569,7 @@
 
 .onboardingPrimary:hover {
   transform: translateY(-2px);
-  background: #2b25ef;
+  background: var(--portal-action-hover);
   box-shadow: 0 20px 48px rgba(27, 22, 220, 0.28), inset 0 1px rgba(255, 255, 255, 0.22);
 }
 

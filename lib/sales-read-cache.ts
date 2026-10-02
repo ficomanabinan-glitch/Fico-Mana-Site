@@ -130,6 +130,11 @@ export async function fetchSales(
     })
     const body = (await response.json().catch(() => ({}))) as SalesSummaryPayload & { error?: string }
     if (!response.ok) throw new Error(body.error || 'Could not load sales data.')
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+      !body.summary || typeof body.summary !== 'object' || Array.isArray(body.summary) ||
+      !body.settings || typeof body.settings !== 'object' || Array.isArray(body.settings)) {
+      throw new Error('The sales data response is invalid. Try loading it again.')
+    }
     if (requestGeneration === cacheGeneration) {
       salesCache.delete(key)
       salesCache.set(key, { data: body, cachedAt: Date.now() })

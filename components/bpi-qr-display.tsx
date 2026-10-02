@@ -55,7 +55,7 @@ export default function BpiQrDisplay({ depositLabel, hint, className = '' }: Pro
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="mt-3 text-caption font-semibold uppercase tracking-wider text-primary/80 hover:text-primary transition-colors"
+          className="mt-3 min-h-11 rounded-sm px-2 text-caption font-semibold uppercase tracking-wider text-[#C4CEFF] hover:text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C4CEFF]"
         >
           View full QR image
         </button>

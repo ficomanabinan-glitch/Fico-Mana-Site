@@ -55,7 +55,8 @@ export async function fetchManagedPackages({ force = false }: { force?: boolean 
   }).then(async (response) => {
     const body = (await response.json().catch(() => ({}))) as ManagedPackage[] & { error?: string }
     if (!response.ok) throw new Error(body.error || 'Could not load the package catalog.')
-    const data = sortPackages(Array.isArray(body) ? body : [])
+    if (!Array.isArray(body)) throw new Error('The package catalog response is invalid. Try loading it again.')
+    const data = sortPackages(body)
     if (requestGeneration === cacheGeneration) {
       packageCache = { data, cachedAt: Date.now() }
     }

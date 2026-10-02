@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-qa/
 .vercel/
 .staging-data/
 .local-data/
@@ -10,7 +11,9 @@ data/fico-spot-blocks.json
 previews/
 artifacts/
 .audit/
-.impeccable/
+.qa-assessment-*/
+.impeccable/*
+!.impeccable/design.json
 .agents/
 .codex/
 .pnpm-store/

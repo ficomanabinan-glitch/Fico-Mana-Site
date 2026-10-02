@@ -68,7 +68,7 @@ export default function Footer() {
             </motion.div>
 
             <motion.div variants={itemVariants} className="md:col-span-2">
-              <h4 className="text-caption font-semibold tracking-label uppercase mb-5 text-white/40">
+              <h4 className="text-caption font-semibold tracking-label uppercase mb-5 text-public-muted">
                 {copy.footerNavigate}
               </h4>
               <ul className="space-y-3">
@@ -87,7 +87,7 @@ export default function Footer() {
 
             <motion.div variants={itemVariants} className="md:col-span-3 space-y-5">
               <div>
-                <h4 className="text-caption font-semibold tracking-label uppercase mb-4 text-white/40">
+                <h4 className="text-caption font-semibold tracking-label uppercase mb-4 text-public-muted">
                   {copy.footerFindUs}
                 </h4>
                 <div className="space-y-3 text-xs text-white/80">
@@ -109,7 +109,7 @@ export default function Footer() {
               </div>
 
               <div>
-                <h4 className="text-caption font-semibold tracking-label uppercase mb-3 text-white/40">
+                <h4 className="text-caption font-semibold tracking-label uppercase mb-3 text-public-muted">
                   {copy.footerConnect}
                 </h4>
                 {content.publicEmail && <a href={`mailto:${content.publicEmail}`} className="mb-3 block break-all text-xs text-white/80 hover:underline">{content.publicEmail}</a>}
@@ -154,7 +154,7 @@ export default function Footer() {
             </motion.div>
 
             <motion.div variants={itemVariants} className="md:col-span-3 space-y-4">
-              <h4 className="text-caption font-semibold tracking-label uppercase text-white/40">
+              <h4 className="text-caption font-semibold tracking-label uppercase text-public-muted">
                 {copy.footerDirections}
               </h4>
               <div className="w-full h-[120px] border border-white/10 overflow-hidden">

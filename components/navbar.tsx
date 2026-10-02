@@ -208,7 +208,7 @@ export default function Navbar() {
 
   const bookButtonClass = cn(
     'inline-flex shrink-0 items-center justify-center rounded-none text-caption sm:text-xs md:text-sm font-semibold tracking-[0.14em] sm:tracking-label uppercase h-9 sm:h-10 md:h-12 px-3 sm:px-6 md:px-8 transition-all duration-300',
-    'hidden md:inline-flex',
+    'hidden lg:inline-flex',
     isScrolled
       ? 'bg-white text-black hover:bg-white/90'
       : 'bg-white text-black hover:bg-white/90',
@@ -227,7 +227,7 @@ export default function Navbar() {
       )}
       style={{ fontFamily: 'var(--font-sans)' }}
     >
-      <div className="max-w-7xl mx-auto flex items-center justify-between md:grid md:grid-cols-[1fr_auto_1fr] md:gap-4">
+      <div className="max-w-7xl mx-auto flex items-center justify-between lg:grid lg:grid-cols-[1fr_auto_1fr] lg:gap-4">
         <Link
           href="/"
           onClick={goHome}
@@ -247,7 +247,7 @@ export default function Navbar() {
           />
         </Link>
 
-        <div className="hidden md:flex items-center justify-center gap-6 lg:gap-8">
+        <div className="hidden lg:flex items-center justify-center gap-8">
           {navItems.map((item) =>
             isDropdown(item) ? (
               <NavDropdownMenu
@@ -274,7 +274,7 @@ export default function Navbar() {
                   variant="outline"
                   size="icon-sm"
                   className={cn(
-                    'md:hidden rounded-none border transition-all duration-300',
+                    'lg:hidden min-h-11 min-w-11 rounded-none border transition-all duration-300',
                     open && 'hidden',
                     isScrolled
                       ? 'border-white/25 bg-white/[0.06] text-white hover:bg-white/12 hover:border-white/40'

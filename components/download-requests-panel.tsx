@@ -13,13 +13,19 @@ function requestedLabel(value: string) {
   })
 }
 
-export default function DownloadRequestsPanel({ onCountChange }: { onCountChange?: (count: number) => void }) {
+export default function DownloadRequestsPanel({ bookingId = '', onCountChange }: {
+  bookingId?: string
+  onCountChange?: (count: number) => void
+}) {
   const toast = useAdminToast()
   const [requests, setRequests] = useState<PortalRawDownloadRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [grantingId, setGrantingId] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const readSequence = useRef(0)
+  const scopedBooking = /^FM-(?:\d{6}|W[A-Z0-9-]{1,40})$/i.test(bookingId) && !showAll ? bookingId : ''
+  const visibleRequests = scopedBooking ? requests.filter(request => request.bookingId === scopedBooking) : requests
 
   const load = useCallback(async (silent = false) => {
     const sequence = ++readSequence.current
@@ -86,13 +92,17 @@ export default function DownloadRequestsPanel({ onCountChange }: { onCountChange
   return (
     <section className={`${adminPanel} overflow-hidden`} aria-labelledby="download-requests-title">
       <header className="flex flex-col gap-3 border-b border-white/[0.08] p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <h2 id="download-requests-title" className="text-base font-semibold text-white">Download requests</h2>
           <p className="mt-1 text-caption leading-relaxed text-white/45">Read the client&apos;s reason before granting one additional originals download.</p>
+          {scopedBooking ? <p className="mt-2 text-sm text-[#C4CEFF]">Requests for {scopedBooking}</p> : null}
         </div>
-        <button type="button" onClick={() => void load()} className={`inline-flex items-center justify-center gap-2 px-3 py-2 ${adminBtnGhost}`} disabled={loading}>
-          <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {scopedBooking ? <button type="button" onClick={() => setShowAll(true)} className={`${adminBtnGhost} min-h-11 px-3 py-2`}>Show all download requests</button> : null}
+          <button type="button" onClick={() => void load()} className={`inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 ${adminBtnGhost}`} disabled={loading}>
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
       </header>
 
       {loadError ? (
@@ -106,24 +116,24 @@ export default function DownloadRequestsPanel({ onCountChange }: { onCountChange
       ) : null}
       {loading ? (
         <div className="flex min-h-56 items-center justify-center"><div className={adminSpinner} /></div>
-      ) : requests.length === 0 && !loadError ? (
+      ) : visibleRequests.length === 0 && !loadError ? (
         <div className={`${adminEmptyState} m-5 min-h-56`}>
           <Download className="size-7 text-white/25" />
-          <p className="text-sm font-medium text-white/70">No download requests</p>
+          <p className="text-sm font-medium text-white/70">{scopedBooking ? `No pending download request for ${scopedBooking}` : 'No download requests'}</p>
           <p className="max-w-sm text-center text-caption leading-relaxed text-white/60">Clients appear here after requesting another originals download.</p>
         </div>
       ) : (
         <div className="divide-y divide-white/[0.07]">
-          {requests.map((request) => (
+          {visibleRequests.map((request) => (
             <article key={request.id} className="grid gap-4 p-5 lg:grid-cols-[minmax(220px,0.8fr)_minmax(280px,1.5fr)_auto] lg:items-center">
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold text-white">{request.customerName}</h3>
                 <p className="mt-1 font-mono text-caption text-[#C4CEFF]">{request.bookingId}</p>
                 <p className="mt-1 text-caption text-white/40">{[request.packageName, request.shootDate].filter(Boolean).join(' · ')}</p>
               </div>
-              <div className="rounded-control border border-white/[0.08] bg-black/15 p-3.5">
+              <div className="min-w-0 rounded-control border border-white/[0.08] bg-black/15 p-3.5">
                 <p className="text-caption font-semibold uppercase tracking-wider text-white/35">Client reason</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-white/75">{request.reason}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/75">{request.reason}</p>
                 <p className="mt-3 flex items-center gap-1.5 text-caption text-white/35"><Clock3 className="size-3" />{requestedLabel(request.requestedAt)}</p>
               </div>
               <button

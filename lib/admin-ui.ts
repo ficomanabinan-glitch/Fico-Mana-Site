@@ -7,15 +7,15 @@ export const adminSubtitle = 'text-small text-white/65 mt-2 max-w-2xl leading-re
 export const adminCard =
   'rounded-card border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]'
 export const adminPanel =
-  'rounded-card border border-white/10 bg-[#222222] shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
+  'rounded-card border border-white/10 bg-staff-surface shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
 export const adminInput =
-  'w-full min-w-0 min-h-11 rounded-control bg-white/[0.06] border border-white/20 text-white placeholder:text-white/60 px-3 py-2 text-body sm:text-small focus:border-[#C4CEFF]/60 focus:outline-none focus:ring-2 focus:ring-[#C4CEFF]/40 transition-colors'
+  'w-full min-w-0 min-h-11 rounded-control bg-white/[0.06] border border-white/20 text-white placeholder:text-white/60 px-3 py-2 text-body sm:text-small focus:border-staff-highlight/60 focus:outline-none focus:ring-2 focus:ring-staff-highlight/40 transition-colors'
 export const adminSelect =
-  'admin-select w-full min-w-0 min-h-11 rounded-control bg-[#222222] border border-white/10 text-white px-3 py-2 text-body sm:text-small font-medium focus:border-[#C4CEFF]/60 focus:outline-none focus:ring-2 focus:ring-[#C4CEFF]/40 [color-scheme:dark] transition-colors'
-export const adminLabel = 'text-caption font-semibold tracking-label text-[#C4CEFF] uppercase'
+  'admin-select w-full min-w-0 min-h-11 rounded-control bg-staff-surface border border-white/10 text-white px-3 py-2 text-body sm:text-small font-medium focus:border-staff-highlight/60 focus:outline-none focus:ring-2 focus:ring-staff-highlight/40 [color-scheme:dark] transition-colors'
+export const adminLabel = 'text-caption font-semibold tracking-label text-staff-highlight uppercase'
 export const adminSectionLabel = 'text-caption font-semibold tracking-label text-white/55 uppercase'
 export const adminBtnPrimary =
-  'min-h-11 cursor-pointer rounded-control bg-primary text-[#11131b] text-small font-semibold hover:bg-[#aebaff] active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none'
+  'min-h-11 cursor-pointer rounded-control bg-primary text-staff-primary-foreground text-small font-semibold hover:bg-staff-primary-hover active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none'
 export const adminBtnGhost =
   'min-h-11 cursor-pointer rounded-control border border-white/10 text-white/70 hover:border-white/25 hover:bg-white/[0.04] hover:text-white text-caption font-semibold uppercase tracking-label transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none'
 export const adminTableWrap = `${adminPanel} fico-table overflow-x-auto`
@@ -27,9 +27,9 @@ export const adminSpinner =
   'relative h-[360px] w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] animate-pulse before:absolute before:left-4 before:top-5 before:h-6 before:w-48 before:rounded-md before:bg-white/10 after:absolute after:inset-x-4 after:top-16 after:bottom-4 after:rounded-lg after:bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.07)_0px,rgba(255,255,255,0.07)_38px,transparent_38px,transparent_54px)]'
 export const adminOverlay = 'fixed inset-0 bg-black/75 backdrop-blur-md flex z-50 animate-in fade-in duration-200'
 export const adminDrawer =
-  'bg-[#222222] border-l border-white/10 w-full max-w-lg h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300'
+  'bg-staff-surface border-l border-white/10 w-full max-w-lg h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300'
 export const adminModal =
-  'rounded-xl bg-[#222222] border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
+  'rounded-xl bg-staff-surface border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200'
 
 export const adminActionSuccess = 'ring-2 ring-green-500/50 scale-[1.02] transition-all duration-300'
 export const adminCardHover =

@@ -7,7 +7,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve))
 test('completed onsite upload sends portal email; Retry resends only email and partial uploads do not send', async t => {
   const savedFetch = globalThis.fetch
   t.after(() => { globalThis.fetch = savedFetch })
-  const dataset = { batch: { jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, storageReady: true, portalUrl: 'https://ficomana.com/portal/test?sig=private' }] } }
+  const dataset = { shootDate: '2026-09-08', batch: { id: 'synthetic-onsite-batch', jobs: [{ bookingId: 'ONE', customerName: 'Test Client', packageName: 'MANA', bookingTime: '1 PM', galleryCount: 1, storageReady: true, portalUrl: 'https://ficomana.com/portal/test?sig=private' }] } }
   let uploadCalls = 0, emailCalls = 0, emailFails = true, partial = false
   globalThis.fetch = async url => {
     if (String(url).endsWith('/portal-email')) {
@@ -74,7 +74,7 @@ test('actual onsite handlers keep Upload first, combine Sync, require delete con
   const calls:Array<{url:string;body?:any}>=[],messages:string[]=[]
   let synced=0,release:(value:Response)=>void=()=>{}
   const job={bookingId:'ONE',customerName:'Synthetic Client',packageName:'MANA',bookingTime:'1 PM',galleryCount:2,storageReady:true}
-  const dataset={batch:{jobs:[job]},shootDate:'2026-09-08'}
+  const dataset={batch:{id:'synthetic-onsite-batch',jobs:[job]},shootDate:'2026-09-08'}
   globalThis.fetch=async(url,options)=>{
     const body=options?.body?JSON.parse(String(options.body)):undefined
     calls.push({url:String(url),body})

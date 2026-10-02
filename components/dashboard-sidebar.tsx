@@ -121,7 +121,7 @@ export function DashboardSidebarProfile({
         <button
           type="button"
           onClick={() => void onLogout()}
-          className="inline-flex size-11 items-center justify-center rounded-lg text-white/65 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-white/65 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C4CEFF]/70"
           title="Logout"
           aria-label="Sign out"
         >
