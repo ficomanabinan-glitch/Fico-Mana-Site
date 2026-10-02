@@ -1665,3 +1665,24 @@
     transition: none;
   }
 }
+
+/* Individual downloads belong to the photo, not its metadata row. */
+.photoDownload { display:block; min-width:0; }
+.photoDownloadButton {
+  position:absolute; top:8px; left:8px; z-index:5;
+  display:flex; align-items:center; justify-content:center;
+  width:44px; height:44px; padding:0;
+  border:1px solid var(--portal-border-strong);
+  border-radius:var(--portal-radius-control);
+  background:var(--portal-surface, #1f1f21); color:#fff; cursor:pointer;
+  transition:background-color 160ms ease-out, border-color 160ms ease-out;
+}
+.photoDownloadButton:hover:not(:disabled) { background:var(--portal-surface-raised, #242427); border-color:var(--portal-muted, #aaaab1); }
+.photoDownloadButton:focus-visible { outline:2px solid var(--portal-focus, #c4ceff); outline-offset:2px; }
+.photoDownloadButton:disabled { cursor:wait; }
+.photoDownloadError { display:block; margin-top:8px; padding-inline:2px; max-width:100%; overflow-wrap:anywhere; color:#fecaca; font-size:12px; line-height:1.5; }
+.downloadableThumb .thumbMeta { display:flex; flex-wrap:wrap; gap:4px 8px; }
+.downloadableThumb .thumbMeta .filename { flex:1 1 100%; }
+@media (min-width:901px) and (max-width:1260px) {
+  .downloadableGallery { grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); }
+}

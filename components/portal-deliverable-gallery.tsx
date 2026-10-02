@@ -16,8 +16,11 @@ export default function PortalDeliverableGallery({ files, publicId, kind }: { fi
   }, [files, activeId])
   if (!active) return null
   return <div className={styles.deliveredGallery}>
-    <button type="button" className={styles.deliveredHero} aria-label={`Preview ${active.fileName}`} onClick={() => { setActiveId(active.id); setPreviewOpen(true) }}><PortalPrivateImage src={active.previewUrl} alt={active.fileName} fit="contain" eager /></button>
-    <div className="flex flex-wrap items-center justify-between gap-3"><p className={`${styles.metadata} min-w-0 break-all`}>{active.fileName} · {files.indexOf(active) + 1} of {files.length}</p><PortalSinglePhotoDownload publicId={publicId} fileId={active.id} kind={kind} fileName={active.fileName} compact /></div>
+    <div className="relative">
+      <button type="button" className={styles.deliveredHero} aria-label={`Preview ${active.fileName}`} onClick={() => { setActiveId(active.id); setPreviewOpen(true) }}><PortalPrivateImage src={active.previewUrl} alt={active.fileName} fit="contain" eager /></button>
+      <PortalSinglePhotoDownload key={active.id} publicId={publicId} fileId={active.id} kind={kind} fileName={active.fileName} overlay />
+    </div>
+    <p className={`${styles.metadata} min-w-0 break-all`}>{active.fileName} · {files.indexOf(active) + 1} of {files.length}</p>
     <div className={styles.filmstrip} aria-label="Published enhanced photos">{files.map(file => <button type="button" key={file.id} aria-label={`View ${file.fileName}`} aria-pressed={active.id === file.id} onClick={() => setActiveId(file.id)}><PortalPrivateImage src={file.previewUrl} alt={file.fileName} /></button>)}</div>
     {previewOpen && files.some(file => file.id === activeId) ? <PortalPhotoPreview key={active.id} file={active} files={files} onFileChange={file => setActiveId(file.id)} onClose={() => setPreviewOpen(false)} /> : null}
   </div>

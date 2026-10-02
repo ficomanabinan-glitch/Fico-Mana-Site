@@ -15,7 +15,7 @@ const ContactPhoto = memo(function ContactPhoto({ file, included, extra, focused
   publicId: string; canDownloadIndividual: boolean
   onFocus: (id: string) => void; onToggle: (id: string) => void; onPreview: (file: ClientGalleryFile) => void
 }) {
-  return <article className={styles.thumb}>
+  return <article className={`${styles.thumb} ${canDownloadIndividual ? styles.downloadableThumb : ''}`}>
     <div className="relative">
       <PhotoSelectButton file={file} locked={locked} className={styles.photo}
         selected={included || extra} focused={focused} extra={extra} desktopBreakpoint="(min-width: 901px)"
@@ -24,9 +24,9 @@ const ContactPhoto = memo(function ContactPhoto({ file, included, extra, focused
         {included || extra ? <span className={`${styles.selectedMark} ${extra ? styles.extraMark : ''}`} aria-hidden="true">{selectionOrder}</span> : null}
       </PhotoSelectButton>
       <button type="button" className={styles.zoom} aria-label={`Zoom ${file.fileName}`} onClick={() => onPreview(file)}><ZoomIn size={17} strokeWidth={1.5} /></button>
+      {canDownloadIndividual ? <PortalSinglePhotoDownload publicId={publicId} fileId={file.id} kind="original" fileName={file.fileName} overlay /> : null}
     </div>
     <div className={styles.thumbMeta}><span className={styles.filename}>{file.fileName}</span>{included || extra ? <span className={`${styles.photoStatus} ${extra ? styles.extraStatus : ''}`}>{extra ? `Extra ${money(extraPrice)}` : 'Included'}</span> : null}</div>
-    {canDownloadIndividual ? <div className="mt-2"><PortalSinglePhotoDownload publicId={publicId} fileId={file.id} kind="original" fileName={file.fileName} compact /></div> : null}
   </article>
 })
 
@@ -56,7 +56,7 @@ export default function PortalPhotoContactSheet({ publicId, canDownloadIndividua
         <div className={styles.galleryCount}>{galleryTotal} photos</div>
         <div className={styles.filters}><button type="button" className={styles.chip} aria-pressed={filter === 'all'} onClick={() => onFilter('all')}>All</button><button type="button" className={styles.chip} aria-pressed={filter === 'selected'} onClick={() => onFilter('selected')}>Selected {selectedFiles.length}</button></div>
       </div>
-      {files.length ? <div className={styles.gallery} data-testid="portal-contact-sheet">{files.map(file => <ContactPhoto key={file.id} file={file}
+      {files.length ? <div className={`${styles.gallery} ${canDownloadIndividual ? styles.downloadableGallery : ''}`} data-testid="portal-contact-sheet">{files.map(file => <ContactPhoto key={file.id} file={file}
         included={included.includes(file.id)} extra={extras.includes(file.id)} focused={activeFile?.id === file.id} locked={locked} extraPrice={extraPrice} selectionOrder={selectionOrder.get(file.id)} publicId={publicId} canDownloadIndividual={canDownloadIndividual}
         onFocus={onFocus} onToggle={onToggle} onPreview={onPreview} />)}</div> : <p className={styles.empty}>{filter === 'selected' ? 'Your selected photos will appear here.' : 'Your studio gallery is still being prepared.'}</p>}
       {filter === 'all' && gallery.length < galleryTotal ? <button type="button" className={`${styles.secondary} ${styles.loadMore}`} onClick={onLoadMore} disabled={loadingMore}>{loadingMore ? 'Loading more…' : `Load more photos (${gallery.length} of ${galleryTotal})`}</button> : null}
@@ -64,9 +64,11 @@ export default function PortalPhotoContactSheet({ publicId, canDownloadIndividua
     <aside className={styles.preview} aria-label="Large photo preview">
       <div className={styles.previewTop}><strong>Photo preview</strong><span>{activeFile && selected.has(activeFile.id) ? extras.includes(activeFile.id) ? 'Extra photo' : 'Included photo' : 'Not selected'}</span></div>
       {activeFile ? <>
-        <button type="button" className={styles.previewCanvas} onClick={() => onPreview(activeFile)} aria-label={`Zoom ${activeFile.fileName}`}><PortalPrivateImage key={activeFile.id} src={activeFile.previewUrl} alt={activeFile.fileName} fit="contain" eager /></button>
+        <div className="relative">
+          <button type="button" className={styles.previewCanvas} onClick={() => onPreview(activeFile)} aria-label={`Zoom ${activeFile.fileName}`}><PortalPrivateImage key={activeFile.id} src={activeFile.previewUrl} alt={activeFile.fileName} fit="contain" eager /></button>
+          {canDownloadIndividual ? <PortalSinglePhotoDownload key={activeFile.id} publicId={publicId} fileId={activeFile.id} kind="original" fileName={activeFile.fileName} overlay /> : null}
+        </div>
         <div className={styles.previewFooter}><p className={styles.filename}>{activeFile.fileName}</p><p className={styles.description}>{extras.includes(activeFile.id) ? `Extra enhancement, ${money(extraPrice)}` : included.includes(activeFile.id) ? 'Included in your selection' : 'Use the button below to select this photo.'}</p>
-          {canDownloadIndividual ? <div className="mb-3"><PortalSinglePhotoDownload publicId={publicId} fileId={activeFile.id} kind="original" fileName={activeFile.fileName} /></div> : null}
           <div className={styles.previewActions}>
             <button type="button" className={styles.iconButton} disabled={activeIndex <= 0} aria-label="Previous photo" onClick={() => onFocus(files[activeIndex - 1].id)}><ChevronLeft size={17} strokeWidth={1.5} /></button>
             <button type="button" className={styles.previewChoice} disabled={locked} aria-pressed={selected.has(activeFile.id)} onClick={() => onToggle(activeFile.id)}>{selected.has(activeFile.id) ? <><Check size={15} strokeWidth={1.5} />Deselect photo</> : included.length >= includedLimit ? `Add for ${money(extraPrice)}` : 'Select photo'}</button>
