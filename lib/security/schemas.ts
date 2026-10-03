@@ -237,7 +237,8 @@ export const bookingMutationSchema = z
     rejectionReason: optionalText(1_000),
     rejectionReasonId: optionalText(100),
     createdAt: z.string().trim().min(8).max(40),
-    receiptUrl: z.string().trim().regex(/^\/api\/receipts\/[0-9a-f-]{36}$/i).max(100).optional(),
+    // Staff explicitly clear a forged receipt; nonempty values remain private receipt paths.
+    receiptUrl: z.union([z.literal(''), z.string().trim().regex(/^\/api\/receipts\/[0-9a-f-]{36}$/i).max(100)]).optional(),
     paymentHistory: z.array(paymentRecordSchema).max(100),
     rawPhotoStatus: z.enum(['Pending Review', 'Approved', 'Rejected', 'Reopened']).optional(),
     rawPhotoNotes: optionalText(5_000),

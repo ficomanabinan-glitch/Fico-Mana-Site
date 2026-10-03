@@ -4,6 +4,7 @@ import type { BlockedSlot } from './blocked-slots'
 import type { FicoSpotBlock } from './fico-spot-blocks'
 import { signalSalesDataChanged } from './sales-read-cache'
 import { STAFF_READ_FRESH_MS } from './admin-cache-policy.ts'
+import { toBookingWritePayload } from './booking-write-payload.ts'
 
 export interface PaymentRecord {
   id: string
@@ -642,7 +643,7 @@ export async function saveBooking(booking: Booking): Promise<{ booking: Booking;
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify(booking),
+    body: JSON.stringify(toBookingWritePayload(booking)),
   })
 
   if (!res.ok) {

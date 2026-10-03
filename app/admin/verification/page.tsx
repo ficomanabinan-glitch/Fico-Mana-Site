@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import StaffReadNotice from '@/components/staff-read-notice'
 import StaffModalFrame from '@/components/staff-modal-frame'
 import Link from 'next/link'
@@ -48,6 +48,8 @@ export default function PaymentVerificationQueue() {
   const [rejectionReason, setRejectionReason] = useState<RejectionReasonId>('forged')
   const [customReason, setCustomReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const actionInFlight = useRef(false)
+  const [confirmation, setConfirmation] = useState<{ type: 'approve' | 'forged'; booking: Booking; opener: HTMLButtonElement; error?: string } | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   useEffect(() => { setSearchTerm(new URLSearchParams(window.location.search).get('search')?.trim() || '') }, [])
   const [exiting, setExiting] = useState<{ id: string; type: 'approve' | 'reject' } | null>(null)
@@ -84,8 +86,9 @@ export default function PaymentVerificationQueue() {
   useOnAdminDbSync(() => fetchQueue(true))
 
   const handleApprove = async (booking: Booking) => {
-    if (!window.confirm(`Approve payment for ${booking.id}?`)) return
-
+    if (actionInFlight.current) return
+    actionInFlight.current = true
+    setConfirmation(current => current ? { ...current, error: undefined } : current)
     setActionLoading(true)
     try {
       const history = [...(booking.paymentHistory || [])]
@@ -110,6 +113,7 @@ export default function PaymentVerificationQueue() {
 
       const { emailErrors } = await runAdminTransaction(updatedBooking)
 
+      setConfirmation(null)
       setShowReceiptModal(false)
       setSelectedBooking(null)
       await animateCardExit(booking.id, 'approve')
@@ -128,8 +132,11 @@ export default function PaymentVerificationQueue() {
       fetchQueue(true)
     } catch (err) {
       console.error(err)
-      toast.error('Approval failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
+      const message = err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.'
+      setConfirmation(current => current ? { ...current, error: message } : current)
+      toast.error('Approval failed', message)
     } finally {
+      actionInFlight.current = false
       setActionLoading(false)
     }
   }
@@ -193,13 +200,14 @@ export default function PaymentVerificationQueue() {
 
   const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedBooking) return
+    if (!selectedBooking || actionInFlight.current) return
 
     if (rejectionReason === 'other' && !customReason.trim()) {
       toast.warning('Reason required', 'Enter a rejection reason for the customer.')
       return
     }
 
+    actionInFlight.current = true
     setActionLoading(true)
     try {
       await submitRejection(selectedBooking, rejectionReason, customReason)
@@ -207,26 +215,26 @@ export default function PaymentVerificationQueue() {
       console.error(err)
       toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
     } finally {
+      actionInFlight.current = false
       setActionLoading(false)
     }
   }
 
   const handleRejectForged = async (booking: Booking) => {
-    if (
-      !window.confirm(
-        `Reject ${booking.id} as a forged/fake receipt? The customer will be emailed and must upload a genuine GCash/BPI screenshot.`,
-      )
-    ) {
-      return
-    }
-
+    if (actionInFlight.current) return
+    actionInFlight.current = true
+    setConfirmation(current => current ? { ...current, error: undefined } : current)
     setActionLoading(true)
     try {
       await submitRejection(booking, 'forged')
+      setConfirmation(null)
     } catch (err) {
       console.error(err)
-      toast.error('Rejection failed', err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.')
+      const message = err instanceof Error ? err.message : 'Could not save changes. Try: refresh the page and try again.'
+      setConfirmation(current => current ? { ...current, error: message } : current)
+      toast.error('Rejection failed', message)
     } finally {
+      actionInFlight.current = false
       setActionLoading(false)
     }
   }
@@ -345,7 +353,7 @@ export default function PaymentVerificationQueue() {
                       {isLikelyInvalidReceipt(display.receiptUrl) && (
                         <button
                           type="button"
-                          onClick={() => handleRejectForged(display)}
+                          onClick={event => setConfirmation({ type: 'forged', booking: display, opener: event.currentTarget })}
                           disabled={actionLoading}
                           className="btn-reject-fx w-full rounded-control bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1 disabled:opacity-50"
                         >
@@ -354,7 +362,7 @@ export default function PaymentVerificationQueue() {
                       )}
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleApprove(display)}
+                          onClick={event => setConfirmation({ type: 'approve', booking: display, opener: event.currentTarget })}
                           disabled={actionLoading}
                           className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-caption font-semibold uppercase tracking-wider py-2 flex items-center justify-center gap-1"
                         >
@@ -498,7 +506,7 @@ export default function PaymentVerificationQueue() {
                 {isLikelyInvalidReceipt(receiptModalBooking.receiptUrl) && (
                   <button
                     type="button"
-                    onClick={() => handleRejectForged(selectedBooking)}
+                    onClick={event => setConfirmation({ type: 'forged', booking: selectedBooking, opener: event.currentTarget })}
                     disabled={actionLoading}
                     className="btn-reject-fx w-full rounded-control bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-200 text-xs font-bold uppercase tracking-wider py-3 flex items-center justify-center gap-1"
                   >
@@ -507,7 +515,7 @@ export default function PaymentVerificationQueue() {
                 )}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleApprove(selectedBooking)}
+                    onClick={event => setConfirmation({ type: 'approve', booking: selectedBooking, opener: event.currentTarget })}
                     disabled={actionLoading}
                     className="btn-approve-fx flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider py-3 flex items-center justify-center gap-1"
                   >
@@ -553,7 +561,7 @@ export default function PaymentVerificationQueue() {
       )}
 
       {showRejectModal && selectedBooking && (
-        <StaffModalFrame labelledBy="verification-rejection-title" onClose={() => setShowRejectModal(false)} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 z-[60] animate-in fade-in duration-200">
+        <StaffModalFrame labelledBy="verification-rejection-title" onClose={() => { if (!actionInFlight.current) setShowRejectModal(false) }} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center overflow-y-auto p-4 z-[60] animate-in fade-in duration-200">
           <form
             onSubmit={handleRejectSubmit}
             className="relative rounded-card border border-white/10 bg-[#222222] shadow-2xl max-w-md w-full p-6 md:p-8 space-y-5"
@@ -566,6 +574,7 @@ export default function PaymentVerificationQueue() {
               <button
                 type="button"
                 aria-label="Close payment rejection"
+                disabled={actionLoading}
                 onClick={() => setShowRejectModal(false)}
                 className="p-1 hover:bg-white/[0.05] rounded text-white/40"
               >
@@ -626,6 +635,7 @@ export default function PaymentVerificationQueue() {
               <button
                 type="button"
                 onClick={() => setShowRejectModal(false)}
+                disabled={actionLoading}
                 className="flex-1 rounded-control border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider py-3 hover:bg-white/[0.03]"
               >
                 Cancel
@@ -645,6 +655,34 @@ export default function PaymentVerificationQueue() {
               </button>
             </div>
           </form>
+        </StaffModalFrame>
+      )}
+
+      {confirmation && (
+        <StaffModalFrame labelledBy="verification-confirm-title" describedBy="verification-confirm-description" returnFocusTo={confirmation.opener}
+          onClose={() => { if (!actionInFlight.current) setConfirmation(null) }}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-card border border-white/10 bg-[#222222] p-6 shadow-2xl sm:p-8" aria-busy={actionLoading}>
+            <h2 id="verification-confirm-title" className="text-xl font-bold text-white">
+              {confirmation.type === 'approve' ? 'Approve payment?' : 'Reject forged receipt?'}
+            </h2>
+            <p className="mt-3 break-words text-base font-semibold text-white">{confirmation.booking.customerName}</p>
+            <p className="mt-1 text-sm text-white/70">{confirmation.booking.id} · Deposit ₱{confirmation.booking.depositAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+            <p id="verification-confirm-description" className="mt-4 text-base leading-relaxed text-white/80">
+              {confirmation.type === 'approve'
+                ? 'Confirm that you have verified this payment. The booking will be confirmed and the client will receive a confirmation email.'
+                : 'The booking will return to Pending Payment. The receipt and payment reference will be cleared, and the client will be asked to upload genuine payment proof.'}
+            </p>
+            {confirmation.error && <p role="alert" className="mt-4 break-words rounded-control border border-red-400/30 bg-red-950/50 p-3 text-sm leading-relaxed text-red-200">{confirmation.error}</p>}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+              <button type="button" autoFocus disabled={actionLoading} onClick={() => setConfirmation(null)}
+                className="min-h-11 flex-1 rounded-control border border-white/20 px-4 py-3 font-semibold text-white hover:bg-white/5 disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={actionLoading} onClick={() => void (confirmation.type === 'approve' ? handleApprove(confirmation.booking) : handleRejectForged(confirmation.booking))}
+                className={`min-h-11 flex-1 rounded-control px-4 py-3 font-semibold text-white disabled:opacity-50 ${confirmation.type === 'approve' ? 'bg-green-700 hover:bg-green-800' : 'bg-red-700 hover:bg-red-800'}`}>
+                {actionLoading ? (confirmation.type === 'approve' ? 'Approving…' : 'Rejecting…') : (confirmation.type === 'approve' ? 'Approve Payment' : 'Reject Receipt')}
+              </button>
+            </div>
+          </div>
         </StaffModalFrame>
       )}
     </div>
