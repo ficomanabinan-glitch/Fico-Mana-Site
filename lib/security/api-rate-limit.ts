@@ -30,7 +30,9 @@ export const API_RATE_LIMITS = {
   // atomically in the database so interrupted transfers do not consume access.
   portalRawDownload: { name: 'portal-raw-download', limit: 10, windowSeconds: 60 * 60, failClosed: true },
   portalRawDownloadRequest: { name: 'portal-raw-download-request', limit: 3, windowSeconds: 24 * 60 * 60, failClosed: true },
-  editorUpload: { name: 'editor-upload', limit: 1_000, windowSeconds: 60 * 60, failClosed: true },
+  // A RAW photo uses two metadata requests: upload-session and complete-file.
+  // Budget for 10,000 photos/hour, not just 10,000 individual API requests.
+  editorUpload: { name: 'editor-upload', limit: 10_000 * 2, windowSeconds: 60 * 60, failClosed: true },
   websiteMediaUpload: { name: 'website-media-upload', limit: 60, windowSeconds: 60 * 60, failClosed: true },
   storageOperation: { name: 'storage-operation', limit: 120, windowSeconds: 15 * 60, failClosed: true },
   adminMutation: { name: 'admin-mutation', limit: 180, windowSeconds: 5 * 60, failClosed: true },
