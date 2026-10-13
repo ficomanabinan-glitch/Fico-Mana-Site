@@ -6,7 +6,7 @@ test('downloaded batches remain eligible for repeat download', async () => {
   const workflow = await readFile('lib/editor-workflow.ts', 'utf8')
   assert.match(
     workflow,
-    /\.in\('status', \['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'\]\)/,
+    /\['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'\]\.includes\(String\(job.status\)\)/,
   )
   assert.match(workflow, /No downloadable selected clients are available in this batch/)
   assert.match(workflow, /status: 'DOWNLOADED'/)

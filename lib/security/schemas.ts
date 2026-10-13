@@ -91,10 +91,21 @@ export const editorBatchUploadStartSchema = z
   .object({
     clients: z.array(z.object({
       bookingId: bookingReferenceSchema,
+      clientId: z.string().min(1).max(200).optional(),
       expectedFiles: z.number().int().min(1).max(1_000),
     }).strict()).min(1).max(500),
+    workspaceId: z.string().min(1).max(200).optional(),
   })
   .strict()
+
+export const editorBatchPreflightSchema = z.object({
+  clients: z.array(z.object({
+    bookingId: z.string().max(200),
+    clientId: z.string().max(200).optional(),
+    expectedFiles: z.number().int().min(0).max(1_000),
+  }).strict()).min(1).max(500),
+  workspaceId: z.string().min(1).max(200).optional(),
+}).strict()
 
 export const editorUploadSessionSchema = z
   .object({

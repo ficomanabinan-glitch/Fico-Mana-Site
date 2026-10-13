@@ -154,7 +154,8 @@ test('all resource creation paths are guarded while ordinary payment confirmatio
   const repair = editor.slice(editor.indexOf('export async function reconcileBookingStorage'), editor.indexOf('export async function saveRawFile'))
   assert.ok(repair.indexOf('assertOnsiteBooking') < repair.indexOf('if (repair)'))
   assert.match(editor, /\.in\('package_id', eligiblePackageIds\)/)
-  assert.match(editor, /bookingMap.has\(String\(job.booking_id\)\)/)
+  // Membership is persistent; visibility/package rules must not discard historical jobs.
+  assert.match(editor, /loadEditorMembership\(admin, workspaceId\)/)
   assert.match(overview, /onsitePackageIds\(admin\)/)
   assert.match(overview, /\.in\('package_id', eligiblePackageIds/)
   assert.ok(email.indexOf('packageUsesOnsiteWorkflow(admin') < email.indexOf('await sendEmail('))

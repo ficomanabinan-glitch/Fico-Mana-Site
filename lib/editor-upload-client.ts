@@ -7,7 +7,7 @@ export type PickedUploadFile = {
 
 export type UploadManifestClient = {
   booking_id: string
-  client_id: string
+  client_id?: string
   folder_name: string
   customer_name: string
   expected_output_count: number
@@ -18,6 +18,7 @@ export type BatchUploadManifest = {
   batch_id: string
   shoot_date: string
   clients: UploadManifestClient[]
+  workspace_id?: string
 }
 
 export type DetectedBatchFolder = {
@@ -86,7 +87,36 @@ type UploadWork = {
   edited: Array<{ file: File; relativePath: string }>
 }
 
-const EDITABLE_STATUSES = new Set(['DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'])
+export type PreflightClient = {
+  bookingId: string
+  customerName: string
+  status: 'READY' | 'DELIVERED' | 'UPLOADING' | 'ATTENTION' | 'MISSING' | 'OTHER_BATCH' | 'INVALID'
+  reason: string
+  expectedFiles: number
+  manifestIndex: number
+  workflowStatus?: string
+}
+export type BatchPreflight = {
+  clients: PreflightClient[]
+  readyClients: number
+  totalClients: number
+  attentionClients: number
+}
+
+function safePath(value: string) {
+  return Boolean(value) && !/^[\\/]|^[a-z]:/i.test(value) && !value.replace(/\\/g, '/').split('/').some((part) => !part || part === '.' || part === '..' || /[\u0000-\u001f]/.test(part))
+}
+
+function clientIssue(batch: DetectedBatchFolder, client: UploadManifestClient) {
+  if (!client || typeof client.booking_id !== 'string' || !client.booking_id.trim()) return 'The manifest is missing a booking ID. Download this batch again.'
+  if (client.client_id !== undefined && (typeof client.client_id !== 'string' || !client.client_id.trim())) return 'The manifest has an invalid client ID. Download this batch again.'
+  if (typeof client.customer_name !== 'string' || !client.customer_name.trim()) return 'The manifest is missing the client name. Download this batch again.'
+  if (!Number.isSafeInteger(client.expected_output_count) || client.expected_output_count < 0) return 'The manifest has an invalid expected photo count. Download this batch again.'
+  if (typeof client.folder_name !== 'string' || !safePath(client.folder_name) || /[\\/:*?"<>|]/.test(client.folder_name) || /[. ]$/.test(client.folder_name)) return 'The client folder name is invalid. Download this batch again.'
+  const duplicates = batch.manifest.clients.filter((other) => other && (other.booking_id === client.booking_id || (client.client_id && other.client_id === client.client_id) || (typeof other.folder_name === 'string' && other.folder_name.toLowerCase() === client.folder_name.toLowerCase())))
+  if (duplicates.length > 1) return 'This client has a duplicate booking, client ID, or folder in the manifest. Download this batch again.'
+  return ''
+}
 
 function normalizePath(value: string) {
   return value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
@@ -151,15 +181,11 @@ function isBatchManifest(value: unknown): value is BatchUploadManifest {
   if (!value || typeof value !== 'object') return false
   const manifest = value as Partial<BatchUploadManifest>
   return (
-    typeof manifest.batch_id === 'string' &&
-    typeof manifest.shoot_date === 'string' &&
-    Array.isArray(manifest.clients) &&
-    manifest.clients.every(
-      (client) =>
-        client &&
-        typeof client.booking_id === 'string' &&
-        typeof client.folder_name === 'string',
-    )
+    manifest.schema_version === 1 &&
+    typeof manifest.batch_id === 'string' && Boolean(manifest.batch_id.trim()) &&
+    typeof manifest.shoot_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(manifest.shoot_date) &&
+    (manifest.workspace_id === undefined || (typeof manifest.workspace_id === 'string' && Boolean(manifest.workspace_id.trim()))) &&
+    Array.isArray(manifest.clients) && manifest.clients.length > 0
   )
 }
 
@@ -173,7 +199,11 @@ export async function detectBatchFolders(files: PickedUploadFile[]) {
     } catch {
       continue
     }
-    if (!isBatchManifest(parsed)) continue
+    if (!isBatchManifest(parsed)) {
+      if (parsed && typeof parsed === 'object' && 'batch_id' in parsed) throw new Error('The batch manifest is invalid or uses an unsupported version. Download this batch again.')
+      continue
+    }
+    if (!safePath(candidate.relativePath)) throw new Error('The batch folder contains an unsafe path. Select a freshly extracted batch folder.')
     const rootPath = parentPath(candidate.relativePath)
     const scopedFiles = files.filter((item) => {
       const path = normalizePath(item.relativePath)
@@ -182,7 +212,7 @@ export async function detectBatchFolders(files: PickedUploadFile[]) {
     const previous = detected.findIndex((item) => item.manifest.batch_id === parsed.batch_id)
     const next = { manifest: parsed, manifestPath: candidate.relativePath, rootPath, files: scopedFiles }
     if (previous < 0) detected.push(next)
-    else if (scopedFiles.length > detected[previous].files.length) detected[previous] = next
+    else throw new Error(`More than one folder identifies batch ${parsed.batch_id}. Choose one batch folder at a time.`)
   }
   return detected.sort((a, b) => a.manifest.shoot_date.localeCompare(b.manifest.shoot_date))
 }
@@ -190,19 +220,21 @@ export async function detectBatchFolders(files: PickedUploadFile[]) {
 export function createUploadWork(batch: DetectedBatchFolder, allowedBookingIds: Set<string>) {
   const work: UploadWork[] = []
   for (const client of batch.manifest.clients) {
+    if (clientIssue(batch, client)) continue
     if (!allowedBookingIds.has(String(client.booking_id))) continue
     const edited = batch.files
       .map((item) => {
-        const parts = normalizePath(item.relativePath).split('/')
-        const clientIndex = parts.findIndex(
-          (part) => part.toLowerCase() === client.folder_name.toLowerCase(),
-        )
-        if (clientIndex < 0) return null
-        const afterClient = parts.slice(clientIndex + 1)
+        if (!safePath(item.relativePath)) return null
+        const path = normalizePath(item.relativePath)
+        const prefix = batch.rootPath ? `${batch.rootPath}/` : ''
+        if (prefix && !path.startsWith(prefix)) return null
+        const parts = path.slice(prefix.length).split('/')
+        if (parts[0]?.toLowerCase() !== client.folder_name.toLowerCase()) return null
+        const afterClient = parts.slice(1)
         const firstFolder = afterClient.shift()?.toUpperCase()
         const editedFolder = firstFolder === 'SELECTED' ? afterClient.shift()?.toUpperCase() : firstFolder
         if (!['EDITED', 'EDITED PHOTOS', 'ENHANCED'].includes(editedFolder || '')) return null
-        if (!afterClient.length || ['manifest.json', '.fico-client.json'].includes(item.file.name)) return null
+        if (!afterClient.length || ['manifest.json', '.fico-client.json'].includes(item.file.name.toLowerCase())) return null
         const originalName = item.file.name
         const uploadName = /^ENHANCED - /i.test(originalName) ? originalName : `ENHANCED - ${originalName}`
         const file = uploadName === originalName
@@ -223,37 +255,54 @@ async function sha256(file: File) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+export async function preflightDetectedBatch(batch: DetectedBatchFolder): Promise<BatchPreflight> {
+  const work = createUploadWork(batch, new Set(batch.manifest.clients.map((client) => client?.booking_id)))
+  const response = await fetch(`/api/editor-workflow/batches/${encodeURIComponent(batch.manifest.batch_id)}/preflight`, {
+    method: 'POST', cache: 'no-store', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspaceId: batch.manifest.workspace_id,
+      clients: batch.manifest.clients.map((client) => ({ bookingId: typeof client?.booking_id === 'string' ? client.booking_id : '', clientId: typeof client?.client_id === 'string' ? client.client_id : undefined, expectedFiles: work.find((item) => item.client === client)?.edited.length || 0 })),
+    }),
+  })
+  const body = await responseJson(response)
+  if (!response.ok) throw new Error(String(body.error || 'Could not verify this batch. Retry the folder check.'))
+  if (!Array.isArray(body.clients) || body.clients.length !== batch.manifest.clients.length) throw new Error('The folder check did not return every client. Retry the folder check.')
+  const statuses = new Set(['READY', 'DELIVERED', 'UPLOADING', 'ATTENTION', 'MISSING', 'OTHER_BATCH', 'INVALID'])
+  const clients = batch.manifest.clients.map((client, manifestIndex): PreflightClient => {
+    const server = (body.clients as Record<string, unknown>[])[manifestIndex]
+    if (!server || server.bookingId !== (typeof client?.booking_id === 'string' ? client.booking_id : '') || !statuses.has(String(server.status)) || typeof server.reason !== 'string') throw new Error('The folder check returned an invalid client result. Retry the folder check.')
+    const edited = work.find((item) => item.client === client)?.edited || []
+    let reason = clientIssue(batch, client)
+    const duplicateFiles = new Set(edited.map((item) => item.relativePath.toLowerCase())).size !== edited.length
+    if (!reason && duplicateFiles) reason = 'Several edited files resolve to the same upload name. Keep one file for each photo and check the folder again.'
+    const clientPrefix = `${batch.rootPath ? `${batch.rootPath}/` : ''}${client?.folder_name}/`.toLowerCase()
+    if (!reason && batch.files.some((item) => !safePath(item.relativePath) && normalizePath(item.relativePath).toLowerCase().startsWith(clientPrefix))) reason = 'This client folder contains an unsafe file path. Choose a freshly extracted folder.'
+    if (!reason && server.status === 'READY' && !edited.length) reason = 'No edited photos found. Save this client’s photos inside SELECTED/EDITED, then check the folder again.'
+    return { bookingId: typeof client?.booking_id === 'string' ? client.booking_id : '', customerName: String(server.customerName || (typeof client?.customer_name === 'string' ? client.customer_name : 'Unnamed client')), status: reason ? 'ATTENTION' : server.status as PreflightClient['status'], reason: reason || server.reason, expectedFiles: edited.length, manifestIndex, workflowStatus: typeof server.workflowStatus === 'string' ? server.workflowStatus : '' }
+  })
+  return { clients, readyClients: clients.filter((client) => client.status === 'READY').length, totalClients: clients.length, attentionClients: clients.filter((client) => client.status !== 'READY' && client.status !== 'DELIVERED').length }
+}
+
 export async function uploadDetectedBatch(
   batch: DetectedBatchFolder,
   options: {
-    failedOnly?: boolean
+    confirmedBookingIds: string[]
+    onPreflight?: (preflight: BatchPreflight) => void
     onProgress: (progress: UploadProgress) => void
     onResult?: (result: UploadResult) => void
   },
 ) {
   const batchId = batch.manifest.batch_id
-  const detailResponse = await fetch(`/api/editor-workflow/batches/${encodeURIComponent(batchId)}`, {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  const detail = (await responseJson(detailResponse)) as {
-    error?: string
-    jobs?: Array<{ bookingId: string; status: string }>
-  }
-  if (!detailResponse.ok) throw new Error(String(detail.error || `Batch ${batchId} was not found.`))
-  const jobStatus = new Map((detail.jobs || []).map((job) => [String(job.bookingId), job.status]))
-  const unknown = batch.manifest.clients.find((client) => !jobStatus.has(String(client.booking_id)))
-  if (unknown) throw new Error(`${unknown.customer_name || unknown.booking_id} is not part of ${batchId}.`)
-  const allowedBookingIds = new Set(
-    batch.manifest.clients
-      .filter((client) => {
-        const status = jobStatus.get(String(client.booking_id)) || ''
-        return options.failedOnly ? status === 'UPLOAD_FAILED' : EDITABLE_STATUSES.has(status)
-      })
-      .map((client) => String(client.booking_id)),
-  )
+  const checked = await preflightDetectedBatch(batch)
+  const confirmed = new Set(options.confirmedBookingIds)
+  const reviewedClients = checked.clients.map((client): PreflightClient => client.status === 'READY' && !confirmed.has(client.bookingId)
+    ? { ...client, status: 'ATTENTION', reason: 'Not included in your confirmation. Check clients again to include this client in a new upload.' }
+    : client)
+  options.onPreflight?.({ ...checked, clients: reviewedClients, readyClients: reviewedClients.filter((client) => client.status === 'READY').length, attentionClients: reviewedClients.filter((client) => client.status !== 'READY' && client.status !== 'DELIVERED').length })
+  const allowedBookingIds = new Set(checked.clients.filter((client) => client.status === 'READY' && confirmed.has(client.bookingId)).map((client) => client.bookingId))
   if (!allowedBookingIds.size) {
-    throw new Error(options.failedOnly ? 'This folder has no failed clients to retry.' : 'This batch has no clients ready for upload.')
+    const summary: BatchUploadSummary = { id: '', status: 'SKIPPED', totalClients: checked.totalClients, completedClients: 0, failedClients: 0, photosUploaded: 0, batchStatus: '', failedBookingIds: [] }
+    return { summary, results: [] as UploadResult[], preflight: checked, skippedClients: checked.totalClients }
   }
   const work = createUploadWork(batch, allowedBookingIds)
   const emptyClient = work.find((item) => item.edited.length === 0)
@@ -290,8 +339,10 @@ export async function uploadDetectedBatch(
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        workspaceId: batch.manifest.workspace_id,
         clients: work.map((item) => ({
           bookingId: item.client.booking_id,
+          clientId: item.client.client_id,
           expectedFiles: item.edited.length,
         })),
       }),
@@ -419,5 +470,5 @@ export async function uploadDetectedBatch(
   )
   const summary = await responseJson(finalizeResponse)
   if (!finalizeResponse.ok) throw new Error(String(summary.error || 'Could not finalize the batch upload.'))
-  return { summary: summary as unknown as BatchUploadSummary, results }
+  return { summary: summary as unknown as BatchUploadSummary, results, preflight: checked, skippedClients: checked.totalClients - work.length }
 }

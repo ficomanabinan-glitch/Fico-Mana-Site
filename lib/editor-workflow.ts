@@ -17,6 +17,7 @@ export { PortalSelectionError } from '@/lib/portal-selection-source'
 import { rawUploadGeneration } from '@/lib/raw-upload-generation'
 import { addonPhotoError } from '@/lib/addon-photo-rules'
 import { enhancedUploadName } from '@/lib/enhanced-upload-naming'
+import { batchMemberAttention, classifyBatchCandidate, loadEditorMembership, readEditorRows, type BatchCandidate } from '@/lib/editor-batch-membership'
 import { prepareBookingStorage } from '@/lib/storage/booking-storage'
 import {
   getObjectMetadata,
@@ -177,9 +178,7 @@ async function audit(
 async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
   const eligiblePackageIds = await graduationPackageIds(admin)
   if (!eligiblePackageIds.length) return []
-  const rows: Record<string, unknown>[] = []
-  for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await admin
+  const rows = await readEditorRows<Record<string, unknown>>((from, to) => admin
       .from('bookings')
       .select(
         'id,workspace_id,client_id,customer_name,customer_email,package_id,package_name,booking_date,booking_time,booking_status,payment_status,price,deposit_amount,selection_limit,raw_photo_status,raw_photo_submitted_at,raw_photo_approved_at,edited_photo_delivered_at',
@@ -187,11 +186,8 @@ async function loadActiveBookings(admin: SupabaseClient, workspaceId: string) {
       .eq('workspace_id', workspaceId)
       .in('package_id', eligiblePackageIds)
       .order('booking_date', { ascending: false })
-      .range(offset, offset + 999)
-    if (error) throw new Error(error.message)
-    rows.push(...((data || []) as Record<string, unknown>[]))
-    if (!data || data.length < 1000) break
-  }
+      .order('id')
+      .range(from, to))
   return rows.filter((booking) => !ACTIVE_BOOKING_EXCLUSIONS.has(String(booking.booking_status || '')))
 }
 
@@ -201,21 +197,16 @@ export async function syncEditorWorkflow(workspaceId: string) {
   const onsiteIds = await onsitePackageIds(admin)
   const onsiteBookings: Array<{ id: string; booking_date: string }> = []
   if (onsiteIds.length) {
-    for (let offset = 0; ; offset += 1000) {
-      const { data, error } = await admin.from('bookings').select('id,booking_date,booking_status')
+    const data = await readEditorRows((from, to) => admin.from('bookings').select('id,booking_date,booking_status')
         .eq('workspace_id', workspaceId).in('package_id', onsiteIds)
-        .order('booking_date', { ascending: false }).range(offset, offset + 999)
-      if (error) throw new Error(error.message)
+        .order('booking_date', { ascending: false }).order('id').range(from, to))
       onsiteBookings.push(...(data || []).filter(row => !ACTIVE_BOOKING_EXCLUSIONS.has(String(row.booking_status || '')))
         .map(row => ({ id: String(row.id), booking_date: String(row.booking_date) })))
-      if (!data || data.length < 1000) break
-    }
   }
-  const { data: existingBatches, error: batchReadError } = await admin
+  const existingBatches = await readEditorRows<Record<string, unknown>>((from, to) => admin
     .from('editing_batches')
     .select('id,shoot_date,location_key,batch_sequence,display_id')
-    .eq('workspace_id', workspaceId)
-  if (batchReadError) throw new Error(batchReadError.message)
+    .eq('workspace_id', workspaceId).order('id').range(from, to))
   const batchByDate = new Map((existingBatches || []).map((batch) => [String(batch.shoot_date), batch]))
   const missingDates = [...new Set(onsiteBookings.map((booking) => booking.booking_date))].filter(
     (date) => date && !batchByDate.has(date),
@@ -233,18 +224,16 @@ export async function syncEditorWorkflow(workspaceId: string) {
     if (error) throw new Error(error.message)
   }
 
-  const { data: batches, error: batchesError } = await admin
+  const batches = await readEditorRows<Record<string, unknown>>((from, to) => admin
     .from('editing_batches')
     .select('id,shoot_date')
-    .eq('workspace_id', workspaceId)
-  if (batchesError) throw new Error(batchesError.message)
+    .eq('workspace_id', workspaceId).order('id').range(from, to))
   const liveBatchByDate = new Map((batches || []).map((batch) => [String(batch.shoot_date), String(batch.id)]))
-  const [{ data: selections }, { data: jobs }, { data: uploadedFiles, error: uploadedFilesError }] = await Promise.all([
-    admin.from('photo_selections').select('booking_id').eq('workspace_id', workspaceId),
-    admin.from('editing_jobs').select('booking_id').eq('workspace_id', workspaceId),
-    admin.from('gallery_files').select('booking_id').eq('workspace_id', workspaceId).eq('storage_status', 'available'),
+  const [selections, jobs, uploadedFiles] = await Promise.all([
+    readEditorRows<{ booking_id: string }>((from, to) => admin.from('photo_selections').select('booking_id').eq('workspace_id', workspaceId).order('id').range(from, to)),
+    readEditorRows<{ booking_id: string }>((from, to) => admin.from('editing_jobs').select('booking_id').eq('workspace_id', workspaceId).order('id').range(from, to)),
+    readEditorRows<{ booking_id: string }>((from, to) => admin.from('gallery_files').select('booking_id').eq('workspace_id', workspaceId).eq('storage_status', 'available').order('id').range(from, to)),
   ])
-  if (uploadedFilesError) throw new Error(uploadedFilesError.message)
   const selectionBookings = new Set((selections || []).map((row) => String(row.booking_id)))
   const jobBookings = new Set((jobs || []).map((row) => String(row.booking_id)))
   const uploadedBookingIds = new Set((uploadedFiles || []).map((row) => String(row.booking_id)))
@@ -297,30 +286,25 @@ export async function getBatchList(
   { synchronize = true }: { synchronize?: boolean } = {},
 ) {
   const admin = adminClient()
-  const [bookings, { data: batches, error: batchError }, { data: jobs, error: jobsError }, { data: uploadedFiles, error: uploadedFilesError }] = await Promise.all([
-    synchronize ? syncEditorWorkflow(workspaceId) : loadActiveBookings(admin, workspaceId),
-    admin
+  if (synchronize) await syncEditorWorkflow(workspaceId)
+  const [{ bookings, jobs }, batches, packageIds] = await Promise.all([
+    loadEditorMembership(admin, workspaceId),
+    readEditorRows<Record<string, unknown>>((from, to) => admin
       .from('editing_batches')
       .select('id,display_id,shoot_date,location_key,storage_prefix')
       .eq('workspace_id', workspaceId)
-      .order('shoot_date', { ascending: false }),
-    admin
-      .from('editing_jobs')
-      .select('batch_id,booking_id,client_id,status,selected_count,assigned_editor_id,assigned_editor_name,photographer_name')
-      .eq('workspace_id', workspaceId),
-    admin.from('gallery_files').select('booking_id').eq('workspace_id', workspaceId).eq('storage_status', 'available'),
+      .order('shoot_date', { ascending: false }).order('id').range(from, to)),
+    graduationPackageIds(admin),
   ])
-  if (batchError) throw new Error(batchError.message)
-  if (jobsError) throw new Error(jobsError.message)
-  if (uploadedFilesError) throw new Error(uploadedFilesError.message)
   const bookingMap = new Map(bookings.map((booking) => [String(booking.id), booking]))
-  const uploadedBookingIds = new Set((uploadedFiles || []).map((file) => String(file.booking_id)))
 
   return (batches || []).map((batch) => {
     const batchJobs = (jobs || []).filter((job) =>
-      job.batch_id === batch.id && bookingMap.has(String(job.booking_id)) && uploadedBookingIds.has(String(job.booking_id)),
+      job.batch_id === batch.id,
     ) as Array<Record<string, unknown> & { status: EditingJobStatus }>
     const counts = batchCounts(batchJobs)
+    const eligiblePackages = new Set(packageIds)
+    const activeJobs = batchJobs.filter(job => !batchMemberAttention(workspaceId, String(batch.id), String(job.booking_id), bookingMap.get(String(job.booking_id)), job, eligiblePackages))
     return {
       id: String(batch.display_id),
       internalId: String(batch.id),
@@ -329,6 +313,9 @@ export async function getBatchList(
       locationKey: String(batch.location_key),
       status: deriveBatchStatus(batchJobs),
       totalClients: batchJobs.length,
+      attentionClients: batchJobs.length - activeJobs.length,
+      activeClients: activeJobs.length,
+      downloadEligibleClients: activeJobs.filter(job => ['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'].includes(String(job.status)) && !bookingMap.get(String(job.booking_id))?.edited_photo_delivered_at && !job.delivered_at).length,
       totalSelectedPhotos: batchJobs.reduce((sum, job) => sum + Number(job.selected_count || 0), 0),
       counts,
       clients: batchJobs.map((job) => {
@@ -339,6 +326,8 @@ export async function getBatchList(
           clientName: String(booking?.customer_name || job.booking_id),
           packageName: String(booking?.package_name || ''),
           status: String(job.status),
+          attentionReason: batchMemberAttention(workspaceId, String(batch.id), String(job.booking_id), booking, job, eligiblePackages)?.reason || null,
+          uploadEligibility: classifyBatchCandidate({ workspaceId, batchId: String(batch.id), candidate: { bookingId: String(job.booking_id), expectedFiles: 1 }, booking, job, eligiblePackages }).status,
           selectedCount: Number(job.selected_count || 0),
           assignedEditorId: job.assigned_editor_id ? String(job.assigned_editor_id) : null,
           assignedEditorName: job.assigned_editor_name ? String(job.assigned_editor_name) : null,
@@ -504,22 +493,21 @@ export async function getBatchDetail(
     (await getBatchList(workspaceId, { synchronize })).find((batch) => batch.id === displayId)
   if (!listEntry) return null
   const batch = await findBatch(admin, workspaceId, displayId)
-  const { data: jobs, error: jobsError } = await admin
+  const jobs = await readEditorRows<Record<string, unknown>>((from, to) => admin
     .from('editing_jobs')
     .select('*')
+    .eq('workspace_id', workspaceId)
     .eq('batch_id', batch.id)
-    .order('updated_at', { ascending: false })
-  if (jobsError) throw new Error(jobsError.message)
-  const eligibleBookingIds = new Set(listEntry.clients.map(client => client.bookingId))
-  const eligibleJobs = (jobs || []).filter(job => eligibleBookingIds.has(String(job.booking_id)))
+    .order('updated_at', { ascending: false }).order('id').range(from, to))
+  const eligibleJobs = jobs
   const bookingIds = eligibleJobs.map((job) => String(job.booking_id))
   if (!bookingIds.length) return { ...listEntry, jobs: [], auditLogs: [] }
 
   const [bookingsResult, selectionsResult, galleryResult, deliveryResult, storageResult, auditsResult, reviewsResult] = await Promise.all([
-    admin.from('bookings').select('*').in('id', bookingIds),
-    admin.from('photo_selections').select('*').in('booking_id', bookingIds),
-    admin.from('gallery_files').select('id,booking_id,file_name,created_at').in('booking_id', bookingIds),
-    admin.from('deliverable_files').select('booking_id').in('booking_id', bookingIds),
+    readEditorRows((from, to) => admin.from('bookings').select('*').eq('workspace_id', workspaceId).in('id', bookingIds).order('id').range(from, to)).then(data => ({ data, error: null })),
+    readEditorRows((from, to) => admin.from('photo_selections').select('*').eq('workspace_id', workspaceId).in('booking_id', bookingIds).order('id').range(from, to)).then(data => ({ data, error: null })),
+    readEditorRows((from, to) => admin.from('gallery_files').select('id,booking_id,file_name,created_at').eq('workspace_id', workspaceId).in('booking_id', bookingIds).order('id').range(from, to)).then(data => ({ data, error: null })),
+    readEditorRows((from, to) => admin.from('deliverable_files').select('booking_id').eq('workspace_id', workspaceId).in('booking_id', bookingIds).order('id').range(from, to)).then(data => ({ data, error: null })),
     admin.from('booking_provisioning').select('booking_id,storage_prefix,storage_status').in('booking_id', bookingIds),
     admin
       .from('workflow_audit_logs')
@@ -536,7 +524,6 @@ export async function getBatchDetail(
       .order('created_at', { ascending: false })
       .limit(100),
   ])
-  if (bookingsResult.error) throw new Error(bookingsResult.error.message)
   for (const [name, result] of [
     ['photo selections', selectionsResult],
     ['gallery files', galleryResult],
@@ -550,18 +537,11 @@ export async function getBatchDetail(
   const selectionIds = (selectionsResult.data || []).map((selection) => String(selection.id))
   const [selectionItemsResult, printAllocationsResult, addonOrdersResult] = selectionIds.length
     ? await Promise.all([
-        admin.from('photo_selection_items').select('selection_id,gallery_file_id,enhancement_preference,is_extra_edit').in('selection_id', selectionIds),
-        admin.from('print_allocations').select('selection_id,category,gallery_file_id,quantity,label_snapshot').in('selection_id', selectionIds),
-        admin.from('client_addon_orders').select('selection_id,name_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,photo_ids,total_amount').in('selection_id', selectionIds),
+        readEditorRows((from, to) => admin.from('photo_selection_items').select('selection_id,gallery_file_id,enhancement_preference,is_extra_edit').in('selection_id', selectionIds).order('selection_id').order('gallery_file_id').range(from, to)).then(data => ({ data, error: null })),
+        readEditorRows((from, to) => admin.from('print_allocations').select('selection_id,category,gallery_file_id,quantity,label_snapshot').eq('workspace_id', workspaceId).in('selection_id', selectionIds).order('id').range(from, to)).then(data => ({ data, error: null })),
+        readEditorRows((from, to) => admin.from('client_addon_orders').select('selection_id,name_snapshot,pricing_type_snapshot,unit_price_snapshot,quantity,photo_count,photo_ids,total_amount').in('selection_id', selectionIds).order('id').range(from, to)).then(data => ({ data, error: null })),
       ])
     : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
-  for (const [name, result] of [
-    ['selection items', selectionItemsResult],
-    ['print allocations', printAllocationsResult],
-    ['add-on orders', addonOrdersResult],
-  ] as const) {
-    if (result.error) console.error(`Batch detail ${name} read failed:`, result.error.message)
-  }
   const bookingMap = new Map((bookingsResult.data || []).map((booking) => [String(booking.id), booking]))
   const selectionMap = new Map((selectionsResult.data || []).map((selection) => [String(selection.booking_id), selection]))
   const galleryNameMap = new Map((galleryResult.data || []).map((file) => [String(file.id), String(file.file_name)]))
@@ -586,6 +566,8 @@ export async function getBatchDetail(
         bookingStatus: String(booking?.booking_status || ''),
         paymentStatus: String(booking?.payment_status || ''),
         status: job.status as EditingJobStatus,
+        attentionReason: listEntry.clients.find(client => client.bookingId === bookingId)?.attentionReason || null,
+        uploadEligibility: listEntry.clients.find(client => client.bookingId === bookingId)?.uploadEligibility || 'MISSING',
         selectedCount: Number(job.selected_count || 0),
         expectedOutputCount: Number(job.expected_output_count || 0),
         galleryCount: (galleryResult.data || []).filter((row) => row.booking_id === bookingId).length,
@@ -1862,71 +1844,65 @@ export async function prepareBatchDownload(
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
-  const { data: readyJobs, error } = await admin
-    .from('editing_jobs')
-    .select('*')
-    .eq('batch_id', batch.id)
-    .in('status', ['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'])
-  if (error) throw new Error(error.message)
-  const allowedBookingIds = await graduationBookingIds(admin, workspaceId, (readyJobs || []).map(job => String(job.booking_id)))
+  const [membership, eligiblePackageIds] = await Promise.all([loadEditorMembership(admin, workspaceId), graduationPackageIds(admin)])
+  const bookingMap = new Map(membership.bookings.map(booking => [String(booking.id), booking]))
+  const eligiblePackages = new Set(eligiblePackageIds)
   const now = Date.now()
-  const jobs = (readyJobs || []).filter((job) => {
-    if (!allowedBookingIds.has(String(job.booking_id))) return false
+  const jobs = membership.jobs.filter((job) => {
+    if (String(job.batch_id) !== String(batch.id) || !['READY_FOR_EDITING', 'DOWNLOADED', 'EDITING', 'READY_TO_UPLOAD', 'UPLOAD_FAILED'].includes(String(job.status))) return false
+    const booking = bookingMap.get(String(job.booking_id))
+    if (batchMemberAttention(workspaceId, String(batch.id), String(job.booking_id), booking, job, eligiblePackages) || job.delivered_at || booking?.edited_photo_delivered_at) return false
     if (allowOverride) return true
     const lockedElsewhere =
       job.download_locked_by !== actorId &&
       job.download_lock_expires_at &&
-      new Date(job.download_lock_expires_at).getTime() > now
+      new Date(String(job.download_lock_expires_at)).getTime() > now
     return !lockedElsewhere
   })
   if (!jobs.length) throw new Error('No downloadable selected clients are available in this batch.')
-  const lockExpiresAt = new Date(now + 2 * 60 * 60 * 1000).toISOString()
-  const { error: lockError } = await admin
-    .from('editing_jobs')
-    .update({ download_locked_by: actorId, download_lock_expires_at: lockExpiresAt, updated_at: nowIso() })
-    .in('id', jobs.map((job) => job.id))
-    .eq('status', 'READY_FOR_EDITING')
-  if (lockError) throw new Error(lockError.message)
   const bookingIds = jobs.map((job) => String(job.booking_id))
-  const [{ data: bookings }, { data: portals }, { data: selections }] = await Promise.all([
-    admin.from('bookings').select('id,customer_name,package_id').in('id', bookingIds),
-    admin.from('client_portals').select('booking_id,public_id').in('booking_id', bookingIds),
-    admin.from('photo_selections').select('id,booking_id').in('booking_id', bookingIds),
+  const [bookings, portals, selections] = await Promise.all([
+    readEditorRows((from, to) => admin.from('bookings').select('*').eq('workspace_id', workspaceId).in('id', bookingIds).order('id').range(from, to)),
+    readEditorRows((from, to) => admin.from('client_portals').select('booking_id,public_id').eq('workspace_id', workspaceId).in('booking_id', bookingIds).order('id').range(from, to)),
+    readEditorRows((from, to) => admin.from('photo_selections').select('id,booking_id').eq('workspace_id', workspaceId).in('booking_id', bookingIds).order('id').range(from, to)),
   ])
+  if (bookings.length !== bookingIds.length || bookings.some(booking => batchMemberAttention(workspaceId, String(batch.id), String(booking.id), booking, jobs.find(job => String(job.booking_id) === String(booking.id)), eligiblePackages))) throw new Error('A client changed while preparing this download. Try: refresh the batch and download again.')
   const names = uniqueClientFolderNames(
     (bookings || []).map((booking) => ({ id: String(booking.id), name: String(booking.customer_name) })),
   )
   const packageIds = [...new Set((bookings || []).map(booking => String(booking.package_id)))]
-  const { data: packageRows, error: packageRowsError } = await admin.from('packages').select('id,category').in('id', packageIds)
-  if (packageRowsError) throw new Error('Package rules could not be checked.')
+  const packageRows = await readEditorRows((from, to) => admin.from('packages').select('id,category').in('id', packageIds).order('id').range(from, to))
+  if (packageRows.length !== packageIds.length) throw new Error('Package rules could not be checked.')
   const categoryByPackage = new Map((packageRows || []).map(row => [String(row.id), String(row.category)]))
   const selectionIds = (selections || []).map((selection) => selection.id)
-  const { data: items, error: itemsError } = await admin
+  const items = await readEditorRows((from, to) => admin
     .from('photo_selection_items')
     .select('selection_id,gallery_file_id')
-    .in('selection_id', selectionIds)
-  if (itemsError) throw new Error(itemsError.message)
+    .in('selection_id', selectionIds).order('selection_id').order('gallery_file_id').range(from, to))
   const galleryIds = (items || []).map((item) => item.gallery_file_id)
-  const { data: gallery, error: galleryError } = galleryIds.length
-    ? await admin.from('gallery_files').select('id,file_name,storage_key').in('id', galleryIds).eq('storage_status', 'available')
-    : { data: [], error: null }
-  if (galleryError) throw new Error(galleryError.message)
+  const gallery = galleryIds.length
+    ? await readEditorRows((from, to) => admin.from('gallery_files').select('id,booking_id,file_name,storage_key').eq('workspace_id', workspaceId).in('booking_id', bookingIds).in('id', galleryIds).eq('storage_status', 'available').order('id').range(from, to))
+    : []
   const galleryMap = new Map((gallery || []).map((file) => [String(file.id), file]))
   const selectionMap = new Map((selections || []).map((selection) => [String(selection.booking_id), String(selection.id)]))
   const portalMap = new Map((portals || []).map((portal) => [String(portal.booking_id), String(portal.public_id)]))
-  const { data: storageRows, error: storageError } = await admin.from('booking_provisioning')
-    .select('booking_id,storage_prefix,storage_status').in('booking_id', bookingIds)
-  if (storageError) throw new Error('The booking storage state could not be loaded.')
+  const storageRows = await readEditorRows((from, to) => admin.from('booking_provisioning')
+    .select('booking_id,storage_prefix,storage_status').eq('workspace_id', workspaceId).in('booking_id', bookingIds).order('booking_id').range(from, to))
   const storageMap = new Map((storageRows || []).map((state) => [String(state.booking_id), state]))
   // One scoped query for the batch, including week/month collections; no per-client read loop.
-  const { data: savedPrints, error: printsError } = await admin.from('print_allocations')
+  const savedPrints = await readEditorRows((from, to) => admin.from('print_allocations')
     .select('selection_id,category,gallery_file_id,quantity').eq('workspace_id', workspaceId)
-    .in('selection_id', selectionIds).order('category')
-  if (printsError) throw new Error('The print instructions could not be loaded. Try: download this batch again.')
+    .in('selection_id', selectionIds).order('category').order('id').range(from, to))
   const printManifests = new Map<string, PrintManifest>()
   for (const bookingId of bookingIds) {
     const selectionId = selectionMap.get(bookingId)
     if (!selectionId) throw new Error('A client selection is missing. Try: refresh the editing queue, then download again.')
+    const selectedItems = items.filter(item => String(item.selection_id) === selectionId)
+    const selectedCount = Number(jobs.find(job => String(job.booking_id) === bookingId)?.selected_count || 0)
+    if (!selectedItems.length || (selectedCount > 0 && selectedCount !== selectedItems.length) || selectedItems.some(item => {
+      const file = galleryMap.get(String(item.gallery_file_id))
+      return !file || String(file.booking_id) !== bookingId || !file.storage_key || !file.file_name
+    })) throw new Error('A selected source photo is missing or belongs to another client. Try: ask the studio to review this selection before downloading.')
     printManifests.set(bookingId, buildPrintManifest({
       bookingId, selectionId,
       packageCategory: categoryByPackage.get(String((bookings || []).find(row => String(row.id) === bookingId)?.package_id)) || '',
@@ -1975,13 +1951,22 @@ export async function prepareBatchDownload(
     entries.push({ name: `${batch.shoot_date}/${folderName}/SELECTED/PRINTS/`, data: Buffer.alloc(0) })
     for (const item of (items || []).filter((row) => String(row.selection_id) === selectionId)) {
       const file = galleryMap.get(String(item.gallery_file_id))
-      if (!file) continue
+      if (!file) throw new Error('A selected source photo is missing. Try: refresh the batch and download again.')
       entries.push({
         name: `${batch.shoot_date}/${folderName}/SELECTED/${safeSegment(String(file.file_name)) || file.id}`,
         storageKey: String(file.storage_key),
       })
     }
   }
+  // Do not lock work when source/print validation failed before a download exists.
+  const lockExpiresAt = new Date(now + 2 * 60 * 60 * 1000).toISOString()
+  const { error: lockError } = await admin
+    .from('editing_jobs')
+    .update({ download_locked_by: actorId, download_lock_expires_at: lockExpiresAt, updated_at: nowIso() })
+    .eq('workspace_id', workspaceId).eq('batch_id', batch.id)
+    .in('id', jobs.map((job) => job.id))
+    .eq('status', 'READY_FOR_EDITING')
+  if (lockError) throw new Error(lockError.message)
   return { fileName: displayId, batch, jobs, manifest, entries }
 }
 
@@ -2060,11 +2045,49 @@ export async function prepareBatchCollectionDownload(
   }
 }
 
+export async function preflightBatchUpload(workspaceId: string, displayId: string, clients: BatchCandidate[], manifestWorkspaceId?: string) {
+  const admin = adminClient()
+  const batch = await findBatch(admin, workspaceId, displayId)
+  const [{ bookings, jobs }, packageIds] = await Promise.all([
+    loadEditorMembership(admin, workspaceId), graduationPackageIds(admin),
+  ])
+  const bookingMap = new Map(bookings.map(booking => [String(booking.id), booking]))
+  const jobMap = new Map(jobs.map(job => [String(job.booking_id), job]))
+  const frequencies = new Map<string, number>()
+  for (const client of clients) frequencies.set(client.bookingId, (frequencies.get(client.bookingId) || 0) + 1)
+  const results = clients.map(candidate => classifyBatchCandidate({ workspaceId, batchId: String(batch.id), candidate,
+    booking: bookingMap.get(candidate.bookingId), job: jobMap.get(candidate.bookingId), eligiblePackages: new Set(packageIds),
+    manifestWorkspaceId, duplicate: frequencies.get(candidate.bookingId)! > 1 }))
+  if (results.some(row => row.status !== 'READY')) {
+    // Aggregate diagnostics only: never log client names, IDs, filenames, or signed URLs.
+    const statusCounts = results.reduce<Record<string, number>>((counts, row) => {
+      counts[row.status] = (counts[row.status] || 0) + 1
+      return counts
+    }, {})
+    console.info('Editor batch upload reconciliation', { totalClients: results.length, statusCounts })
+  }
+  return { clients: results, totalClients: results.length, readyClients: results.filter(row => row.status === 'READY').length,
+    attentionClients: results.filter(row => !['READY', 'DELIVERED', 'UPLOADING'].includes(row.status)).length }
+}
+
+async function assertUploadStillEligible(admin: SupabaseClient, workspaceId: string, batchId: string, bookingId: string, editingJobId: string) {
+  const [{ data: booking, error: bookingError }, { data: job, error: jobError }, packages] = await Promise.all([
+    admin.from('bookings').select('*').eq('workspace_id', workspaceId).eq('id', bookingId).maybeSingle(),
+    admin.from('editing_jobs').select('*').eq('workspace_id', workspaceId).eq('id', editingJobId).maybeSingle(),
+    graduationPackageIds(admin),
+  ])
+  if (bookingError || jobError) throw new Error(bookingError?.message || jobError?.message)
+  const state = classifyBatchCandidate({ workspaceId, batchId, candidate: { bookingId, expectedFiles: 1 }, booking: booking || undefined,
+    job: job ? { ...job, status: job.status === 'UPLOADING' ? 'READY_TO_UPLOAD' : job.status } : undefined, eligiblePackages: new Set(packages) })
+  if (state.status !== 'READY') throw new Error(`${state.customerName}: ${state.reason}`)
+}
+
 export async function createBatchUploadRun(
   workspaceId: string,
   displayId: string,
-  clients: Array<{ bookingId: string; expectedFiles: number }>,
+  clients: BatchCandidate[],
   actorId: string,
+  manifestWorkspaceId?: string,
 ) {
   const admin = adminClient()
   const batch = await findBatch(admin, workspaceId, displayId)
@@ -2072,12 +2095,16 @@ export async function createBatchUploadRun(
   if (!uniqueIds.length) throw new Error('Choose at least one client folder to upload.')
   if (uniqueIds.length !== clients.length) throw new Error('Each client folder may appear only once per upload run.')
   if (uniqueIds.length > 500) throw new Error('One upload run is limited to 500 client folders.')
+  const preflight = await preflightBatchUpload(workspaceId, displayId, clients, manifestWorkspaceId)
+  const rejected = preflight.clients.find(client => client.status !== 'READY')
+  if (rejected) throw new Error(`${rejected.customerName}: ${rejected.reason}`)
   const eligibleIds = await graduationBookingIds(admin, workspaceId, uniqueIds)
   if (eligibleIds.size !== uniqueIds.length) throw new GraduationWorkflowOnlyError()
   const expectedByBooking = new Map(clients.map((client) => [client.bookingId, client.expectedFiles]))
   const { data: jobs, error } = await admin
     .from('editing_jobs')
     .select('*')
+    .eq('workspace_id', workspaceId)
     .eq('batch_id', batch.id)
     .in('booking_id', uniqueIds)
   if (error) throw new Error(error.message)
@@ -2186,6 +2213,10 @@ export async function createDeliverableUploadSession(
     .eq('editing_jobs.workspace_id', workspaceId)
     .maybeSingle()
   if (error || !item) throw new Error(error?.message || 'Upload client is not part of this batch run.')
+  const { data: run, error: runError } = await admin.from('batch_upload_jobs').select('id').eq('id', uploadJobId)
+    .eq('workspace_id', workspaceId).eq('batch_id', batch.id).eq('status', 'RUNNING').maybeSingle()
+  if (runError || !run) throw new Error('This upload run is no longer active.')
+  await assertUploadStillEligible(admin, workspaceId, String(batch.id), input.bookingId, String(item.editing_job_id))
   const relativePath = safeRelativePath(input.relativePath)
   const checksum = input.checksum.toLowerCase()
   if (!/^[a-f0-9]{64}$/.test(checksum)) throw new Error('A SHA-256 file checksum is required.')
@@ -2321,13 +2352,17 @@ export async function completeDeliverableUpload(
   // Authorize before any lookup of a caller-supplied storage key.
   const { data: job } = await admin
     .from('editing_jobs')
-    .select('id,workspace_id')
+    .select('id,workspace_id,batch_id')
     .eq('id', uploadFile.batch_upload_items.editing_job_id)
     .eq('workspace_id', workspaceId)
     .eq('booking_id', uploadFile.batch_upload_items.booking_id)
     .single()
   if (!job) throw new Error('Upload job is outside this workspace.')
   const bookingId = String(uploadFile.batch_upload_items.booking_id)
+  const { data: run, error: runError } = await admin.from('batch_upload_jobs').select('batch_id').eq('id', uploadJobId)
+    .eq('workspace_id', workspaceId).eq('status', 'RUNNING').maybeSingle()
+  if (runError || !run) throw new Error('This upload run is no longer active.')
+  await assertUploadStillEligible(admin, workspaceId, String(run.batch_id), bookingId, String(job.id))
   if (completion.storageKey !== uploadFile.storage_key) {
     throw new Error('The uploaded file does not match the selected batch.')
   }
@@ -2437,8 +2472,10 @@ export async function finalizeClientUpload(
     .eq('upload_job_id', uploadJobId)
     .eq('booking_id', bookingId)
     .eq('editing_jobs.batch_id', batch.id)
+    .eq('editing_jobs.workspace_id', workspaceId)
     .maybeSingle()
   if (error || !item) throw new Error(error?.message || 'Upload client state not found.')
+  await assertUploadStillEligible(admin, workspaceId, String(batch.id), bookingId, String(item.editing_job_id))
   const { count: uploadedCount, error: countError } = await admin
     .from('batch_upload_files')
     .select('id', { count: 'exact', head: true })
@@ -2477,6 +2514,8 @@ export async function finalizeClientUpload(
     throw new Error('This client is already being processed. Try: wait for the current upload or download to finish, then retry. An interrupted print run unlocks after 10 minutes.')
   }
   try {
+  await assertUploadStillEligible(admin, workspaceId, String(batch.id), bookingId, String(item.editing_job_id))
+  try {
     await fulfillBookingPrints({
       admin, workspaceId, bookingId, editingJobId: String(item.editing_job_id), uploadItemId: String(item.id),
     })
@@ -2491,13 +2530,11 @@ export async function finalizeClientUpload(
       bookingId, batchId: batch.id, metadata: { uploadJobId, error: message },
     })
     return { bookingId, status: 'UPLOAD_FAILED', expected, uploaded, error: message }
-  } finally {
-    await admin.from('editing_jobs').update({ download_locked_by: null, download_lock_expires_at: null })
-      .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('download_lock_expires_at', printLockUntil)
   }
   const portal = await ensurePortal(admin, workspaceId, bookingId)
+  await assertUploadStillEligible(admin, workspaceId, String(batch.id), bookingId, String(item.editing_job_id))
   const clientPortalUrl = portalUrl(String(portal.public_id))
-  await Promise.all([
+  const deliveryWrites = await Promise.all([
     admin
       .from('batch_upload_items')
       .update({ status: 'DELIVERED', uploaded_files: uploaded, last_error: null, updated_at: timestamp })
@@ -2505,7 +2542,7 @@ export async function finalizeClientUpload(
     admin
       .from('editing_jobs')
       .update({ status: 'DELIVERED', delivered_at: timestamp, last_error: null, updated_at: timestamp })
-      .eq('id', item.editing_job_id),
+      .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('batch_id', batch.id),
     admin
       .from('photo_selections')
       .update({ client_status: 'Ready for Release', updated_at: timestamp })
@@ -2514,8 +2551,10 @@ export async function finalizeClientUpload(
     admin
       .from('bookings')
       .update({ edited_photo_delivered_at: timestamp })
-      .eq('id', bookingId),
+      .eq('id', bookingId).eq('workspace_id', workspaceId),
   ])
+  const deliveryWriteError = deliveryWrites.find(result => result.error)?.error
+  if (deliveryWriteError) throw new Error(`Delivery could not be recorded completely. ${deliveryWriteError.message} Try: ask the studio administrator to review this client before retrying.`)
   await audit(admin, workspaceId, { type: 'staff', id: actorId }, 'DELIVERY_COMPLETED', {
     bookingId,
     batchId: batch.id,
@@ -2537,6 +2576,10 @@ export async function finalizeClientUpload(
     }
   }
   return { bookingId, customerName: String(booking?.customer_name || bookingId), status: 'DELIVERED', expected, uploaded }
+  } finally {
+    await admin.from('editing_jobs').update({ download_locked_by: null, download_lock_expires_at: null })
+      .eq('id', item.editing_job_id).eq('workspace_id', workspaceId).eq('download_lock_expires_at', printLockUntil)
+  }
 }
 
 export async function finalizeBatchUpload(workspaceId: string, displayId: string, uploadJobId: string) {
@@ -2550,17 +2593,18 @@ export async function finalizeBatchUpload(workspaceId: string, displayId: string
     .eq('batch_id', batch.id)
     .maybeSingle()
   if (!run) throw new Error('Batch upload run not found in this workspace.')
-  const { data: items, error } = await admin
+  const items = await readEditorRows<Record<string, unknown>>((from, to) => admin
     .from('batch_upload_items')
     .select('*')
-    .eq('upload_job_id', uploadJobId)
-  if (error) throw new Error(error.message)
+    .eq('upload_job_id', uploadJobId).order('id').range(from, to))
   const completed = (items || []).filter((item) => item.status === 'DELIVERED').length
   const failed = (items || []).filter((item) => item.status === 'FAILED').length
   const photosUploaded = (items || []).reduce((sum, item) => sum + Number(item.uploaded_files || 0), 0)
   const status = failed > 0 ? 'PARTIALLY_COMPLETED' : completed === (items || []).length ? 'COMPLETED' : 'RUNNING'
   const completedAt = nowIso()
-  await admin
+  const allJobs = await readEditorRows<{ status: EditingJobStatus }>((from, to) => admin.from('editing_jobs').select('status').eq('workspace_id', workspaceId).eq('batch_id', batch.id).order('id').range(from, to))
+  const batchStatus = deriveBatchStatus(allJobs)
+  const { error: runWriteError } = await admin
     .from('batch_upload_jobs')
     .update({
       status,
@@ -2571,9 +2615,9 @@ export async function finalizeBatchUpload(workspaceId: string, displayId: string
     })
     .eq('id', uploadJobId)
     .eq('workspace_id', workspaceId)
-  const { data: allJobs } = await admin.from('editing_jobs').select('status').eq('batch_id', batch.id)
-  const batchStatus = deriveBatchStatus((allJobs || []) as Array<{ status: EditingJobStatus }>)
-  await admin.from('editing_batches').update({ status: batchStatus, updated_at: completedAt }).eq('id', batch.id)
+  if (runWriteError) throw new Error(runWriteError.message)
+  const { error: batchWriteError } = await admin.from('editing_batches').update({ status: batchStatus, updated_at: completedAt }).eq('workspace_id', workspaceId).eq('id', batch.id)
+  if (batchWriteError) throw new Error(batchWriteError.message)
   return {
     id: uploadJobId,
     status,

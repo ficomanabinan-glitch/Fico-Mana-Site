@@ -5,7 +5,6 @@ import { useCachedPageRead, usePageBackgroundSync } from '@/components/use-cache
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
-  FileCheck2,
   FolderOpen,
   FolderUp,
   UploadCloud,
@@ -19,7 +18,9 @@ import {
   detectBatchFolders,
   pickedFilesFromDrop,
   pickedFilesFromList,
+  preflightDetectedBatch,
   uploadDetectedBatch,
+  type BatchPreflight,
   type DetectedBatchFolder,
   type UploadProgress,
   type UploadResult,
@@ -86,10 +87,14 @@ export default function EditorUploadPhotos({
   const toast = useAdminToast()
   const input = useRef<HTMLInputElement | null>(null)
   const [detected, setDetected] = useState<DetectedBatchFolder[]>([])
+  const [preflights, setPreflights] = useState<Record<string, BatchPreflight>>({})
+  const [checkErrors, setCheckErrors] = useState<Record<string, string>>({})
+  const busy = useRef(false)
   const [dragActive, setDragActive] = useState(false)
   const [reading, setReading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [failedOnly, setFailedOnly] = useState(initialFailedOnly)
+  const [runStats, setRunStats] = useState<{ total: number; eligible: number; skipped: number; completed: number; failed: number; pending: number } | null>(null)
   const [progress, setProgress] = useState<UploadProgress | null>(null)
   const [results, setResults] = useState<UploadResult[]>([])
   const [runErrors, setRunErrors] = useState<string[]>([])
@@ -97,6 +102,26 @@ export default function EditorUploadPhotos({
   const [reportError, setReportError] = useState('')
   const [reportsVerified, setReportsVerified] = useState(false)
   const [refreshingReports, setRefreshingReports] = useState(false)
+
+  const checkFolders = async (batches: DetectedBatchFolder[]) => {
+    const checks: Record<string, BatchPreflight> = {}
+    const errors: Record<string, string> = {}
+    await Promise.all(batches.map(async (batch) => {
+      const id = batch.manifest.batch_id
+      try { checks[id] = await preflightDetectedBatch(batch) }
+      catch (error) { errors[id] = error instanceof Error ? error.message : 'Could not check this batch. Try again.' }
+    }))
+    setPreflights(checks)
+    setCheckErrors(errors)
+  }
+
+  const refreshChecks = async () => {
+    if (busy.current) return
+    busy.current = true
+    setReading(true)
+    try { await checkFolders(detected) }
+    finally { busy.current = false; setReading(false) }
+  }
 
   const loadReports = useCallback(async (silent = false) => {
     if (!silent) setReportsLoading(true)
@@ -141,11 +166,16 @@ export default function EditorUploadPhotos({
   usePageBackgroundSync(() => uploading ? undefined : loadReports(true))
 
   const inspect = async (files: Awaited<ReturnType<typeof pickedFilesFromDrop>>) => {
-    if (!files.length) return
+    if (busy.current) return
+    if (!files.length) { setReading(false); return }
+    busy.current = true
     setReading(true)
     setResults([])
     setRunErrors([])
     setProgress(null)
+    setRunStats(null)
+    setPreflights({})
+    setCheckErrors({})
     try {
       const batches = await detectBatchFolders(files)
       if (!batches.length) {
@@ -158,16 +188,14 @@ export default function EditorUploadPhotos({
         throw new Error(`This folder does not contain the expected batch ${initialBatchId}.`)
       }
       setDetected(selected)
-      const clientCount = selected.reduce((sum, batch) => sum + batch.manifest.clients.length, 0)
-      toast.success(
-        selected.length === 1 ? 'Batch folder ready' : 'Batch folders ready',
-        `${selected.length} batch${selected.length === 1 ? '' : 'es'} · ${clientCount} client${clientCount === 1 ? '' : 's'} detected.`,
-      )
+      await checkFolders(selected)
     } catch (error) {
       setDetected([])
+      setRunErrors([error instanceof Error ? error.message : 'Choose a valid Fico Mana batch folder.'])
       toast.error('Folder not accepted', error instanceof Error ? error.message : 'Choose a valid Fico Mana batch folder.')
     } finally {
       setReading(false)
+      busy.current = false
       if (input.current) input.current.value = ''
     }
   }
@@ -175,38 +203,66 @@ export default function EditorUploadPhotos({
   const chooseFolder = () => input.current?.click()
 
   const startUpload = async () => {
-    if (!detected.length || uploading) return
+    if (!detected.length || busy.current || reading) return
+    const confirmation = new Map(detected.map((batch) => [batch.manifest.batch_id, (preflights[batch.manifest.batch_id]?.clients || []).filter((client) => client.status === 'READY' && (!failedOnly || client.workflowStatus === 'UPLOAD_FAILED')).map((client) => client.bookingId)]))
+    if (![...confirmation.values()].some((ids) => ids.length)) return
+    busy.current = true
     setUploading(true)
+    setProgress(null)
     setResults([])
     setRunErrors([])
+    const confirmedCount = [...confirmation.values()].reduce((sum, ids) => sum + ids.length, 0)
+    setRunStats({ total: selectedClients, eligible: confirmedCount, skipped: selectedClients - confirmedCount, completed: 0, failed: 0, pending: confirmedCount })
     let completed = 0
     let failed = 0
+    let errors = 0
     for (const batch of detected) {
+      const confirmedBookingIds = confirmation.get(batch.manifest.batch_id) || []
+      if (!confirmedBookingIds.length) continue
+      let batchPending = confirmedBookingIds.length
       try {
-        const outcome = await uploadDetectedBatch(batch, {
-          failedOnly,
+        await uploadDetectedBatch(batch, {
+          confirmedBookingIds,
+          onPreflight: (checked) => {
+            setPreflights((current) => ({ ...current, [batch.manifest.batch_id]: checked }))
+            const excluded = confirmedBookingIds.filter((id) => !checked.clients.some((client) => client.bookingId === id && client.status === 'READY')).length
+            batchPending -= excluded
+            if (excluded) setRunStats((current) => current ? { ...current, eligible: current.eligible - excluded, skipped: current.skipped + excluded, pending: current.pending - excluded } : current)
+          },
           onProgress: setProgress,
-          onResult: (result) => setResults((current) => [...current, result]),
+          onResult: (result) => {
+            batchPending -= 1
+            if (result.status === 'DELIVERED') completed += 1
+            else failed += 1
+            setResults((current) => [...current, result])
+            setRunStats((current) => current ? { ...current, completed: current.completed + (result.status === 'DELIVERED' ? 1 : 0), failed: current.failed + (result.status === 'DELIVERED' ? 0 : 1), pending: Math.max(0, current.pending - 1) } : current)
+          },
         })
-        completed += outcome.summary.completedClients
-        failed += outcome.summary.failedClients
       } catch (error) {
         const message = `${batch.manifest.batch_id}: ${error instanceof Error ? error.message : 'Upload failed.'}`
-        failed += 1
+        errors += 1
+        failed += batchPending
+        setRunStats((current) => current ? { ...current, failed: current.failed + batchPending, pending: Math.max(0, current.pending - batchPending) } : current)
         setRunErrors((current) => [...current, message])
       }
     }
     setUploading(false)
+    busy.current = false
+    await checkFolders(detected)
     await loadReports(true)
-    if (failed > 0) {
-      toast.warning('Upload finished with failures', `${completed} client${completed === 1 ? '' : 's'} delivered · ${failed} failed.`)
-    } else {
+    if (failed > 0 || errors > 0) {
+      toast.warning('Upload needs attention', `${completed} client${completed === 1 ? '' : 's'} delivered · ${failed} failed. Review the messages below.`)
+    } else if (completed > 0) {
       toast.success('Upload complete', `${completed} client${completed === 1 ? '' : 's'} delivered to secure storage.`)
+    } else {
+      toast.warning('No clients uploaded', 'The confirmed clients are no longer eligible. Review the updated folder check.')
     }
   }
 
   const selectedClients = detected.reduce((sum, batch) => sum + batch.manifest.clients.length, 0)
   const selectedFiles = detected.reduce((sum, batch) => sum + batch.files.length, 0)
+  const readyClients = Object.values(preflights).reduce((sum, checked) => sum + checked.clients.filter((client) => client.status === 'READY' && (!failedOnly || client.workflowStatus === 'UPLOAD_FAILED')).length, 0)
+  const skippedClients = selectedClients - readyClients
   const percent = progress
     ? progress.bytesTotal > 0
       ? Math.round((progress.bytesDone / progress.bytesTotal) * 100)
@@ -223,6 +279,7 @@ export default function EditorUploadPhotos({
       <input
         ref={input}
         type="file"
+        aria-label="Choose edited batch folder"
         multiple
         className="hidden"
         onChange={(event) => void inspect(pickedFilesFromList(event.target.files || []))}
@@ -246,6 +303,7 @@ export default function EditorUploadPhotos({
         onDrop={(event) => {
           event.preventDefault()
           setDragActive(false)
+          if (busy.current || reading || uploading) return
           setReading(true)
           void pickedFilesFromDrop(event.dataTransfer).then(inspect).catch((error) => {
             setReading(false)
@@ -275,48 +333,51 @@ export default function EditorUploadPhotos({
       </section>
 
       {detected.length > 0 ? (
-        <section className={`${adminPanel} overflow-hidden`}>
+        <section aria-label="Batch upload review" className={`${adminPanel} overflow-hidden`}>
           <div className="flex flex-col gap-4 border-b border-white/[0.08] p-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-caption font-semibold uppercase tracking-wider text-emerald-300">Ready to upload</p>
-              <h2 className="mt-1 text-base font-semibold">
-                {detected.length} batch{detected.length === 1 ? '' : 'es'} · {selectedClients} clients
-              </h2>
+              <h2 className="text-base font-semibold">Review clients before upload</h2>
+              <p className="mt-2 text-sm text-white/65" role="status" aria-live="polite">
+                {selectedClients} total · {readyClients} eligible · {skippedClients} skipped
+              </p>
+              <p className="mt-1 text-sm text-white/65">
+                {detected.length} batch{detected.length === 1 ? '' : 'es'}
+                {initialFailedOnly ? ' · Retry: delivered clients are skipped automatically.' : ''}
+              </p>
               <p className="mt-1 text-caption text-white/35">{selectedFiles} total folder files inspected</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 text-caption text-white/55">
-                <input
-                  type="checkbox"
-                  checked={failedOnly}
-                  onChange={(event) => setFailedOnly(event.target.checked)}
-                  disabled={uploading}
-                  className="accent-[#0500D0]"
-                />
-                Retry failed clients only
-              </label>
+              <label className="flex min-h-11 items-center gap-2 text-sm text-white/65"><input type="checkbox" checked={failedOnly} onChange={(event) => setFailedOnly(event.target.checked)} disabled={uploading || reading} className="accent-[#8FA0FF]" />Retry failed clients only</label>
+              <button type="button" onClick={() => void refreshChecks()} disabled={reading || uploading} className={`${adminBtnGhost} px-4 py-2.5 disabled:opacity-40`}>{reading ? 'Checking clients…' : 'Check clients again'}</button>
               <button
                 type="button"
                 onClick={() => void startUpload()}
-                disabled={uploading}
+                disabled={uploading || reading || readyClients === 0}
                 className={`${adminBtnPrimary} inline-flex items-center gap-2 px-5 py-2.5 disabled:opacity-40`}
               >
                 <UploadCloud className="size-4" />
-                {uploading ? 'Uploading…' : 'Upload edited photos'}
+                {uploading ? 'Uploading…' : `Upload ${readyClients} Eligible Clients`}
               </button>
             </div>
           </div>
           <div className="divide-y divide-white/[0.06]">
             {detected.map((batch) => (
-              <div key={batch.manifest.batch_id} className="grid gap-2 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+              <div key={batch.manifest.batch_id} className="p-4">
                 <div>
                   <p className="text-sm font-semibold">{batch.manifest.shoot_date}</p>
                   <p className="mt-1 font-mono text-caption text-white/30">{batch.manifest.batch_id}</p>
                 </div>
-                <span className="text-caption text-white/40">{batch.manifest.clients.length} clients</span>
-                <span className="inline-flex items-center gap-1.5 text-caption text-emerald-300">
-                  <FileCheck2 className="size-3.5" />Manifest verified
-                </span>
+                {checkErrors[batch.manifest.batch_id] ? <p role="alert" className="mt-3 text-sm text-red-300">{checkErrors[batch.manifest.batch_id]} Use Check clients again.</p> : null}
+                <ul className="mt-3 divide-y divide-white/[0.06]">
+                  {batch.manifest.clients.map((client, index) => {
+                    const checked = preflights[batch.manifest.batch_id]?.clients[index]
+                    const retryExcluded = checked?.status === 'READY' && failedOnly && checked.workflowStatus !== 'UPLOAD_FAILED'
+                    return <li key={index} className="flex min-w-0 flex-col gap-2 py-3 text-sm sm:flex-row sm:justify-between">
+                      <div className="min-w-0 break-words"><p className="font-semibold">{checked?.customerName || (typeof client?.customer_name === 'string' ? client.customer_name : 'Unnamed client')}</p><p className="mt-1 text-white/65">{typeof client?.booking_id === 'string' ? client.booking_id : 'Missing booking ID'} · {checked ? `${checked.expectedFiles} edited photos found` : 'Photos not yet verified'}</p></div>
+                      <div className="min-w-0 sm:max-w-xl sm:text-right"><p className={checked?.status === 'READY' || checked?.status === 'DELIVERED' ? 'text-emerald-300' : 'text-amber-300'}>{retryExcluded ? 'Skipped by retry filter' : checked ? checked.status === 'READY' ? 'Eligible' : checked.status === 'DELIVERED' ? 'Delivered · skipped' : `${checked.status.replace(/_/g, ' ')} · skipped` : reading ? 'Checking…' : 'Not verified · skipped'}</p><p className="mt-1 break-words text-white/65">{retryExcluded ? 'This client has no failed upload to retry. Turn off the retry filter to include it.' : checked?.reason || (checked?.status === 'READY' ? 'Ready to upload. Confirm with the upload button.' : checked?.status === 'DELIVERED' ? 'Already delivered. No files will be uploaded again.' : '')}</p></div>
+                    </li>
+                  })}
+                </ul>
               </div>
             ))}
           </div>
@@ -338,16 +399,16 @@ export default function EditorUploadPhotos({
             </div>
             <span className={`text-2xl font-bold ${runErrors.length ? 'text-red-300' : 'text-[#C4CEFF]'}`}>{percent}%</span>
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.08]">
+          <div role="progressbar" aria-label="Current batch upload" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.08]">
             <div
               className={`h-full rounded-full transition-[width] duration-200 ${runErrors.length ? 'bg-red-400' : 'bg-[#6678FF]'}`}
               style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
             />
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <ProgressCell label="Clients" value={`${progress?.clientsDone || 0} / ${progress?.clientsTotal || 0}`} />
-            <ProgressCell label="Photos" value={`${progress?.filesDone || 0} / ${progress?.filesTotal || 0}`} />
-            <ProgressCell label="Data" value={`${formatBytes(progress?.bytesDone || 0)} / ${formatBytes(progress?.bytesTotal || 0)}`} />
+            <ProgressCell label="Clients" value={runStats ? `${runStats.total} total · ${runStats.eligible} eligible · ${runStats.skipped} skipped` : `${selectedClients} clients inspected`} />
+            <ProgressCell label="Results" value={runStats ? `${runStats.completed} delivered · ${runStats.failed} failed · ${runStats.pending} pending` : 'No upload started'} />
+            <ProgressCell label="Photos" value={progress ? `${progress.filesDone} / ${progress.filesTotal} · ${formatBytes(progress.bytesDone)}` : 'Waiting for server confirmation'} />
           </div>
           {results.length || runErrors.length ? (
             <div className="mt-5 divide-y divide-white/[0.06] overflow-hidden rounded-control border border-white/[0.07]">
@@ -441,7 +502,7 @@ function ProgressCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-control border border-white/[0.07] bg-black/10 p-3">
       <p className="text-caption font-semibold uppercase tracking-wider text-white/25">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
+      <p className="mt-1 break-words text-sm font-semibold">{value}</p>
     </div>
   )
 }

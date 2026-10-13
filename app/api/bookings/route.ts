@@ -46,6 +46,7 @@ import { bookingMutationSchema } from '@/lib/security/schemas'
 import { validateCashDiscountMutation } from '@/lib/studio-cash-discount'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { secureErrorMessage } from '@/lib/security/error-response'
+import { AVAILABILITY_UNAVAILABLE_MESSAGE, BookingAvailabilityUnavailableError, loadDatabaseAvailabilityBookings } from '@/lib/booking-availability-read'
 
 /** Keep slotId in sync with bookingTime so reschedules pass capacity checks. */
 function normalizeBookingSchedule(booking: Booking, isMakeupPackage: boolean): Booking {
@@ -74,9 +75,12 @@ async function loadPackageDefinition(packageId: string): Promise<BookingPackage 
   const fallback = catalogPackage ? { ...catalogPackage, isActive: true } : null
   if (!isSupabaseConfigured()) return fallback
   const admin = getSupabaseAdmin()
-  if (!admin) return null
-  const { data, error } = await admin.from('packages').select('*').eq('id', packageId).maybeSingle()
-  if (error || !data) return null
+  if (!admin) throw new BookingAvailabilityUnavailableError()
+  const { data, error } = await Promise.resolve(
+    admin.from('packages').select('*').eq('id', packageId).maybeSingle(),
+  ).catch(() => { throw new BookingAvailabilityUnavailableError() })
+  if (error) throw new BookingAvailabilityUnavailableError()
+  if (!data) return null
   const mapped = mapDbPackageRow(data as DbPackageRow)
   return {
     id: mapped.id,
@@ -108,46 +112,7 @@ function bookingEmailPayload(result: Booking, booking: Booking) {
 async function loadAvailabilityBookings(): Promise<Booking[]> {
   if (!isSupabaseConfigured()) return listBookings()
 
-  const admin = getSupabaseAdmin()
-  if (!admin) return []
-
-  const [bookingsResult, packagesResult] = await Promise.all([
-    admin
-      .from('bookings')
-      .select('id, booking_date, slot_id, package_id, booking_status, booking_time')
-      .order('created_at', { ascending: false }),
-    admin.from('packages').select('id, slot_type'),
-  ])
-
-  if (bookingsResult.error || !bookingsResult.data) return []
-
-  const packageSlotTypes = new Map<string, 'makeup' | 'standard'>(
-    (packagesResult.data ?? []).map((pkg) => [
-      String(pkg.id),
-      pkg.slot_type === 'makeup' ? 'makeup' : 'standard',
-    ]),
-  )
-
-  return bookingsResult.data.map((b) => ({
-    id: String(b.id),
-    customerName: '',
-    customerEmail: '',
-    customerPhone: '',
-    customerFbLink: '',
-    customerFbName: '',
-    packageId: String(b.package_id),
-    packageSlotType: packageSlotTypes.get(String(b.package_id)),
-    packageName: '',
-    bookingDate: String(b.booking_date),
-    bookingTime: String(b.booking_time ?? ''),
-    slotId: b.slot_id ? String(b.slot_id) : undefined,
-    depositAmount: 0,
-    price: 0,
-    bookingStatus: b.booking_status as Booking['bookingStatus'],
-    paymentStatus: 'Unpaid',
-    createdAt: '',
-    paymentHistory: [],
-  }))
+  return loadDatabaseAvailabilityBookings(getSupabaseAdmin())
 }
 
 async function notifyNewBooking(booking: Booking) {
@@ -477,6 +442,9 @@ export async function POST(request: Request) {
     return NextResponse.json(responseBody, { status: isExisting ? 200 : 201 })
   } catch (error) {
     console.error('POST /api/bookings', error)
+    if (error instanceof BookingAvailabilityUnavailableError) {
+      return NextResponse.json({ error: AVAILABILITY_UNAVAILABLE_MESSAGE }, { status: 503 })
+    }
     return NextResponse.json({ error: 'Failed to save booking.' }, { status: 500 })
   }
 }
