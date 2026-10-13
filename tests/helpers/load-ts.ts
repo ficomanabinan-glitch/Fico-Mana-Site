@@ -8,6 +8,8 @@ import * as portalPagePayload from '../../lib/portal-page-payload.ts'
 import * as portalDevice from '../../lib/security/portal-device.ts'
 import * as editorReadValidation from '../../lib/editor-read-validation.ts'
 import * as bookingWritePayload from '../../lib/booking-write-payload.ts'
+import * as editorBatchMembership from '../../lib/editor-batch-membership.ts'
+import * as bookingAvailabilityRead from '../../lib/booking-availability-read.ts'
 
 const require = createRequire(import.meta.url)
 
@@ -28,9 +30,11 @@ export function loadTs<T>(path: string, stubs: Record<string, unknown>, source?:
     if (name === '@/lib/security/portal-device') return portalDevice
     if (name === '@/lib/editor-read-validation') return editorReadValidation
     if (name === './booking-write-payload.ts') return bookingWritePayload
+    if (name === '@/lib/editor-batch-membership') return editorBatchMembership
+    if (name === '@/lib/booking-availability-read') return bookingAvailabilityRead
     // The shared read notice has no external boundary; run its actual JSX unchanged.
     if (name === '@/components/staff-read-notice') return loadTs('components/staff-read-notice.tsx', {})
-    if (name.startsWith('node:') || ['react', 'react/jsx-runtime', 'lucide-react'].includes(name)) return require(name)
+    if (name.startsWith('node:') || ['react', 'react/jsx-runtime', 'lucide-react', 'zod'].includes(name)) return require(name)
     throw new Error(`Unstubbed dependency: ${name}`)
   }
   new Function('require', 'module', 'exports', output)(boundaryRequire, loadedModule, loadedModule.exports)

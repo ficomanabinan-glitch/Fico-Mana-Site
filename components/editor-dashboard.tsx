@@ -299,7 +299,7 @@ export default function EditorDashboard() {
                       <p className="text-base font-semibold">{dayLabel(batch.shootDate)}</p>
                       <p className="mt-1 font-mono text-caption text-white/30">{batch.id}</p>
                       <p className="mt-2 text-caption text-white/65">
-                        {batch.totalClients} client{batch.totalClients === 1 ? '' : 's'} · {batch.counts.readyForEditing} pending download · {batch.counts.downloaded + batch.counts.editing + batch.counts.readyToUpload + batch.counts.uploading} downloaded
+                        {batch.totalClients} total client{batch.totalClients === 1 ? '' : 's'} · {batch.activeClients ?? batch.totalClients} active · {batch.attentionClients ?? 0} require attention · {batch.counts.readyForEditing} pending download
                       </p>
                     </div>
                     <div>

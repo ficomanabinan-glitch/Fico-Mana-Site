@@ -6,47 +6,7 @@ import { toAvailability } from '@/lib/auth-api'
 import type { Booking } from '@/lib/data-store'
 import { getSlotId } from '@/lib/booking-slots'
 import { usesMakeupSlots } from '@/lib/booking-packages'
-
-function mapDbBookingToAvailability(
-  b: Record<string, unknown>,
-  packageSlotTypes: Map<string, 'makeup' | 'standard'>,
-) {
-  const packageId = String(b.package_id)
-  const draft = {
-    id: String(b.id),
-    bookingDate: String(b.booking_date),
-    slotId: b.slot_id ? String(b.slot_id) : undefined,
-    bookingTime: b.booking_time ? String(b.booking_time) : '',
-    packageId,
-    packageSlotType: packageSlotTypes.get(packageId),
-    bookingStatus: String(b.booking_status) as Booking['bookingStatus'],
-    customerName: '',
-    customerEmail: '',
-    customerPhone: '',
-    customerFbLink: '',
-    customerFbName: '',
-    packageName: '',
-    depositAmount: 0,
-    price: 0,
-    paymentStatus: 'Unpaid' as const,
-    createdAt: '',
-    paymentHistory: [],
-  } satisfies Booking
-
-  // Resolve slot from time when slot_id is missing (imported / legacy rows)
-  const resolvedSlotId =
-    usesMakeupSlots(draft.packageId, draft.packageSlotType) ? getSlotId(draft) ?? draft.slotId : draft.slotId
-
-  return toAvailability({
-    id: draft.id,
-    bookingDate: draft.bookingDate,
-    slotId: resolvedSlotId,
-    bookingTime: draft.bookingTime,
-    packageId: draft.packageId,
-    packageSlotType: draft.packageSlotType,
-    bookingStatus: draft.bookingStatus,
-  })
-}
+import { AVAILABILITY_UNAVAILABLE_MESSAGE, loadDatabaseAvailabilityBookings } from '@/lib/booking-availability-read'
 
 function bookingToAvailability(b: Booking) {
   const resolvedSlotId = usesMakeupSlots(b.packageId, b.packageSlotType) ? getSlotId(b) ?? b.slotId : b.slotId
@@ -74,38 +34,15 @@ export async function GET() {
       )
     }
 
-    const admin = getSupabaseAdmin()
-    if (!admin) {
-      return NextResponse.json({ error: 'This service is temporarily unavailable. Try: refresh the page, or contact your administrator.' }, { status: 500 })
-    }
-
-    const [bookingsResult, packagesResult] = await Promise.all([
-      admin
-        .from('bookings')
-        .select('id, booking_date, slot_id, booking_time, package_id, booking_status')
-        .order('created_at', { ascending: false }),
-      admin.from('packages').select('id, slot_type'),
-    ])
-
-    if (bookingsResult.error || !bookingsResult.data) {
-      return NextResponse.json([])
-    }
-
-    const packageSlotTypes = new Map<string, 'makeup' | 'standard'>(
-      (packagesResult.data ?? []).map((pkg) => [
-        String(pkg.id),
-        pkg.slot_type === 'makeup' ? 'makeup' : 'standard',
-      ]),
-    )
-
+    const bookings = await loadDatabaseAvailabilityBookings(getSupabaseAdmin())
     return NextResponse.json(
-      bookingsResult.data.map((booking, index) => ({
-        ...mapDbBookingToAvailability(booking, packageSlotTypes),
+      bookings.map((booking, index) => ({
+        ...bookingToAvailability(booking),
         id: `availability-${index + 1}`,
       })),
     )
   } catch (error) {
     console.error('GET /api/bookings/availability', error)
-    return NextResponse.json({ error: 'Failed to load availability' }, { status: 500 })
+    return NextResponse.json({ error: AVAILABILITY_UNAVAILABLE_MESSAGE }, { status: 503 })
   }
 }

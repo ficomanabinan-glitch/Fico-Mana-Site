@@ -60,6 +60,14 @@ export default function EditorQueue({basePath='/admin/filtering',initialSearch='
   return <div className="space-y-5">
     {heading}
     {recovery}
+    {visible.filter(batch => (batch.attentionClients ?? 0) > 0).map(batch => (
+      <section key={`attention-${batch.id}`} className={`${adminPanel} p-4`} aria-label={`Clients requiring attention in ${batch.id}`}>
+        <h2 className="text-base font-semibold">{dayLabel(batch.shootDate)} · {batch.totalClients} total clients</h2>
+        <p className="mt-2 text-sm text-white/65">{batch.activeClients ?? batch.totalClients} active · {batch.attentionClients} require attention. These clients remain part of the batch history.</p>
+        <ul className="mt-3 space-y-2 text-sm">{batch.clients.filter(client => client.attentionReason).map(client => <li key={client.bookingId} className="break-words"><span className="font-semibold">{client.clientName}</span> — {client.attentionReason}</li>)}</ul>
+        <Link href={`${basePath}/batch/${encodeURIComponent(batch.id)}`} className={`${adminBtnGhost} mt-3 inline-flex min-h-11 items-center px-3`}>Review batch clients</Link>
+      </section>
+    ))}
     <div className={`${adminPanel} grid min-w-0 gap-4 p-4 2xl:grid-cols-[minmax(16rem,1fr)_auto]`}>
       <div className="relative min-w-0"><Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/55"/><input aria-label="Search editing batches" value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Search client, booking, date, batch ID, or package…" className={`${adminInput} pl-11`}/></div>
       <label className="grid gap-2 sm:hidden"><span className="text-caption font-semibold uppercase tracking-wider text-white/60">Editing stage</span><select value={filter} onChange={event=>setFilter(event.target.value as StatusFilter)} className={adminInput}>{stageOptions.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>

@@ -8,6 +8,8 @@ export type EditorBatchClient = {
   packageName: string
   status: string
   selectedCount: number
+  attentionReason?: string | null
+  uploadEligibility?: string
 }
 
 export type EditorBatchSummary = {
@@ -17,6 +19,9 @@ export type EditorBatchSummary = {
   locationKey: string
   status: string
   totalClients: number
+  activeClients?: number
+  attentionClients?: number
+  downloadEligibleClients?: number
   totalSelectedPhotos: number
   counts: {
     waitingForSelection: number

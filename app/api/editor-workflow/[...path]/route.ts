@@ -24,6 +24,7 @@ import {
   getWorkflowMembers,
   refreshRawFiles,
   prepareBatchDownload,
+  preflightBatchUpload,
   prepareBatchCollectionDownload,
   preparePortalDeliverables,
   preparePortalRawPhotos,
@@ -52,7 +53,8 @@ import { validateJpegThumbnailContent, validatePhotographyFileContent } from '@/
 import {
   clientSelectionStatusSchema,
   editorBatchUploadFinalizeSchema,
-  editorBatchUploadStartSchema,
+  editorBatchUploadStartSchema as batchUploadStartSchema,
+  editorBatchPreflightSchema as batchPreflightSchema,
   editorClientUploadFinalizeSchema,
   editorJobStatusSchema,
   editorUploadCompleteSchema,
@@ -63,6 +65,7 @@ import {
 } from '@/lib/security/schemas'
 import { recordSecurityAuditEvent } from '@/lib/security/security-audit'
 import { scanUpload } from '@/lib/security/upload-scanner'
+
 import { rejectUntrustedMutation } from '@/lib/security/request-security'
 import { startRawUpload, completeRawUpload } from '@/lib/raw-upload-server'
 import { rawUploadMetadataSchema, rawUploadCompleteSchema, RawUploadError } from '@/lib/raw-upload-contract'
@@ -457,12 +460,19 @@ async function handle(request: NextRequest, path: string[]) {
           : []
         return json(await recordMatchReviews(workspaceId, batchId, folders, actorId))
       }
+      if (path[2] === 'preflight' && path.length === 3 && method === 'POST') {
+        const denied = requireCapability('edit')
+        if (denied) return denied
+        const parsed = batchPreflightSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return json({ error: 'Choose valid client folders to check.' }, 400)
+        return json(await preflightBatchUpload(workspaceId, batchId, parsed.data.clients, parsed.data.workspaceId))
+      }
       if (path[2] === 'start-upload' && method === 'POST') {
         const denied = requireCapability('edit')
         if (denied) return denied
-        const parsed = editorBatchUploadStartSchema.safeParse(await request.json().catch(() => null))
+        const parsed = batchUploadStartSchema.safeParse(await request.json().catch(() => null))
         if (!parsed.success) return json({ error: 'The batch details are incomplete. Try: select the downloaded batch folder again.' }, 400)
-        return json(await createBatchUploadRun(workspaceId, batchId, parsed.data.clients, actorId))
+        return json(await createBatchUploadRun(workspaceId, batchId, parsed.data.clients, actorId, parsed.data.workspaceId))
       }
       if (path[2] === 'upload-session' && method === 'POST') {
         const denied = requireCapability('edit')
