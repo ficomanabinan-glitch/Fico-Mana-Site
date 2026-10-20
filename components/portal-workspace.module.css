@@ -832,6 +832,23 @@
   color: var(--portal-ink);
 }
 
+/* This nested portal is a sheet body, not the full-page portal. Keep these
+   overrides more specific than the page's visible overflow and viewport floor. */
+.overviewContent.portal {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-bottom: max(28px, env(safe-area-inset-bottom, 0px));
+  scrollbar-width: thin;
+  scrollbar-color: var(--portal-muted) transparent;
+}
+
+.overviewContent.portal:focus-visible {
+  outline: 2px solid var(--portal-focus);
+  outline-offset: -2px;
+}
+
 @keyframes selection-stamp {
   from {
     opacity: 0;
