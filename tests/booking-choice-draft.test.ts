@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFile } from 'node:fs/promises'
 import { BOOKING_CHOICE_DRAFT_KEY as key, BOOKING_CHOICE_DRAFT_TTL as ttl, readBookingChoiceDraft, saveBookingChoiceDraft, clearBookingChoiceDraft } from '../lib/booking-choice-draft.ts'
 
 const now = Date.parse('2026-10-02T01:00:00Z')
+
+test('booking saves safe choices automatically without a remember checkbox and clears on success', async () => {
+  const source = await readFile('components/booking.tsx', 'utf8')
+  assert.doesNotMatch(source, /rememberChoices|setRememberChoices|Remember only my package/)
+  assert.match(source, /if \(step === 6\) \{ clearBookingChoiceDraft\(window\.localStorage\); return \}/)
+  assert.match(source, /if \(selectedSession\) saveBookingChoiceDraft\(window\.localStorage, \{ packageId: selectedSession\.id, date: dateKey \|\| null \}\)/)
+})
 function storage(raw: string | null = null) {
   const map = new Map<string,string>(raw ? [[key, raw]] : [])
   return { map, getItem: (name: string) => map.get(name) ?? null, setItem: (name: string, value: string) => { map.set(name,value) }, removeItem: (name: string) => { map.delete(name) } }

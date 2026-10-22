@@ -173,7 +173,6 @@ function BookingForm() {
   const [formError, setFormError] = useState('')
   const [choiceDraft, setChoiceDraft] = useState<BookingChoiceDraft | null>(null)
   const [draftChecked, setDraftChecked] = useState(false)
-  const [rememberChoices, setRememberChoices] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadedReceiptRef = useRef<{
     bookingId: string
@@ -262,10 +261,10 @@ function BookingForm() {
   useEffect(() => {
     if (!draftChecked) return
     try {
-      if (step === 6 || !rememberChoices) { clearBookingChoiceDraft(window.localStorage); return }
+      if (step === 6) { clearBookingChoiceDraft(window.localStorage); return }
       if (selectedSession) saveBookingChoiceDraft(window.localStorage, { packageId: selectedSession.id, date: dateKey || null })
     } catch { /* Booking remains usable when browser storage is unavailable. */ }
-  }, [draftChecked, rememberChoices, selectedSession, dateKey, step])
+  }, [draftChecked, selectedSession, dateKey, step])
   const resumeDraft = () => {
     if (!choiceDraft) return
     let currentDraft: BookingChoiceDraft | null = null
@@ -553,7 +552,6 @@ function BookingForm() {
           <div className="mt-3 flex flex-wrap gap-3"><button type="button" disabled={packagesLoading || !!packagesError || !packages.some(pkg => pkg.id === choiceDraft.packageId)} onClick={resumeDraft} className={btnPrimaryClass}>Resume choices</button><button type="button" onClick={discardDraft} className={btnBackClass}>Discard</button></div>
           {!packagesLoading && !packagesError && !packages.some(pkg => pkg.id === choiceDraft.packageId) && <p className="mt-3 text-public-muted">That package is no longer available. Discard these choices and choose a current package.</p>}
         </section>}
-        {step === 1 && <label className="mb-5 flex min-h-11 items-start gap-3 text-sm leading-6 text-public-muted"><input type="checkbox" checked={rememberChoices} onChange={event => { setRememberChoices(event.target.checked); if (!event.target.checked) discardDraft() }} className="mt-1 size-5 shrink-0 accent-primary"/><span>Remember only my package and date on this device for one hour. No contact or payment details.</span></label>}
 
         <div className="min-h-[min(62vh,640px)] flex flex-col">
         {/* Step 1 — Package */}
