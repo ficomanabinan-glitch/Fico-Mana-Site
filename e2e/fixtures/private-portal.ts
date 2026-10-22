@@ -19,6 +19,7 @@ type SelectionPayload = {
   printAllocations: Array<Omit<ClientSelection['printAllocations'][number], 'label'>>; addons: unknown[]; acknowledgeNoRevision: boolean
 }
 type PortalFixture = {
+  extraEdit: (category: 'capping-pinning' | 'graduation') => void
   mode: (mode: 'selection' | 'downloads') => void
   expire: (value: boolean) => void
   selectionPosts: SelectionPayload[]
@@ -26,21 +27,23 @@ type PortalFixture = {
   requests: Array<{ method: string; path: string; query: string; status: number }>
 }
 
-function portalData(submitted: boolean, pending: boolean, enhanced: boolean): PortalData {
-  const gallery = PRIVATE_PHOTO_IDS.map((id, i) => ({ id, fileName: `SYNTHETIC-${String(i + 1).padStart(2, '0')}.JPG`, mimeType: 'image/jpeg', previewUrl: previewPath }))
+function portalData(submitted: boolean, pending: boolean, enhanced: boolean, extraCategory?: 'capping-pinning' | 'graduation'): PortalData {
+  const includedCount = extraCategory === 'capping-pinning' ? 2 : 5
+  const photoIds = extraCategory ? Array.from({ length: includedCount + 1 }, (_, i) => `88888888-8888-4888-8888-${String(i + 1).padStart(12, '0')}`) : PRIVATE_PHOTO_IDS
+  const gallery = photoIds.map((id, i) => ({ id, fileName: `SYNTHETIC-${String(i + 1).padStart(2, '0')}.JPG`, mimeType: 'image/jpeg', previewUrl: previewPath }))
   return {
-    booking: { id: PRIVATE_BOOKING_ID, customerName: PRIVATE_CLIENT_NAME, packageName: 'Synthetic FICO Package', packageCategory: 'graduation',
+    booking: { id: PRIVATE_BOOKING_ID, customerName: PRIVATE_CLIENT_NAME, packageName: 'Synthetic FICO Package', packageCategory: extraCategory || 'graduation',
       bookingDate: '2026-10-01', bookingTime: '8:00 AM – 4:00 PM', bookingStatus: 'Confirmed', paymentStatus: 'Paid Deposit', price: 3500, depositAmount: 500, amountPaid: 500 },
     portalId: PRIVATE_PORTAL_ID, shareUrl: `http://127.0.0.1:3200/portal/${PRIVATE_PORTAL_ID}`,
     expiry: { days: 30, portalReadyEmailSentAt: '2026-10-01T01:00:00Z', deliverablesUploadedAt: enhanced ? '2026-10-01T03:00:00Z' : null, expiresAt: enhanced ? '2026-10-31T03:00:00Z' : null },
-    selection: { id: '99999999-9999-4999-8999-999999999999', status: submitted ? 'SUBMITTED' : 'OPEN', requiredCount: 5, includedLimit: 5,
+    selection: { id: '99999999-9999-4999-8999-999999999999', status: submitted ? 'SUBMITTED' : 'OPEN', requiredCount: includedCount, includedLimit: includedCount,
       clientStatus: submitted ? 'submitted' : 'selecting', noRevisionAcknowledged: true,
       submittedAt: submitted ? '2026-10-01T04:00:00Z' : null, reopenedAt: null, rawUploadGeneration: 0,
-      selectedIds: PRIVATE_PHOTO_IDS, selectedItems: PRIVATE_PHOTO_IDS.map(fileId => ({ fileId, preference: 'standard', extraEdit: false })),
-      printAllocations: PRIVATE_PRINT_CATEGORIES.map(category => ({ category, fileId: PRIVATE_PHOTO_IDS[0], quantity: 1, label: category })),
+      selectedIds: photoIds, selectedItems: photoIds.map((fileId, i) => ({ fileId, preference: 'standard', extraEdit: Boolean(extraCategory && i >= includedCount) })),
+      printAllocations: PRIVATE_PRINT_CATEGORIES.filter(category => extraCategory !== 'capping-pinning' || category !== 'WALLET_SIZE').map(category => ({ category, fileId: PRIVATE_PHOTO_IDS[0], quantity: 1, label: category })),
       addonOrders: [], totalAddonAmount: 0 },
-    gallery, selectedGallery: gallery, galleryTotal: 5, rawDownloadBytes: 26_214_400, galleryOffset: 0, galleryLimit: 48,
-    editingStatus: enhanced ? 'DELIVERED' : submitted ? 'READY_FOR_EDITING' : 'WAITING_FOR_SELECTION', addonCatalog: [],
+    gallery, selectedGallery: gallery, galleryTotal: gallery.length, rawDownloadBytes: 26_214_400, galleryOffset: 0, galleryLimit: 48,
+    editingStatus: enhanced ? 'DELIVERED' : submitted ? 'READY_FOR_EDITING' : 'WAITING_FOR_SELECTION', addonCatalog: extraCategory ? [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab', name: 'Extra Edit', description: 'Synthetic extra edit', price: 400, pricingType: 'per_photo', maxQuantity: 200 }] : [],
     deliverables: enhanced ? [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fileName: 'SYNTHETIC-ENHANCED.JPG', mimeType: 'image/jpeg', fileSize: 1024, publishedAt: '2026-10-01T03:00:00Z', previewUrl: previewPath }] : [],
     resources: [], downloadAllUrl: `${root}/deliverables-folder`,
     rawDownloadAllUrl: submitted && !enhanced ? `${root}/raw-photos-folder` : null,
@@ -55,6 +58,8 @@ export const test = base.extend<{ privatePortal: PortalFixture }>({
     if (new URL(baseURL!).origin !== 'http://127.0.0.1:3200') throw new Error('Private portal fixtures require the owned isolated port3200.')
     await page.clock.install({ time: new Date('2026-10-01T04:00:00Z') })
     let mode: 'selection' | 'downloads' = 'selection', submitted = false, pending = false, expired = false
+    let extraCategory: 'capping-pinning' | 'graduation' | undefined
+    const data = () => portalData(submitted || mode === 'downloads', pending, mode === 'downloads', extraCategory)
     const selectionPosts: SelectionPayload[] = [], requestPosts: Array<{ reason: string }> = [], requests: PortalFixture['requests'] = []
     const violations: string[] = [], errors: string[] = [], expectedResourceErrors: string[] = []
     const expectedFailures = new Set<string>()
@@ -87,7 +92,7 @@ export const test = base.extend<{ privatePortal: PortalFixture }>({
       if (method === 'GET' && url.pathname === root) {
         // The repaired typed expiry contract exposes only safe recovery guidance.
         if (expired) { await reply({ error: 'This client portal has expired. Try: contact FICO MANA to request access again.', code: 'PORTAL_EXPIRED', requestId: 'synthetic-expired-read' }, 410); return }
-        await reply(portalData(submitted || mode === 'downloads', pending, mode === 'downloads')); return
+        await reply(data()); return
       }
       if (method === 'GET' && url.pathname === `${root}/photo-revision`) {
         if (expired) { await reply({ error: 'This client portal has expired.', code: 'PORTAL_EXPIRED' }, 410); return }
@@ -115,7 +120,7 @@ export const test = base.extend<{ privatePortal: PortalFixture }>({
       await route.fulfill({ status: 405, json: { error: 'This fixture prohibits unlisted API, file, download and grant calls.' } })
     })
     try {
-      await provide({ mode: value => { mode = value }, expire: value => { expired = value }, selectionPosts, requestPosts, requests })
+      await provide({ extraEdit: value => { extraCategory = value }, mode: value => { mode = value }, expire: value => { expired = value }, selectionPosts, requestPosts, requests })
     } finally {
       await testInfo.attach('private-portal-intercepted-evidence', { body: JSON.stringify({ requests,
         // Synthetic PINs are not customer secrets, but raw evidence need not publish them.

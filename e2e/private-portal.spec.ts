@@ -43,6 +43,8 @@ for (const width of widths) {
       await test.step('success is locked and no download is started', async () => {
         const prompt = page.getByRole('dialog', { name: 'Selection submitted', exact: true })
         await expect(prompt).toBeVisible()
+        const portalFont = await page.getByRole('heading', { name: 'Your submitted choices', exact: true, includeHidden: true }).evaluate(element => getComputedStyle(element).fontFamily.split(',')[0])
+        await expect.poll(() => prompt.getByRole('heading', { name: 'Selection submitted', exact: true }).evaluate(element => getComputedStyle(element).fontFamily.split(',')[0])).toBe(portalFont)
         await expect(prompt.getByRole('button', { name: 'Download Photos', exact: true })).toBeEnabled()
         const later = prompt.getByRole('button', { name: 'Maybe Later', exact: true })
         await later.focus(); await expect(later).toBeFocused(); await page.keyboard.press('Enter')

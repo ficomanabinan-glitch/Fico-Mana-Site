@@ -69,12 +69,13 @@ function money(value: number) {
 }
 
 function printsAreComplete(
-  choices: { included: string[]; printSelections: Partial<Record<PrintCategory, string>>; walletSelections: string[] },
+  choices: { included: string[]; extras: string[]; printSelections: Partial<Record<PrintCategory, string>>; walletSelections: string[] },
   printOptions: ReturnType<typeof portalPrintOptions>,
 ) {
   const requiresWallet = printOptions.some(option => option.category === 'WALLET_SIZE')
-  return printOptions.filter(option => option.category !== 'WALLET_SIZE').every(option => choices.included.includes(choices.printSelections[option.category] || '')) &&
-    (!requiresWallet || (choices.walletSelections.length >= 1 && choices.walletSelections.length <= 4 && choices.walletSelections.every(id => choices.included.includes(id))))
+  const selected = [...choices.included, ...choices.extras]
+  return printOptions.filter(option => option.category !== 'WALLET_SIZE').every(option => selected.includes(choices.printSelections[option.category] || '')) &&
+    (!requiresWallet || (choices.walletSelections.length >= 1 && choices.walletSelections.length <= 4 && choices.walletSelections.every(id => selected.includes(id))))
 }
 
 export function ClientPhotoSelection({
@@ -237,7 +238,7 @@ export function ClientPhotoSelection({
   const chosenAddonIds = Object.entries(addonQuantities).filter(([, quantity]) => quantity > 0).map(([id]) => id)
   const addonTypeCount = chosenAddonIds.length + (extras.length > 0 ? 1 : 0)
   const photosComplete = included.length === includedLimit && Boolean(editingPreference)
-  const printsComplete = printsAreComplete({ included, printSelections, walletSelections }, printOptions)
+  const printsComplete = printsAreComplete({ included, extras, printSelections, walletSelections }, printOptions)
   const addonsComplete = addonTypeCount <= 4 && chosenAddonIds.every(id => {
     const addon = addons.find(item => item.id === id)
     return Boolean(addon && !addonPhotoError(addon, addonPhotos[id] || [], [...included, ...extras]))
@@ -295,13 +296,13 @@ export function ClientPhotoSelection({
     setMessage('')
     if (included.includes(fileId) || extras.includes(fileId)) {
       setAddonPhotos(current => Object.fromEntries(Object.entries(current).map(([id, photos]) => [id, photos.filter(photo => photo !== fileId)])))
+      setPrintSelections((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => id !== fileId)))
+      setWalletSelections(current => current.filter(id => id !== fileId))
     }
     if (included.includes(fileId)) {
       // Keep ordered selection: the earliest extra fills a vacated included slot.
       setIncluded([...included.filter(id => id !== fileId), ...extras.slice(0, 1)])
       setExtras(extras.slice(1))
-      setPrintSelections((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => id !== fileId)))
-      setWalletSelections(current => current.filter(id => id !== fileId))
       return
     }
     if (extras.includes(fileId)) {
@@ -465,7 +466,7 @@ export function ClientPhotoSelection({
         </div>
         <PortalPhotoContactSheet publicId={publicId} canDownloadIndividual={!sampleMode} gallery={gallery} galleryTotal={galleryTotal} selectedFiles={selectedFiles} filter={galleryFilter} onFilter={setGalleryFilter} included={included} extras={extras} includedLimit={includedLimit} extraPrice={extraEditAddon?.price || 0} activeFile={activeFile} locked={locked || submitting || draftFinished} photosComplete={photosComplete} loadingMore={loadingMore} showPhotoTip={showPhotoTip} onDismissPhotoTip={() => setShowPhotoTip(false)} onFocus={setActiveFileId} onToggle={togglePhoto} onPreview={setPreviewFile} onLoadMore={onLoadMore} onContinue={continueWorkflow} />
       </> : null}
-      {step === 'prints' ? <PortalPrintPicker files={included.map(selectedPhoto)} options={printOptions} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
+      {step === 'prints' ? <PortalPrintPicker files={selectedFiles} options={printOptions} printSelections={printSelections} walletSelections={walletSelections} locked={locked || submitting || draftFinished} complete={printsComplete} onPrint={(category, id) => setPrintSelections(current => ({ ...current, [category]: id }))} onWallet={setWalletSelections} onWarning={setMessage} onBack={() => setStep('photos')} onContinue={() => setStep('addons')} /> : null}
 
       {step === 'addons' ? <PortalAddonPicker addons={optionalAddons} files={selectedAll.map(selectedPhoto)} quantities={addonQuantities} assignments={addonPhotos} locked={locked || submitting || draftFinished} typeCount={addonTypeCount} extraCount={extras.length} extraPrice={extraEditAddon?.price || 0} total={addonTotal} complete={addonsComplete} onToggle={toggleAddon} onQuantity={(id, quantity) => setAddonQuantities(current => ({ ...current, [id]: quantity }))} onPhotos={(id, photos) => setAddonPhotos(current => ({ ...current, [id]: photos }))} onWarning={setMessage} onBack={() => setStep('prints')} onContinue={() => setStep('review')} /> : null}
 
@@ -498,7 +499,7 @@ export function ClientPhotoSelection({
     <Sheet open={downloadPromptOpen} onOpenChange={setDownloadPromptOpen}>
       {downloadPromptOpen ? <SheetContent side="bottom" className="client-portal gap-0 rounded-t-[20px] border-white/[0.12] bg-[#181819] p-5 text-white sm:mx-auto sm:max-w-lg" overlayClassName="bg-black/70">
         <SheetHeader className="pr-10 text-left">
-          <SheetTitle className="text-lg font-semibold text-white">Selection submitted</SheetTitle>
+          <SheetTitle className="font-sans text-lg font-semibold text-white">Selection submitted</SheetTitle>
           <SheetDescription className="mt-2 text-sm leading-relaxed text-white/65">Download all originals as a ZIP now, or choose Maybe Later. You can also download individual photos from your portal.</SheetDescription>
         </SheetHeader>
         {!downloadUrl ? <p role="status" className="mt-5 text-sm text-white/65">Your download is being prepared. It will appear below your selection when available.</p> : null}

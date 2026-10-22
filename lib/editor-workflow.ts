@@ -1462,8 +1462,8 @@ export async function submitPhotoSelection(publicId: string, input: PortalSelect
       if (allocationKeys.has(allocationKey)) {
         throw new PortalSelectionError('The same photo cannot be assigned twice in one print category.', 'SELECTION_INVALID', 400)
       }
-      if (!included.includes(allocation.fileId)) {
-        throw new PortalSelectionError('Free print allocations must use an included enhanced photo.', 'SELECTION_INVALID', 400)
+      if (!unique.includes(allocation.fileId)) {
+        throw new PortalSelectionError('Free print allocations must use a selected photo.', 'SELECTION_INVALID', 400)
       }
       const validWalletQuantity = allocation.category === 'WALLET_SIZE' && (allocation.quantity === 1 || (walletAllocations.length === 1 && allocation.quantity === 4))
       if ((allocation.category !== 'WALLET_SIZE' && allocation.quantity !== PRINT_CATEGORY_LIMITS[allocation.category]) || (allocation.category === 'WALLET_SIZE' && !validWalletQuantity)) {

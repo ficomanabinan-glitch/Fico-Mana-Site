@@ -68,7 +68,7 @@ test('actual selection controller preserves deterministic ordering, live prices,
   assert.deepEqual(f.photos().included,['1','2','3','4','5'])
   assert.deepEqual(f.photos().extras,['6'])
   f.step('Free Prints')
-  assert.deepEqual(f.prints().files.map(file=>file.id),['1','2','3','4','5'])
+  assert.deepEqual(f.prints().files.map(file=>file.id),['1','2','3','4','5','6'])
   for(const category of ['TOGA_PICTURE_4R','ALAMPAY_BARONG_4R','FRAME_8R'] as const)f.prints().onPrint(category,'1')
   f.prints().onWallet(['1','2']);f.render();assert.equal(f.prints().complete,true)
   f.step('Add-ons');f.addons().onToggle(addons[1]);f.render()
@@ -78,6 +78,19 @@ test('actual selection controller preserves deterministic ordering, live prices,
   f.step('Photos');f.photos().onToggle('6');f.render();f.step('Add-ons')
   assert.deepEqual(f.addons().assignments.frame,[],'Deselecting a photo clears its assignments')
   assert.equal(f.addons().complete,false)
+})
+
+test('extra edits can fill every print type, while deselection clears their allocations', t => {
+  browser(t); const f = setup(ready); t.after(f.unmount)
+  f.step('Free Prints')
+  for (const category of ['TOGA_PICTURE_4R', 'ALAMPAY_BARONG_4R', 'FRAME_8R'] as const) f.prints().onPrint(category, '5')
+  f.prints().onWallet(['5']); f.render()
+  assert.equal(f.prints().complete, true)
+  assert.equal(f.pricing.total, 400)
+  f.step('Photos'); f.photos().onToggle('5'); f.render(); f.step('Free Prints')
+  assert.deepEqual(f.prints().printSelections, {})
+  assert.deepEqual(f.prints().walletSelections, [])
+  assert.equal(f.prints().complete, false)
 })
 
 test('PIN confirmation shows balance, clears PIN on cancel and failure, and preserves exact choices for retry', async t=>{

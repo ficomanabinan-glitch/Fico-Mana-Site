@@ -11,7 +11,7 @@ export const PORTAL_PRINT_OPTIONS: Array<{ category: PortalPrintCategory; title:
   { category: 'TOGA_PICTURE_4R', title: 'Toga picture', subtitle: '4R Size Printed / FREE', max: 1 },
   { category: 'ALAMPAY_BARONG_4R', title: 'Alampay / Barong', subtitle: '4R Size Printed / FREE', max: 1 },
   { category: 'FRAME_8R', title: 'Frame', subtitle: '8R Size Printed / FREE', max: 1 },
-  { category: 'WALLET_SIZE', title: 'Wallet size', subtitle: '4 Copies / FREE · Choose one to four different included photos', max: 4 },
+  { category: 'WALLET_SIZE', title: 'Wallet size', subtitle: '4 Copies / FREE · Choose one to four different selected photos', max: 4 },
 ]
 export function portalPrintOptions(category: string) {
   const included = includedPrintCategories(category)
@@ -52,7 +52,7 @@ export default function PortalPrintPicker({ files, options = PORTAL_PRINT_OPTION
             if (option.max === 1) { onPrint(option.category, selected.includes(id) ? '' : id); return }
             if (selected.includes(id)) onWallet(selected.filter(value => value !== id))
             else if (selected.length < 4) onWallet([...selected, id])
-            else onWarning('Wallet Size allows up to four different included photos. Remove one before choosing another.')
+            else onWarning('Wallet Size allows up to four different selected photos. Remove one before choosing another.')
           }} />
         </fieldset>
       })}</div>

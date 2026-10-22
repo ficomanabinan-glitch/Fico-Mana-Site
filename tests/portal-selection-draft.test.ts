@@ -9,6 +9,13 @@ function storage() {
 const key = portalDraftKey('portal-a', 'selection-a', null, 5)
 const choices: PortalDraftChoices = { included: ['photo-1', 'photo-2'], extras: ['photo-extra'], editingPreference: 'less', printSelections: { TOGA_PICTURE_4R: 'photo-1' }, walletSelections: ['photo-1', 'photo-2'], addonQuantities: { print: 2 }, acknowledged: true, step: 'prints' }
 
+test('extra-edit print and wallet choices survive a refresh without changing included allowance', () => {
+  const browser = storage()
+  const extraPrints = { ...choices, printSelections: { FRAME_8R: 'photo-extra' }, walletSelections: ['photo-extra'] }
+  assert.ok(writePortalDraft(key, extraPrints, browser))
+  assert.deepEqual(readPortalDraft(key, browser)?.choices, extraPrints)
+})
+
 test('draft status distinguishes saved, expired, absent and blocked storage for honest UI feedback', () => {
   const browser = storage(), now = 1_000_000
   assert.equal(readPortalDraftState(key, browser, now).status, 'empty')

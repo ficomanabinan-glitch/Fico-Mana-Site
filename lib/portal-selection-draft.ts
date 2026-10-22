@@ -33,8 +33,8 @@ function validChoices(value: unknown): value is PortalDraftChoices {
   if (!photos.every(id) || new Set(photos).size !== photos.length) return false
   if (!['', 'standard', 'less', 'raw'].includes(draft.editingPreference) || !['photos', 'prints', 'addons', 'review'].includes(draft.step) || typeof draft.acknowledged !== 'boolean') return false
   if (!draft.printSelections || typeof draft.printSelections !== 'object' || Array.isArray(draft.printSelections)) return false
-  if (!Object.entries(draft.printSelections).every(([category, value]) => PRINT_CATEGORIES.includes(category as typeof PRINT_CATEGORIES[number]) && (value === '' || id(value) && draft.included.includes(value)))) return false
-  if (!Array.isArray(draft.walletSelections) || draft.walletSelections.length > 4 || new Set(draft.walletSelections).size !== draft.walletSelections.length || !draft.walletSelections.every(value => id(value) && draft.included.includes(value))) return false
+  if (!Object.entries(draft.printSelections).every(([category, value]) => PRINT_CATEGORIES.includes(category as typeof PRINT_CATEGORIES[number]) && (value === '' || id(value) && photos.includes(value)))) return false
+  if (!Array.isArray(draft.walletSelections) || draft.walletSelections.length > 4 || new Set(draft.walletSelections).size !== draft.walletSelections.length || !draft.walletSelections.every(value => id(value) && photos.includes(value))) return false
   if (!draft.addonQuantities || typeof draft.addonQuantities !== 'object' || Array.isArray(draft.addonQuantities)) return false
   if (draft.addonPhotos !== undefined) {
     if (!draft.addonPhotos || typeof draft.addonPhotos !== 'object' || Array.isArray(draft.addonPhotos)) return false

@@ -82,7 +82,8 @@ test('submission logic validates booking ownership, acknowledgement, print limit
   assert.match(source, /\.in\('status', \['OPEN', 'COPY_FAILED'\]\)/)
   assert.match(source, /This selection is already submitted and locked/)
   assert.match(source, /\.eq\('booking_id', bookingId\)\s*\.in\('id', unique\)/)
-  assert.match(source, /Free print allocations must use an included enhanced photo/)
+  assert.match(source, /if \(!unique\.includes\(allocation\.fileId\)\)/)
+  assert.match(source, /Free print allocations must use a selected photo/)
   assert.match(source, /Add Extra Edit for every photo selected beyond the included allocation/)
 })
 
