@@ -14,7 +14,7 @@ export default function SchoolAffiliations() {
       name: copy.partner1Name,
       short: 'PLS',
       tag: copy.partner1Tag,
-      logo: 'https://phillaw.edu.ph/assets/img/phillaw-logo.png',
+      logo: '/philippine-law-school-logo.png',
     },
     {
       name: copy.partner2Name,
